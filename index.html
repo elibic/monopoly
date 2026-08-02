@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>מונופול בעברית 🎩</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎩</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- מסך פתיחה -->
+  <div id="setup-screen">
+    <div class="setup-card">
+      <h1 class="logo">מוֹנוֹפּוֹל</h1>
+      <p class="subtitle">משחק העסקים המוביל בעולם — בעברית!</p>
+
+      <label class="setup-label" for="player-name">איך קוראים לך?</label>
+      <input id="player-name" type="text" maxlength="12" placeholder="השם שלי..." value="">
+
+      <label class="setup-label">בחרו כלי משחק:</label>
+      <div id="token-picker" class="token-picker"></div>
+
+      <label class="setup-label">כמה יריבי מחשב?</label>
+      <div id="opponent-picker" class="opponent-picker">
+        <button class="opt-btn selected" data-n="1">🤖</button>
+        <button class="opt-btn" data-n="2">🤖🤖</button>
+        <button class="opt-btn" data-n="3">🤖🤖🤖</button>
+      </div>
+
+      <button id="start-btn" class="big-btn">🎲 מתחילים לשחק!</button>
+    </div>
+  </div>
+
+  <!-- מסך המשחק -->
+  <div id="game-screen" class="hidden">
+    <div id="board-wrap">
+      <div id="board">
+        <div id="board-center">
+          <div class="center-logo">מוֹנוֹפּוֹל</div>
+          <div id="turn-banner"></div>
+          <div id="dice-area">
+            <span class="die" id="die1">🎲</span>
+            <span class="die" id="die2">🎲</span>
+          </div>
+          <div id="action-buttons">
+            <button id="roll-btn" class="big-btn">🎲 הטלת קוביות</button>
+            <button id="end-turn-btn" class="big-btn green">✅ סיום תור</button>
+            <button id="manage-btn" class="mid-btn">🏠 העסקים שלי</button>
+            <button id="trade-btn" class="mid-btn">🤝 הצעת עסקה</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside id="side-panel">
+      <div class="side-top">
+        <button id="sound-btn" class="icon-btn" title="הקראה קולית">🔊</button>
+        <button id="restart-btn" class="icon-btn" title="משחק חדש">🔄</button>
+      </div>
+      <div id="cards-panel"></div>
+      <div id="log"></div>
+    </aside>
+  </div>
+
+  <!-- שכבת דיאלוגים -->
+  <div id="dialog-root" class="hidden"></div>
+  <div id="toast-root"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

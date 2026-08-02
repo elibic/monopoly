@@ -1,0 +1,512 @@
+/* מונופול בעברית — עיצוב מותאם לילדים */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --board-bg: #cfe8cf;
+  --paper: #fdf7e8;
+  --ink: #23303f;
+  --accent: #e33d3d;
+  --gold: #f2b736;
+}
+
+html, body { height: 100%; }
+
+body {
+  font-family: 'Heebo', 'Segoe UI', 'Arial Hebrew', Arial, sans-serif;
+  background: linear-gradient(135deg, #74b9ff 0%, #a29bfe 50%, #fd79a8 100%);
+  color: var(--ink);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.hidden { display: none !important; }
+
+/* ---------- מסך פתיחה ---------- */
+#setup-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.setup-card {
+  background: var(--paper);
+  border-radius: 28px;
+  padding: 36px 44px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.35);
+  text-align: center;
+  max-width: 480px;
+  width: 100%;
+}
+
+.logo {
+  font-size: 52px;
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: 2px 3px 0 #f8d0d0;
+  letter-spacing: 2px;
+}
+
+.subtitle { color: #7a8699; margin: 6px 0 22px; font-size: 17px; }
+
+.setup-label {
+  display: block;
+  text-align: right;
+  font-weight: 700;
+  font-size: 18px;
+  margin: 18px 0 8px;
+}
+
+#player-name {
+  width: 100%;
+  font-size: 22px;
+  padding: 12px 16px;
+  border: 3px solid #d5dbe6;
+  border-radius: 14px;
+  text-align: center;
+  font-family: inherit;
+}
+#player-name:focus { outline: none; border-color: #74b9ff; }
+
+.token-picker, .opponent-picker {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.token-btn, .opt-btn {
+  font-size: 30px;
+  padding: 10px 14px;
+  border: 3px solid #d5dbe6;
+  border-radius: 16px;
+  background: white;
+  cursor: pointer;
+  transition: transform .12s, border-color .12s;
+}
+.token-btn:hover, .opt-btn:hover { transform: scale(1.1); }
+.token-btn.selected, .opt-btn.selected {
+  border-color: var(--accent);
+  background: #ffe9e9;
+  transform: scale(1.12);
+}
+
+.big-btn {
+  font-family: inherit;
+  font-size: 24px;
+  font-weight: 800;
+  padding: 14px 30px;
+  margin-top: 26px;
+  border: none;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ff7675, var(--accent));
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 6px 0 #b02a2a;
+  transition: transform .1s, box-shadow .1s;
+}
+.big-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b02a2a; }
+.big-btn:disabled { filter: grayscale(.8); opacity: .5; cursor: not-allowed; box-shadow: none; }
+.big-btn.green { background: linear-gradient(180deg, #55efc4, #00b894); box-shadow: 0 6px 0 #067a5e; }
+.big-btn.green:active { box-shadow: 0 2px 0 #067a5e; }
+.big-btn.blue { background: linear-gradient(180deg, #74b9ff, #0984e3); box-shadow: 0 6px 0 #0a5da0; }
+.big-btn.blue:active { box-shadow: 0 2px 0 #0a5da0; }
+
+.mid-btn {
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border: 2px solid #b8c4d4;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+}
+.mid-btn:hover { background: #eef3fa; }
+.mid-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------- מסך משחק ---------- */
+#game-screen {
+  display: flex;
+  gap: 14px;
+  padding: 12px;
+  height: 100vh;
+  align-items: stretch;
+}
+
+#board-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+#board {
+  --cell: minmax(0, 1fr);
+  display: grid;
+  grid-template-columns: 1.6fr repeat(9, 1fr) 1.6fr;
+  grid-template-rows: 1.6fr repeat(9, 1fr) 1.6fr;
+  width: min(96vh, 100%);
+  aspect-ratio: 1;
+  background: var(--board-bg);
+  border: 6px solid var(--ink);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.4);
+}
+
+/* משבצת */
+.square {
+  border: 1px solid #93a793;
+  background: var(--board-bg);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: clamp(6px, 1.05vh, 12px);
+  cursor: default;
+}
+
+.square .band {
+  height: 22%;
+  min-height: 8px;
+  border-bottom: 1px solid #6b7d6b;
+  flex-shrink: 0;
+}
+
+.square .sq-name {
+  font-weight: 700;
+  text-align: center;
+  padding: 1px 2px;
+  line-height: 1.15;
+}
+
+.square .sq-price {
+  margin-top: auto;
+  text-align: center;
+  padding-bottom: 2px;
+  color: #445;
+}
+
+.square.corner { font-size: clamp(8px, 1.5vh, 16px); }
+.square.corner .sq-name { margin: auto; font-weight: 900; }
+.square .sq-emoji { text-align: center; font-size: 2.2em; line-height: 1; }
+
+.square.owned-border { border-width: 3px; border-style: solid; }
+.square.mortgaged::after {
+  content: "🔒 ממושכן";
+  position: absolute;
+  inset: auto 0 30% 0;
+  text-align: center;
+  background: rgba(255,255,255,.85);
+  font-weight: 800;
+  color: #a00;
+}
+
+.sq-houses {
+  position: absolute;
+  top: 22%;
+  right: 1px;
+  font-size: 1.2em;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+
+.sq-tokens {
+  position: absolute;
+  bottom: 1px;
+  left: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  font-size: 1.9em;
+  line-height: 1;
+}
+
+.sq-tokens .tok {
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,.5));
+  animation: tok-pop .35s ease;
+}
+
+@keyframes tok-pop {
+  0% { transform: scale(1.7) translateY(-6px); }
+  100% { transform: scale(1); }
+}
+
+.square.flash { animation: sq-flash 1s ease; }
+@keyframes sq-flash {
+  0%, 100% { box-shadow: none; }
+  40% { box-shadow: inset 0 0 0 4px var(--gold); }
+}
+
+/* מרכז הלוח */
+#board-center {
+  grid-area: 2 / 2 / 11 / 11;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255,255,255,.55), transparent 60%),
+    var(--board-bg);
+  padding: 10px;
+}
+
+.center-logo {
+  font-size: clamp(22px, 4.5vh, 46px);
+  font-weight: 900;
+  color: var(--accent);
+  background: white;
+  border: 3px solid var(--accent);
+  padding: 4px 26px;
+  border-radius: 12px;
+  transform: rotate(-4deg);
+  box-shadow: 0 6px 16px rgba(0,0,0,.2);
+}
+
+#turn-banner {
+  font-size: clamp(14px, 2.4vh, 24px);
+  font-weight: 800;
+  background: white;
+  border-radius: 999px;
+  padding: 6px 22px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.15);
+  min-height: 1em;
+}
+
+#dice-area { display: flex; gap: 14px; }
+
+.die {
+  font-size: clamp(34px, 7vh, 64px);
+  line-height: 1;
+  background: white;
+  border-radius: 16px;
+  padding: 2px 8px;
+  box-shadow: 0 5px 14px rgba(0,0,0,.25);
+}
+
+.die.rolling { animation: die-roll .5s ease infinite; }
+@keyframes die-roll {
+  0%, 100% { transform: rotate(-12deg) translateY(0); }
+  50% { transform: rotate(12deg) translateY(-8px); }
+}
+
+#action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+#action-buttons .big-btn { margin-top: 0; }
+#action-buttons .row { display: flex; gap: 8px; }
+
+/* ---------- פאנל צד ---------- */
+#side-panel {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.side-top { display: flex; gap: 8px; justify-content: flex-start; }
+
+.icon-btn {
+  font-size: 22px;
+  border: none;
+  background: rgba(255,255,255,.85);
+  border-radius: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+#cards-panel { display: flex; flex-direction: column; gap: 10px; }
+
+/* כרטיס אשראי */
+.credit-card {
+  border-radius: 16px;
+  padding: 12px 16px;
+  color: white;
+  position: relative;
+  box-shadow: 0 8px 20px rgba(0,0,0,.3);
+  transition: transform .2s, box-shadow .2s;
+  overflow: hidden;
+}
+.credit-card::before {
+  content: "";
+  position: absolute;
+  top: -30px; left: -30px;
+  width: 90px; height: 90px;
+  background: rgba(255,255,255,.18);
+  border-radius: 50%;
+}
+.credit-card.active {
+  transform: scale(1.04);
+  box-shadow: 0 0 0 4px var(--gold), 0 10px 24px rgba(0,0,0,.35);
+}
+.credit-card.bankrupt { filter: grayscale(1); opacity: .55; }
+
+.cc-top { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 18px; }
+.cc-chip { font-size: 20px; }
+.cc-balance { font-size: 28px; font-weight: 900; margin-top: 4px; letter-spacing: 1px; }
+.cc-sub { font-size: 13px; opacity: .9; margin-top: 2px; display: flex; justify-content: space-between; }
+
+.cc-float {
+  position: absolute;
+  left: 16px;
+  top: 34px;
+  font-size: 22px;
+  font-weight: 900;
+  animation: float-up 1.4s ease forwards;
+  pointer-events: none;
+}
+.cc-float.gain { color: #b8ffdd; }
+.cc-float.loss { color: #ffc4c4; }
+@keyframes float-up {
+  0% { opacity: 0; transform: translateY(8px); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-26px); }
+}
+
+/* יומן */
+#log {
+  flex: 1;
+  background: rgba(255,255,255,.92);
+  border-radius: 16px;
+  padding: 10px 12px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 80px;
+}
+#log .entry { padding: 2px 0; border-bottom: 1px dashed #e2e6ee; }
+#log .entry.kind-turn { font-weight: 800; color: #0984e3; }
+#log .entry.kind-buy, #log .entry.kind-win { font-weight: 800; color: #00875a; }
+#log .entry.kind-jail { color: #a05a00; }
+#log .entry.kind-debt, #log .entry.kind-bankrupt { color: #c0392b; font-weight: 700; }
+
+/* ---------- דיאלוגים ---------- */
+#dialog-root {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 28, 45, .55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 16px;
+}
+
+.dialog {
+  background: var(--paper);
+  border-radius: 24px;
+  padding: 26px 30px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 30px 80px rgba(0,0,0,.5);
+  text-align: center;
+  animation: dialog-in .25s ease;
+}
+@keyframes dialog-in {
+  from { transform: scale(.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.dialog h2 { font-size: 26px; margin-bottom: 10px; }
+.dialog .d-sub { color: #66707f; font-size: 17px; margin-bottom: 14px; }
+.dialog .d-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+
+.deed {
+  border: 3px solid var(--ink);
+  border-radius: 12px;
+  overflow: hidden;
+  max-width: 240px;
+  margin: 0 auto;
+  background: white;
+}
+.deed-band { padding: 8px; color: white; font-weight: 900; font-size: 18px; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.deed-body { padding: 10px 12px; font-size: 14px; }
+.deed-body table { width: 100%; border-collapse: collapse; }
+.deed-body td { padding: 2px 0; }
+.deed-body td:last-child { text-align: left; font-weight: 700; }
+
+/* קלף הפתעה/תיבה */
+.game-card {
+  border-radius: 18px;
+  padding: 22px 26px;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  max-width: 380px;
+  margin: 0 auto;
+  border: 4px dashed rgba(0,0,0,.25);
+}
+.game-card.chance { background: #ffe9b8; }
+.game-card.chest { background: #cfe6ff; }
+.game-card .gc-title { font-size: 15px; opacity: .7; margin-bottom: 8px; }
+
+/* רשימת נכסים בדיאלוגים */
+.asset-list { display: flex; flex-direction: column; gap: 6px; text-align: right; }
+.asset-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 2px solid #e2e6ee;
+  border-radius: 12px;
+  padding: 6px 10px;
+  font-size: 15px;
+}
+.asset-row .a-band { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,.25); }
+.asset-row .a-name { font-weight: 700; flex: 1; }
+.asset-row button { font-family: inherit; font-size: 13px; font-weight: 700; border: none; border-radius: 8px; padding: 5px 9px; cursor: pointer; background: #eef3fa; }
+.asset-row button:hover:not(:disabled) { background: #d9e7fb; }
+.asset-row button:disabled { opacity: .4; cursor: not-allowed; }
+.asset-row.selected { border-color: var(--accent); background: #fff1f1; }
+
+.debt-need { font-size: 22px; font-weight: 900; color: #c0392b; }
+
+/* טוסטים */
+#toast-root {
+  position: fixed;
+  top: 14px;
+  right: 50%;
+  transform: translateX(50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 60;
+  pointer-events: none;
+}
+.toast {
+  background: rgba(35, 48, 63, .94);
+  color: white;
+  font-size: 17px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 10px 22px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.35);
+  animation: toast-in .3s ease, toast-out .4s ease 3s forwards;
+}
+@keyframes toast-in { from { transform: translateY(-16px); opacity: 0; } }
+@keyframes toast-out { to { transform: translateY(-16px); opacity: 0; } }
+
+/* מסך ניצחון */
+.win-burst { font-size: 70px; animation: spin-pop 1.2s ease infinite alternate; }
+@keyframes spin-pop {
+  from { transform: scale(1) rotate(-8deg); }
+  to { transform: scale(1.25) rotate(8deg); }
+}
+
+/* מסכים צרים */
+@media (max-width: 900px) {
+  #game-screen { flex-direction: column; height: auto; }
+  #board { width: min(96vw, 96vh); margin: 0 auto; }
+  #side-panel { width: 100%; }
+  #cards-panel { flex-direction: row; flex-wrap: wrap; }
+  .credit-card { flex: 1 1 220px; }
+}
