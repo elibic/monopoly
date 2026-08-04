@@ -127,20 +127,28 @@
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
   }
 
-  // הורדת המשחק לשימוש מקומי בלי אינטרנט
+  // הורדת המשחק — שתי אפשרויות: לשחק אופליין, או פרויקט מלא למתכנת
   function showDownloadDialog() {
-    const zipUrl = 'https://github.com/elibic/monopoly/archive/refs/heads/gh-pages.zip';
+    const repo = 'https://github.com/elibic/monopoly';
+    const playZip = `${repo}/archive/refs/heads/gh-pages.zip`;         // המשחק הרץ (שטוח)
+    const devZip = `${repo}/archive/refs/heads/claude/monopoly-hebrew-dhr54d.zip`; // מקור מלא
     const d = UI.openDialog(`
-      <h2>הורדה למשחק בלי אינטרנט 💻</h2>
-      <p class="d-sub">אפשר לשמור את המשחק במחשב ולשחק בלי חיבור לרשת — הקול,
-      הלוח והכול נשמרים אצלך.</p>
-      <a class="big-btn green dl-link" href="${zipUrl}" download>⬇️ הורדת המשחק (קובץ ZIP)</a>
-      <ol class="dl-steps">
-        <li>לוחצים על הכפתור למעלה — יורד קובץ ZIP.</li>
-        <li>פותחים אותו (לחיצה ימנית ← "חלץ הכול" / Extract).</li>
-        <li>נכנסים לתיקייה ולוחצים לחיצה כפולה על <b>index.html</b>.</li>
-        <li>המשחק ייפתח בדפדפן ויעבוד גם בלי אינטרנט! 🎉</li>
-      </ol>
+      <h2>הורדת המשחק 💻</h2>
+      <div class="dl-section">
+        <b>🎮 כדי לשחק בלי אינטרנט</b>
+        <a class="big-btn green dl-link" href="${playZip}" download>⬇️ הורדת המשחק (ZIP)</a>
+        <ol class="dl-steps">
+          <li>מחלצים את ה-ZIP (לחיצה ימנית ← "חלץ הכול").</li>
+          <li>לחיצה כפולה על <b>index.html</b> — והמשחק רץ, גם בלי רשת! 🎉</li>
+        </ol>
+      </div>
+      <div class="dl-section dl-dev">
+        <b>👨‍💻 כדי שמתכנת ישפר את המשחק</b>
+        <p class="d-sub">זהו הפרויקט <b>המלא</b> — כל הקוד, הבדיקות, הכלים ואוטומציית
+        הבנייה. הכי נוח לשלוח למתכנת את הקישור לפרויקט ב-GitHub:</p>
+        <a class="dl-repo" href="${repo}" target="_blank" rel="noopener">${repo}</a>
+        <a class="big-btn blue dl-link" href="${devZip}" download>⬇️ הורדת הפרויקט המלא (ZIP)</a>
+      </div>
       <div class="d-actions"><button class="big-btn" id="dl-close">סגירה</button></div>`);
     d.querySelector('#dl-close').onclick = () => UI.closeDialog();
   }
