@@ -70,7 +70,12 @@ async def main():
     manifest = [item["id"] for item in lines]
     with open(os.path.join(OUT_DIR, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False)
-    print(f"נוצרו {len(manifest)} קליפים + manifest")
+    # גרסת JS של המניפסט — נטענת כ-<script> ולכן עובדת גם אופליין (file://),
+    # שם fetch חסום. ה-UI מעדיף את הגלובל הזה על פני fetch.
+    with open(os.path.join(OUT_DIR, "manifest.js"), "w", encoding="utf-8") as f:
+        f.write("globalThis.MONOPOLY_VOICE_MANIFEST = "
+                + json.dumps(manifest, ensure_ascii=False) + ";\n")
+    print(f"נוצרו {len(manifest)} קליפים + manifest (json + js)")
     if not FFMPEG:
         print("אזהרה: ffmpeg לא נמצא — הקליפים לא רופדו בשקט")
 

@@ -409,7 +409,27 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   font-size: 1.9em;
   line-height: 1;
 }
-.sq-tokens .tok { filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .45)); }
+.sq-tokens .tok {
+  --pc: #333;
+  font-size: 1.35em;
+  line-height: 1;
+  padding: 2px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 0 2.5px var(--pc), 0 3px 4px rgba(0, 0, 0, .5);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .3));
+}
+/* השחקן שבתורו — חייל גדול ומודגש עם הילה פועמת */
+.sq-tokens .tok.current {
+  font-size: 1.7em;
+  box-shadow: 0 0 0 3px var(--pc), 0 0 10px 3px var(--pc), 0 4px 6px rgba(0, 0, 0, .55);
+  animation: tok-current 1.1s ease-in-out infinite;
+  z-index: 3;
+}
+@keyframes tok-current {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.12); }
+}
 
 .square.flash { animation: sq-flash 1.1s ease; }
 @keyframes sq-flash {
@@ -425,11 +445,15 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   z-index: 6;
 }
 .fly-token {
+  --pc: #333;
   position: absolute;
-  font-size: clamp(18px, 3.6cqw, 36px);
+  font-size: clamp(20px, 4cqw, 40px);
   line-height: 1;
+  padding: 3px;
+  border-radius: 50%;
+  background: white;
   transform: translate(-50%, -50%);
-  filter: drop-shadow(0 6px 6px rgba(0, 0, 0, .5));
+  box-shadow: 0 0 0 3px var(--pc), 0 6px 8px rgba(0, 0, 0, .5);
   transition: left .13s ease, top .13s ease;
 }
 .fly-token.hop { animation: tok-hop .13s ease; }
@@ -491,6 +515,38 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 
 .setup-mascot { width: 92px; margin: -10px auto 2px; }
 .setup-mascot svg { width: 100%; }
+
+/* תצוגת הקופה במרכז הלוח */
+#pot-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  background: linear-gradient(180deg, #FFF7E0, #F6E4A8);
+  border: 2.5px solid var(--gold-deep);
+  border-radius: 14px;
+  padding: 4px 16px 6px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .25);
+  animation: pot-bob 1.8s ease-in-out infinite;
+}
+#pot-display .pot-coins { display: flex; margin-bottom: -2px; }
+#pot-display .pot-coins svg { width: clamp(16px, 2.6cqw, 26px); margin: 0 -3px; }
+#pot-display .pot-label {
+  font-family: var(--font-display);
+  font-size: clamp(11px, 1.7cqw, 17px);
+  color: #8A5A12;
+  letter-spacing: 1px;
+}
+#pot-display .pot-amount {
+  font-family: var(--font-display);
+  font-size: clamp(15px, 2.6cqw, 26px);
+  color: #7C1519;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes pot-bob {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-3px) rotate(1deg); }
+}
 
 #turn-banner {
   font-size: clamp(14px, 2.3vh, 23px);

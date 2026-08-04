@@ -470,3 +470,23 @@ test('מכירות מופעלות כברירת מחדל', () => {
   const g = new Game([{ name: 'א' }, { name: 'ב', isAI: true }]);
   assert.equal(g.auctionsEnabled, true);
 });
+
+test('קופה מכובה: תשלום לבנק לא מצטבר וחניה חופשית לא מזכה', () => {
+  const g = new Game(
+    [{ name: 'א' }, { name: 'ב', isAI: true }],
+    { diceQueue: [[1, 3], [4, 4]], pot: false },
+  );
+  g.rollDice(); // מס הכנסה 200 — לא נכנס לקופה
+  assert.equal(g.pot, 0);
+  g.endTurn();
+  g.players[1].pos = 16;
+  g.rollDice(); // המחשב: 16+4=20 חניה חופשית — אין קופה לזכות
+  assert.equal(g.players[1].money, 1500);
+  assert.equal(g.pot, 0);
+});
+
+test('קופה מכובה: שמירה ושחזור', () => {
+  const g = new Game([{ name: 'א' }, { name: 'ב', isAI: true }], { pot: false });
+  const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.potEnabled, false);
+});

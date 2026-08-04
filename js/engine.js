@@ -32,6 +32,7 @@
       this.diceQueue = (opts.diceQueue || []).slice();
       this.cardQueue = (opts.cardQueue || []).slice(); // מזהי קלפים כפויים לבדיקות
       this.auctionsEnabled = opts.auctions !== false; // מכירה פומבית בוויתור על קנייה
+      this.potEnabled = opts.pot !== false; // קופה בחניה חופשית (חוק בית)
 
       this.players = playersSpec.map((p, idx) => ({
         idx,
@@ -302,7 +303,7 @@
       const p = this.current();
       if (p.money < sq.price) throw new Error('אין מספיק כסף בחשבון');
       p.money -= sq.price;
-      this.pot += sq.price;
+      if (this.potEnabled) this.pot += sq.price;
       this.owner[pos] = p.idx;
       this.pendingBuy = null;
       this._log(`${p.name} ${v(p, 'קנה', 'קנתה')} את "${sq.name}" ב-${money(sq.price)}! 🎉`, 'buy');
@@ -377,7 +378,7 @@
       if (a.active.length === 1 && a.highBidder === a.active[0]) {
         const winner = this.players[a.highBidder];
         winner.money -= a.currentBid;
-        this.pot += a.currentBid;
+        if (this.potEnabled) this.pot += a.currentBid;
         this.owner[a.pos] = winner.idx;
         this._log(`${winner.name} ${v(winner, 'זכה', 'זכתה')} במכירה! "${this.square(a.pos).name}" ב-${money(a.currentBid)}.`, 'buy');
         this.auction = null;
@@ -532,7 +533,7 @@
       if (this.phase !== 'roll' || !p.inJail) throw new Error('לא ניתן לשלם קנס עכשיו');
       if (p.money < C.JAIL_FINE) throw new Error('אין מספיק כסף לקנס');
       p.money -= C.JAIL_FINE;
-      this.pot += C.JAIL_FINE;
+      if (this.potEnabled) this.pot += C.JAIL_FINE;
       p.inJail = false;
       p.jailRolls = 0;
       this._log(`${p.name} ${v(p, 'שילם קנס', 'שילמה קנס')} ${money(C.JAIL_FINE)} ${v(p, 'ויצא', 'ויצאה')} מהכלא.`, 'jail');
@@ -574,7 +575,7 @@
       const sq = this.square(pos);
       const cost = GROUPS[sq.group].houseCost;
       p.money -= cost;
-      this.pot += cost;
+      if (this.potEnabled) this.pot += cost;
       if (this.houses[pos] === 4) {
         this.houses[pos] = 5;
         this.hotelsLeft--;
@@ -653,7 +654,7 @@
       const p = this.players[idx];
       if (p.money < cost) throw new Error('אין מספיק כסף לפדיון');
       p.money -= cost;
-      this.pot += cost;
+      if (this.potEnabled) this.pot += cost;
       this.mortgaged[pos] = false;
       this._log(`${p.name} ${v(p, 'פדה', 'פדתה')} את "${sq.name}" מהמשכנתא תמורת ${money(cost)} (כולל 10% ריבית).`, 'mortgage');
     }
@@ -704,7 +705,7 @@
       if (p.money >= amount) {
         p.money -= amount;
         if (creditorIdx !== null) this.players[creditorIdx].money += amount;
-        else this.pot += amount;
+        else if (this.potEnabled) this.pot += amount;
         if (onPaid) onPaid();
         return;
       }
@@ -720,7 +721,7 @@
       if (p.money < d.amount) throw new Error('עדיין אין מספיק כסף');
       p.money -= d.amount;
       if (d.creditor !== null) this.players[d.creditor].money += d.amount;
-      else this.pot += d.amount;
+      else if (this.potEnabled) this.pot += d.amount;
       this.debt = null;
       this._log(`${p.name} ${v(p, 'שילם', 'שילמה')} את החוב (${money(d.amount)}).`, 'money');
       this.phase = 'end';
@@ -800,6 +801,7 @@
       return {
         v: 1,
         auctionsEnabled: this.auctionsEnabled,
+        potEnabled: this.potEnabled,
         playersSpec: this.players.map((p) => ({ name: p.name, token: p.token, isAI: p.isAI, gender: p.gender })),
         players: this.players.map((p) => ({
           ...p,
@@ -834,7 +836,7 @@
     static restore(data) {
       const cardById = (deck, id) =>
         (deck === 'chance' ? D.CHANCE_CARDS : D.CHEST_CARDS).find((c) => c.id === id);
-      const g = new Game(data.playersSpec, { auctions: data.auctionsEnabled !== false });
+      const g = new Game(data.playersSpec, { auctions: data.auctionsEnabled !== false, pot: data.potEnabled !== false });
       g.players = data.players.map((p) => ({
         ...p,
         jailCards: (p.jailCards || []).map((h) => ({ deck: h.deck, card: cardById(h.deck, h.id) })),
