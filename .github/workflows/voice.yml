@@ -31,11 +31,15 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: התקנת edge-tts
-        run: pip install edge-tts
+      - name: התקנת edge-tts ו-ffmpeg
+        run: |
+          pip install edge-tts
+          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
 
-      - name: יצירת קובצי הקריינות
-        run: python tools/generate_voice.py
+      - name: יצירת קובצי הקריינות (מאפס)
+        run: |
+          rm -rf audio
+          python tools/generate_voice.py
 
       - name: Commit קובצי האודיו
         run: |

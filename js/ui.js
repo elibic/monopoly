@@ -191,16 +191,15 @@
     },
   };
 
-  // מיפוי רשומת יומן → קליפי קריינות
+  // מיפוי רשומת יומן → קליפ קריינות (משפט שלם אחד, בלי הדבקות)
   function narrationFor(g, entry) {
     const t = entry.text;
     const actor = g.players
       .filter((p) => t.includes(p.name))
       .sort((a, b) => t.indexOf(a.name) - t.indexOf(b.name))[0];
-    const vk = actor ? (actor.isAI ? 'ai' : actor.gender) : null;
+    const vk = actor ? (actor.isAI ? 'ai' : 'h') : null;
     const sqm = t.match(/"([^"]+)"/);
     const sqEntry = sqm ? BOARD.find((s) => s.name === sqm[1]) : null;
-    const sqId = sqEntry ? [`sq${sqEntry.pos}`] : [];
 
     switch (entry.kind) {
       case 'turn':
@@ -208,8 +207,8 @@
         if (!vk) return null;
         return [`ev_turn_${vk}`];
       case 'buy':
-        if (!vk) return null;
-        return [`ev_bought_${vk}`, ...sqId];
+        if (!vk || !sqEntry) return null;
+        return [`buy_${vk}_${sqEntry.pos}`];
       case 'rent':
         if (!vk) return null;
         return [`ev_rent_${vk}`];
@@ -233,7 +232,7 @@
         if (!vk) return null;
         return [`ev_bankrupt_${vk}`];
       case 'win':
-        return [actor && !actor.isAI ? `ev_win_${vk}` : 'ev_lose'];
+        return [actor && !actor.isAI ? 'ev_win_h' : 'ev_lose'];
       case 'trade':
         return ['ev_trade'];
       default:
@@ -719,7 +718,7 @@
         <button class="big-btn green" id="d-buy" ${canAfford ? '' : 'disabled'}>💳 קונים!</button>
         <button class="big-btn" id="d-skip">🙅 לא הפעם</button>
       </div>`);
-    narrator.say([`sq${pos}`, 'ev_offer'], `${vocalize(sq.name)} פָּנוּי לִקְנִיָּה. רוֹצֶה לִקְנוֹת?`);
+    narrator.say([`offer_${pos}`], `${vocalize(sq.name)} פָּנוּי לִקְנִיָּה. רוֹצֶה לִקְנוֹת?`);
     d.querySelector('#d-buy').onclick = () => { closeDialog(); onBuy(); };
     d.querySelector('#d-skip').onclick = () => { closeDialog(); onDecline(); };
   }
@@ -903,7 +902,7 @@
         <button class="big-btn green" id="d-acc">✅ מסכימים!</button>
         <button class="big-btn" id="d-dec">❌ לא מוכרים</button>
       </div>`);
-    narrator.say(['ev_trade_offer', `sq${pos}`], `הַצָּעַת עִסְקָה! ${ai.name} רוֹצֶה לִקְנוֹת מִמְּךָ אֶת ${vocalize(sq.name)}`);
+    narrator.say(['ev_trade_offer'], `הַצָּעַת עִסְקָה! ${ai.name} רוֹצֶה לִקְנוֹת מִמְּךָ אֶת ${vocalize(sq.name)}`);
     d.querySelector('#d-acc').onclick = () => { closeDialog(); onAccept(); };
     d.querySelector('#d-dec').onclick = () => { closeDialog(); onDecline(); };
   }
