@@ -97,7 +97,7 @@
     game = new Game(spec);
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
-    UI.speak(`שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`, { raw: true });
+    UI.narrator.say(['ev_welcome'], `שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`);
     tick();
   }
 
@@ -369,6 +369,7 @@
     initSetup();
     UI.buildBoard();
     initGameButtons();
+    UI.narrator.init(); // טעינת רשימת קליפי הקריינות (אם קיימים)
     const saved = loadSave();
     if (saved) offerResume(saved);
   });
