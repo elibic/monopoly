@@ -173,7 +173,8 @@
     speechSynthesis.speak(u);
   }
 
-  const SPOKEN_KINDS = new Set(['turn', 'buy', 'rent', 'jail', 'win', 'debt', 'offer', 'bankrupt', 'money', 'tax', 'pot']);
+  // הערה: 'offer' לא כאן — ההצעה מוקראת ע"י showBuyDialog בלבד, אחרת נוצרת כפילות
+  const SPOKEN_KINDS = new Set(['turn', 'buy', 'rent', 'jail', 'win', 'debt', 'bankrupt', 'money', 'tax', 'pot']);
 
   /* ---------- קריין AI: קליפים מוקלטים מראש (audio/), עם נסיגה לקול הדפדפן ---------- */
 
@@ -182,6 +183,11 @@
     cache: {},
     queue: Promise.resolve(),
     async init() {
+      // אופליין (file://): fetch חסום, אז מעדיפים מניפסט שנטען כ-<script>
+      if (Array.isArray(globalThis.MONOPOLY_VOICE_MANIFEST)) {
+        this.ids = new Set(globalThis.MONOPOLY_VOICE_MANIFEST);
+        return;
+      }
       try {
         const r = await fetch('audio/manifest.json', { cache: 'no-cache' });
         if (r.ok) this.ids = new Set(await r.json());
@@ -398,6 +404,7 @@
 
     const layer = $('#token-layer');
     const fly = el('span', 'fly-token', p.token);
+    fly.style.setProperty('--pc', PLAYER_COLORS[playerIdx]);
     const start = squareCenter(from);
     fly.style.left = `${start.x}px`;
     fly.style.top = `${start.y}px`;
@@ -674,18 +681,33 @@
       const toks = div.querySelector('.sq-tokens');
       toks.innerHTML = '';
       for (const p of g.players) {
-        if (!p.bankrupt && p.pos === sq.pos) toks.appendChild(el('span', 'tok', p.token));
+        if (!p.bankrupt && p.pos === sq.pos) {
+          const t = el('span', 'tok', p.token);
+          t.style.setProperty('--pc', PLAYER_COLORS[p.idx]);
+          if (p.idx === g.turn && g.phase !== 'gameover') t.classList.add('current');
+          toks.appendChild(t);
+        }
       }
     }
 
     // 3. קוביות
     if (g.dice[0]) { setDieFace('die1', g.dice[0]); setDieFace('die2', g.dice[1]); }
 
-    // 3.5 הקופה על משבצת החניה החופשית
+    // 3.5 הקופה — תג על משבצת החניה + תצוגה ברורה במרכז הלוח
     const potBadge = document.querySelector('.pot-badge');
     if (potBadge) {
       potBadge.textContent = g.pot > 0 ? `🎁 ${money(g.pot)}` : '';
       potBadge.classList.toggle('has-pot', g.pot > 0);
+    }
+    const potDisplay = $('#pot-display');
+    if (potDisplay) {
+      const show = g.potEnabled && g.pot > 0;
+      potDisplay.classList.toggle('hidden', !show);
+      if (show) {
+        potDisplay.innerHTML = `<span class="pot-coins">${SVG.coin}${SVG.coin}${SVG.coin}</span>
+          <span class="pot-label">הקופה</span>
+          <span class="pot-amount">${money(g.pot)}</span>`;
+      }
     }
 
     // 4. באנר תור

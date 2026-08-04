@@ -9,7 +9,7 @@
 
   const $ = (sel) => document.querySelector(sel);
 
-  const AI_NAMES = ['רובי הרובוט', 'ביפ-בופ', 'צ\'יפי'];
+  const AI_NAMES = ['רובי הבוט', 'ביפ-בופ', 'צ\'יפי'];
 
   let game = null;
   const humanIdx = 0;
@@ -48,6 +48,9 @@
   const AUC_KEY = 'monopoly-hebrew-auctions';
   let chosenAuctions = true;
   try { chosenAuctions = localStorage.getItem(AUC_KEY) !== 'off'; } catch (e) { /* */ }
+  const POT_KEY = 'monopoly-hebrew-pot';
+  let chosenPot = true;
+  try { chosenPot = localStorage.getItem(POT_KEY) !== 'off'; } catch (e) { /* */ }
 
   function initSetup() {
     // הקמע בפתיחה ובמרכז הלוח
@@ -107,6 +110,18 @@
       };
     });
 
+    // בורר קופה בחניה חופשית
+    const potPicker = $('#pot-picker');
+    potPicker.querySelectorAll('.opt-btn').forEach((b) => {
+      b.classList.toggle('selected', (b.dataset.pot === 'on') === chosenPot);
+      b.onclick = () => {
+        potPicker.querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
+        b.classList.add('selected');
+        chosenPot = b.dataset.pot === 'on';
+        try { localStorage.setItem(POT_KEY, chosenPot ? 'on' : 'off'); } catch (e) { /* */ }
+      };
+    });
+
     $('#start-btn').onclick = startGame;
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
   }
@@ -121,7 +136,7 @@
       spec.push({ name: AI_NAMES[i], token: aiTokens[i].emoji, isAI: true, gender: 'm' });
     }
 
-    game = new Game(spec, { auctions: chosenAuctions });
+    game = new Game(spec, { auctions: chosenAuctions, pot: chosenPot });
     aiRoundStartSeq = null;
     summaryPending = false;
     $('#setup-screen').classList.add('hidden');
