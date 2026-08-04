@@ -9,8 +9,8 @@
 
   const $ = (sel) => document.querySelector(sel);
 
-  const AI_NAMES = ['רובי הרובוט 🤖', 'ביפ-בופ 🤖', 'צ\'יפי 🤖'];
-  const AI_DELAY = 1000; // השהיה "אנושית" בין פעולות מחשב
+  const AI_NAMES = ['רובי הרובוט', 'ביפ-בופ', 'צ\'יפי'];
+  const AI_DELAY = 750; // השהיה "אנושית" בין פעולות מחשב
 
   let game = null;
   const humanIdx = 0;
@@ -54,7 +54,7 @@
 
     const spec = [{ name, token: chosenToken.emoji, isAI: false }];
     for (let i = 0; i < nAI; i++) {
-      spec.push({ name: AI_NAMES[i].replace(' 🤖', ''), token: aiTokens[i].emoji, isAI: true });
+      spec.push({ name: AI_NAMES[i], token: aiTokens[i].emoji, isAI: true });
     }
 
     game = new Game(spec);
@@ -74,31 +74,42 @@
 
   function isAI(idx) { return game.players[idx].isAI; }
 
-  function tick() {
-    UI.render(game);
-    updateButtons();
+  // tick אסינכרוני: הרינדור כולל אנימציות (דילוגי כלים, קלף מתהפך).
+  // דגל busy מונע ריצות חופפות; קריאה בזמן ריצה נרשמת לריצה נוספת בסוף.
+  let ticking = false;
+  let tickQueued = false;
 
-    if (game.phase === 'gameover') {
-      UI.showWin(game, () => location.reload());
-      return;
-    }
+  async function tick() {
+    if (ticking) { tickQueued = true; return; }
+    ticking = true;
+    do {
+      tickQueued = false;
+      await UI.render(game);
+      updateButtons();
 
-    if (game.phase === 'auction') {
-      UI.renderAuction(game, humanIdx, onHumanBid, onHumanPassAuction);
-    } else if (game.phase === 'buy' && !isAI(game.turn)) {
-      UI.showBuyDialog(game, () => { game.buy(); tick(); }, () => { game.declineBuy(); tick(); });
-    } else if (game.phase === 'debt' && !isAI(game.debt.debtor)) {
-      showHumanDebt();
-    } else if (game.phase === 'roll' && !isAI(game.turn) && game.current().inJail) {
-      UI.showJailDialog(game, {
-        onPay: () => { game.payJailFine(); tick(); },
-        onCard: () => { game.useJailCard(); tick(); },
-        onRoll: () => { rollWithAnimation(); },
-      });
-    }
+      if (game.phase === 'gameover') {
+        UI.showWin(game, () => location.reload());
+        break;
+      }
 
-    const actor = currentActor();
-    if (isAI(actor)) scheduleAi();
+      if (game.phase === 'auction') {
+        UI.renderAuction(game, humanIdx, onHumanBid, onHumanPassAuction);
+      } else if (game.phase === 'buy' && !isAI(game.turn)) {
+        UI.showBuyDialog(game, () => { game.buy(); tick(); }, () => { game.declineBuy(); tick(); });
+      } else if (game.phase === 'debt' && !isAI(game.debt.debtor)) {
+        showHumanDebt();
+      } else if (game.phase === 'roll' && !isAI(game.turn) && game.current().inJail) {
+        UI.showJailDialog(game, {
+          onPay: () => { game.payJailFine(); tick(); },
+          onCard: () => { game.useJailCard(); tick(); },
+          onRoll: () => { doRoll(); },
+        });
+      }
+
+      const actor = currentActor();
+      if (isAI(actor)) scheduleAi();
+    } while (tickQueued);
+    ticking = false;
   }
 
   function updateButtons() {
@@ -110,15 +121,12 @@
     $('#trade-btn').disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));
   }
 
-  function rollWithAnimation() {
-    $('#die1').classList.add('rolling');
-    $('#die2').classList.add('rolling');
-    setTimeout(() => {
-      $('#die1').classList.remove('rolling');
-      $('#die2').classList.remove('rolling');
-      game.rollDice();
-      tick();
-    }, 550);
+  // הטלת קוביות עם אנימציית תלת-ממד — לאדם ולמחשב
+  async function doRoll() {
+    $('#roll-btn').disabled = true;
+    game.rollDice();
+    await UI.animateDice(game.dice[0], game.dice[1]);
+    tick();
   }
 
   /* ---------- פעולות השחקן האנושי ---------- */
@@ -135,12 +143,12 @@
 
   function showHumanDebt() {
     UI.showDebtDialog(game, humanIdx, {
-      onAction: (act, pos) => {
+      onAction: async (act, pos) => {
         try {
           if (act === 'mortgage') game.mortgage(pos);
           if (act === 'sellHouse') game.sellHouse(pos);
         } catch (e) { UI.toast(e.message); }
-        UI.render(game);
+        await UI.render(game);
         showHumanDebt(); // רענון הדיאלוג עם המצב החדש
       },
       onSettle: () => { try { game.settleDebt(); } catch (e) { UI.toast(e.message); } tick(); },
@@ -150,14 +158,14 @@
 
   function showManage() {
     UI.showManageDialog(game, humanIdx, {
-      onAction: (act, pos) => {
+      onAction: async (act, pos) => {
         try {
           if (act === 'build') game.buildHouse(pos);
           if (act === 'sellHouse') game.sellHouse(pos);
           if (act === 'mortgage') game.mortgage(pos);
           if (act === 'unmortgage') game.unmortgage(pos);
         } catch (e) { UI.toast(e.message); }
-        UI.render(game);
+        await UI.render(game);
         showManage(); // רענון
       },
       onClose: () => tick(),
@@ -209,7 +217,7 @@
     aiTimer = setTimeout(() => { aiTimer = null; aiStep(); }, AI_DELAY);
   }
 
-  function aiStep() {
+  async function aiStep() {
     if (!game || game.phase === 'gameover') { tick(); return; }
     const idx = currentActor();
     if (!isAI(idx)) { tick(); return; }
@@ -232,7 +240,8 @@
           if (strat === 'card') { g.useJailCard(); tick(); return; }
           if (strat === 'pay') { g.payJailFine(); tick(); return; }
         }
-        g.rollDice();
+        await doRoll();
+        return; // doRoll כבר קורא ל-tick
       } else if (g.phase === 'end') {
         AI.manageAssets(g, idx);
         // הצעת עסקה לאדם — לכל היותר פעם בסבב, ורק אם האדם עדיין במשחק
@@ -240,7 +249,7 @@
           const offer = AI.proposeTrade(g, idx, humanIdx);
           if (offer) {
             tradeOfferedThisRound = true;
-            UI.render(game);
+            await UI.render(game);
             UI.showAiTradeOffer(g, idx, offer.pos, offer.offer, {
               onAccept: () => {
                 try {
@@ -272,7 +281,7 @@
   /* ---------- כפתורים קבועים ---------- */
 
   function initGameButtons() {
-    $('#roll-btn').onclick = () => { if (!$('#roll-btn').disabled) rollWithAnimation(); };
+    $('#roll-btn').onclick = () => { if (!$('#roll-btn').disabled) doRoll(); };
     $('#end-turn-btn').onclick = () => {
       if ($('#end-turn-btn').disabled) return;
       game.endTurn();

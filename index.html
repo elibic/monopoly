@@ -12,7 +12,7 @@
   <!-- מסך פתיחה -->
   <div id="setup-screen">
     <div class="setup-card">
-      <h1 class="logo">מוֹנוֹפּוֹל</h1>
+      <div class="logo-plate"><h1 class="logo">מוֹנוֹפּוֹל</h1></div>
       <p class="subtitle">משחק העסקים המוביל בעולם — בעברית!</p>
 
       <label class="setup-label" for="player-name">איך קוראים לך?</label>
@@ -40,16 +40,19 @@
           <div class="center-logo">מוֹנוֹפּוֹל</div>
           <div id="turn-banner"></div>
           <div id="dice-area">
-            <span class="die" id="die1">🎲</span>
-            <span class="die" id="die2">🎲</span>
+            <div class="die3d-scene"><div class="die3d" id="die1"></div></div>
+            <div class="die3d-scene"><div class="die3d" id="die2"></div></div>
           </div>
           <div id="action-buttons">
             <button id="roll-btn" class="big-btn">🎲 הטלת קוביות</button>
             <button id="end-turn-btn" class="big-btn green">✅ סיום תור</button>
-            <button id="manage-btn" class="mid-btn">🏠 העסקים שלי</button>
-            <button id="trade-btn" class="mid-btn">🤝 הצעת עסקה</button>
+            <div class="row">
+              <button id="manage-btn" class="mid-btn">🏠 העסקים שלי</button>
+              <button id="trade-btn" class="mid-btn">🤝 הצעת עסקה</button>
+            </div>
           </div>
         </div>
+        <div id="token-layer"></div>
       </div>
     </div>
 
@@ -63,8 +66,10 @@
     </aside>
   </div>
 
-  <!-- שכבת דיאלוגים -->
+  <!-- שכבות: קלף נשלף, דיאלוגים, קונפטי, טוסטים -->
+  <div id="card-root" class="hidden"></div>
   <div id="dialog-root" class="hidden"></div>
+  <canvas id="confetti"></canvas>
   <div id="toast-root"></div>
 
   <script src="js/data.js"></script>

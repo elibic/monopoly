@@ -1,4 +1,4 @@
-/* שכבת התצוגה: לוח, כרטיסי אשראי, דיאלוגים, קול והקראה. */
+/* שכבת התצוגה: לוח, כרטיסי אשראי, דיאלוגים, אנימציות, קול והקראה. */
 (function () {
   'use strict';
 
@@ -12,10 +12,11 @@
     if (html !== undefined) e.innerHTML = html;
     return e;
   };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const money = (n) => `${n.toLocaleString('he-IL')} ₪`;
-  const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-  const PLAYER_COLORS = ['#e33d3d', '#0984e3', '#00b894', '#8e44ad', '#e67e22', '#16a085'];
+  const PLAYER_COLORS = ['#E0393E', '#3D8FD1', '#2FA671', '#8E44AD', '#E67E22', '#16A085'];
 
   const SQ_EMOJI = {
     go: '🏁', jail: '👮', parking: '🅿️', gotojail: '🚔',
@@ -50,13 +51,14 @@
   }
 
   const sounds = {
-    dice() { tone(300, .07, 0, 'square'); tone(420, .07, .09, 'square'); },
+    dice() { for (let i = 0; i < 5; i++) tone(260 + Math.random() * 260, .05, i * .09, 'square', .07); },
+    tick() { tone(640, .045, 0, 'square', .06); },
     money() { tone(880, .1); tone(1175, .12, .09); },
     pay() { tone(392, .12); tone(294, .16, .1); },
     buy() { tone(523, .1); tone(659, .1, .09); tone(784, .18, .18); },
     jail() { tone(220, .25, 0, 'sawtooth', .09); tone(180, .35, .2, 'sawtooth', .09); },
-    card() { tone(700, .08); tone(900, .1, .07); },
-    win() { [523, 659, 784, 1047].forEach((f, i) => tone(f, .22, i * .16, 'triangle', .15)); },
+    card() { tone(700, .08); tone(940, .1, .08); },
+    win() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, .22, i * .15, 'triangle', .15)); },
   };
 
   function speak(text) {
@@ -75,11 +77,11 @@
   /* ---------- בניית הלוח ---------- */
 
   function gridArea(pos) {
-    // עם כיוון RTL של הדף, עמודה 1 בגריד מוצגת בימין — לכן GO (0) בעמודה 1, שורה 11.
-    if (pos <= 10) return { row: 11, col: pos + 1 };            // שורה תחתונה, ימין→שמאל ויזואלית
-    if (pos <= 19) return { row: 11 - (pos - 10), col: 11 };    // טור שמאלי ויזואלית (col 11)
-    if (pos <= 30) return { row: 1, col: 11 - (pos - 20) };     // שורה עליונה
-    return { row: pos - 29, col: 1 };                            // טור ימני ויזואלית
+    // בדף RTL עמודה 1 מוצגת בימין — "דרך צלחה" בפינה הימנית-תחתונה, נגד כיוון השעון.
+    if (pos <= 10) return { row: 11, col: pos + 1 };
+    if (pos <= 19) return { row: 11 - (pos - 10), col: 11 };
+    if (pos <= 30) return { row: 1, col: 11 - (pos - 20) };
+    return { row: pos - 29, col: 1 };
   }
 
   function buildBoard() {
@@ -104,11 +106,186 @@
         if (sq.price) div.appendChild(el('div', 'sq-price', money(sq.price)));
         if (sq.amount) div.appendChild(el('div', 'sq-price', money(sq.amount)));
       }
+      div.appendChild(el('div', 'owner-flag'));
       div.appendChild(el('div', 'sq-houses'));
       div.appendChild(el('div', 'sq-tokens'));
       div.title = sq.name;
       board.appendChild(div);
     }
+    buildDice();
+  }
+
+  /* ---------- קוביות תלת-ממד ---------- */
+
+  // פריסת נקודות לכל ערך (רשת 3×3, אינדקסים 1-9)
+  const PIP_LAYOUT = {
+    1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9],
+  };
+  // איזה ערך יושב על כל פאה, והסיבוב שמביא אותו קדימה
+  const FACE_TRANSFORMS = [
+    { value: 1, css: 'rotateY(0deg) translateZ(var(--hz))' },
+    { value: 2, css: 'rotateY(180deg) translateZ(var(--hz))' },
+    { value: 3, css: 'rotateY(90deg) translateZ(var(--hz))' },
+    { value: 4, css: 'rotateY(-90deg) translateZ(var(--hz))' },
+    { value: 5, css: 'rotateX(90deg) translateZ(var(--hz))' },
+    { value: 6, css: 'rotateX(-90deg) translateZ(var(--hz))' },
+  ];
+  const VALUE_ROTATION = {
+    1: [0, 0], 2: [0, 180], 3: [0, -90], 4: [0, 90], 5: [-90, 0], 6: [90, 0],
+  };
+
+  function buildDice() {
+    for (const id of ['die1', 'die2']) {
+      const die = document.getElementById(id);
+      die.innerHTML = '';
+      const size = die.parentElement.offsetWidth || 60;
+      die.style.setProperty('--hz', `${size / 2}px`);
+      for (const f of FACE_TRANSFORMS) {
+        const face = el('div', 'face');
+        face.style.transform = f.css;
+        for (let cell = 1; cell <= 9; cell++) {
+          const pip = el('span');
+          if (PIP_LAYOUT[f.value].includes(cell)) {
+            pip.className = 'pip' + (f.value === 1 ? ' red' : '');
+            pip.style.gridArea = `${Math.ceil(cell / 3)} / ${((cell - 1) % 3) + 1}`;
+          }
+          if (pip.className) face.appendChild(pip);
+        }
+        die.appendChild(face);
+      }
+    }
+  }
+
+  let diceSpins = 0;
+
+  function setDieFace(id, value, extraSpin = false) {
+    const die = document.getElementById(id);
+    const [rx, ry] = VALUE_ROTATION[value];
+    const spin = extraSpin ? 360 * (2 + (diceSpins % 2)) : 0;
+    die.style.transform = `rotateX(${rx - 16 + spin}deg) rotateY(${ry + 22 + spin}deg)`;
+  }
+
+  async function animateDice(v1, v2) {
+    diceSpins++;
+    // עדכון עומק הקובייה לפי הגודל בפועל (המסך היה מוסתר בזמן הבנייה)
+    for (const id of ['die1', 'die2']) {
+      const die = document.getElementById(id);
+      const size = die.parentElement.offsetWidth;
+      if (size) die.style.setProperty('--hz', `${size / 2}px`);
+    }
+    sounds.dice();
+    if (reducedMotion()) { setDieFace('die1', v1); setDieFace('die2', v2); return; }
+    setDieFace('die1', v1, true);
+    setDieFace('die2', v2, true);
+    await wait(1080);
+  }
+
+  /* ---------- אנימציית תנועת כלי ---------- */
+
+  function squareCenter(pos) {
+    const board = $('#board');
+    const sq = document.getElementById(`sq-${pos}`);
+    const b = board.getBoundingClientRect();
+    const s = sq.getBoundingClientRect();
+    return { x: s.left - b.left + s.width / 2, y: s.top - b.top + s.height * 0.62 };
+  }
+
+  async function animateTokenMove(g, playerIdx, from, to) {
+    const p = g.players[playerIdx];
+    if (reducedMotion() || document.hidden) return;
+
+    // מסלול: קדימה עד 12 צעדים, אחורה עד 3, אחרת "טיסה" ישירה (כלא)
+    const fwd = (to - from + 40) % 40;
+    const back = (from - to + 40) % 40;
+    let path = [];
+    if (fwd > 0 && fwd <= 12) for (let i = 1; i <= fwd; i++) path.push((from + i) % 40);
+    else if (back > 0 && back <= 3) for (let i = 1; i <= back; i++) path.push((from - i + 40) % 40);
+    else path = [to];
+
+    // מסתירים את הכלי הסטטי במשבצת הישנה
+    const oldSq = document.querySelector(`#sq-${from} .sq-tokens`);
+    if (oldSq) {
+      for (const t of oldSq.children) if (t.textContent === p.token) t.style.visibility = 'hidden';
+    }
+
+    const layer = $('#token-layer');
+    const fly = el('span', 'fly-token', p.token);
+    const start = squareCenter(from);
+    fly.style.left = `${start.x}px`;
+    fly.style.top = `${start.y}px`;
+    layer.appendChild(fly);
+    await wait(30);
+
+    const stepMs = path.length > 8 ? 120 : 150;
+    for (const pos of path) {
+      const c = squareCenter(pos);
+      fly.classList.remove('hop');
+      void fly.offsetWidth;
+      fly.classList.add('hop');
+      fly.style.left = `${c.x}px`;
+      fly.style.top = `${c.y}px`;
+      sounds.tick();
+      await wait(stepMs);
+    }
+    await wait(90);
+    fly.remove();
+  }
+
+  /* ---------- קלף מתהפך ---------- */
+
+  async function showCardFlip(deck, text) {
+    const root = $('#card-root');
+    root.classList.remove('hidden');
+    const isChance = deck === 'chance';
+    root.innerHTML = `
+      <div class="flip-card ${isChance ? 'chance' : 'chest'}">
+        <div class="flip-face flip-back">${isChance ? '❓' : '🎁'}</div>
+        <div class="flip-face flip-front">
+          <div class="gc-title">${isChance ? '✨ הפתעה ✨' : '🎁 תיבת המזל 🎁'}</div>
+          <div class="gc-text">${text}</div>
+        </div>
+      </div>`;
+    sounds.card();
+    await wait(reducedMotion() ? 600 : 2800);
+    root.classList.add('hidden');
+    root.innerHTML = '';
+  }
+
+  /* ---------- קונפטי ---------- */
+
+  function confettiBurst(durationMs = 4500) {
+    if (reducedMotion()) return;
+    const canvas = $('#confetti');
+    const c = canvas.getContext('2d');
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
+    const colors = ['#E0393E', '#F5B940', '#2FA671', '#3D8FD1', '#8E44AD', '#FFFFFF'];
+    const parts = Array.from({ length: 160 }, () => ({
+      x: Math.random() * canvas.width,
+      y: -20 - Math.random() * canvas.height * 0.4,
+      w: 6 + Math.random() * 7,
+      h: 8 + Math.random() * 10,
+      vy: 2 + Math.random() * 3.2,
+      vx: -1.4 + Math.random() * 2.8,
+      rot: Math.random() * Math.PI,
+      vr: -0.12 + Math.random() * 0.24,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    }));
+    const t0 = performance.now();
+    (function frame(t) {
+      c.clearRect(0, 0, canvas.width, canvas.height);
+      for (const pt of parts) {
+        pt.x += pt.vx; pt.y += pt.vy; pt.rot += pt.vr;
+        c.save();
+        c.translate(pt.x, pt.y);
+        c.rotate(pt.rot);
+        c.fillStyle = pt.color;
+        c.fillRect(-pt.w / 2, -pt.h / 2, pt.w, pt.h);
+        c.restore();
+      }
+      if (t - t0 < durationMs) requestAnimationFrame(frame);
+      else c.clearRect(0, 0, canvas.width, canvas.height);
+    })(t0);
   }
 
   /* ---------- רינדור מצב ---------- */
@@ -117,14 +294,39 @@
   let lastLogId = 0;
   let lastPositions = [];
 
-  function render(g) {
-    // משבצות
+  function animateBalance(elBalance, from, to) {
+    if (from === to || reducedMotion()) { elBalance.textContent = money(to); return; }
+    const t0 = performance.now();
+    const dur = 650;
+    (function frame(t) {
+      const k = Math.min(1, (t - t0) / dur);
+      const eased = 1 - Math.pow(1 - k, 3);
+      elBalance.textContent = money(Math.round(from + (to - from) * eased));
+      if (k < 1) requestAnimationFrame(frame);
+    })(t0);
+  }
+
+  async function render(g) {
+    // 1. אנימציות תנועה (לפני עדכון המשבצות — הכלי הסטטי עדיין במקום הישן)
+    const moves = [];
+    g.players.forEach((p, i) => {
+      if (lastPositions[i] !== undefined && lastPositions[i] !== p.pos && !p.bankrupt) {
+        moves.push({ i, from: lastPositions[i], to: p.pos });
+      }
+    });
+    for (const m of moves) await animateTokenMove(g, m.i, m.from, m.to);
+    lastPositions = g.players.map((p) => p.pos);
+
+    // 2. משבצות
     for (const sq of BOARD) {
       const div = $(`#sq-${sq.pos}`);
       const ownerIdx = g.owner[sq.pos];
       div.classList.toggle('mortgaged', !!g.mortgaged[sq.pos]);
-      div.classList.toggle('owned-border', ownerIdx !== null);
-      div.style.borderColor = ownerIdx !== null ? PLAYER_COLORS[ownerIdx] : '';
+      div.classList.toggle('owned', ownerIdx !== null);
+      const flag = div.querySelector('.owner-flag');
+      flag.style.borderColor = ownerIdx !== null
+        ? `${PLAYER_COLORS[ownerIdx]} transparent transparent transparent`
+        : '';
 
       const housesEl = div.querySelector('.sq-houses');
       const h = g.houses[sq.pos];
@@ -133,72 +335,62 @@
       const toks = div.querySelector('.sq-tokens');
       toks.innerHTML = '';
       for (const p of g.players) {
-        if (!p.bankrupt && p.pos === sq.pos) {
-          const t = el('span', 'tok', p.token);
-          if (lastPositions[p.idx] !== p.pos) t.style.animation = 'tok-pop .35s ease';
-          toks.appendChild(t);
-        }
+        if (!p.bankrupt && p.pos === sq.pos) toks.appendChild(el('span', 'tok', p.token));
       }
     }
-    lastPositions = g.players.map((p) => p.pos);
 
-    // קוביות
-    if (g.dice[0]) {
-      $('#die1').textContent = DICE_FACES[g.dice[0]];
-      $('#die2').textContent = DICE_FACES[g.dice[1]];
-    }
+    // 3. קוביות (מצב סופי, בלי אנימציה — האנימציה רצה ב-animateDice)
+    if (g.dice[0]) { setDieFace('die1', g.dice[0]); setDieFace('die2', g.dice[1]); }
 
-    // באנר תור
+    // 4. באנר תור
     const cur = g.current();
     $('#turn-banner').textContent =
       g.phase === 'gameover'
         ? `🏆 ${g.players[g.winner].name} ניצח/ה!`
         : `התור של ${cur.token} ${cur.name}`;
 
-    // כרטיסי אשראי
+    // 5. כרטיסי אשראי
     const panel = $('#cards-panel');
     panel.innerHTML = '';
     g.players.forEach((p, i) => {
       const card = el('div', 'credit-card');
-      card.style.background = `linear-gradient(135deg, ${PLAYER_COLORS[i]}, ${PLAYER_COLORS[i]}cc 60%, #23303f)`;
+      card.style.background = `linear-gradient(135deg, ${PLAYER_COLORS[i]}, ${PLAYER_COLORS[i]}bb 55%, #22242C)`;
       if (i === g.turn && g.phase !== 'gameover') card.classList.add('active');
       if (p.bankrupt) card.classList.add('bankrupt');
       const props = g.playerProps(i).length;
       card.innerHTML = `
         <div class="cc-top"><span>${p.token} ${p.name}</span><span class="cc-chip">💳</span></div>
-        <div class="cc-balance">${p.bankrupt ? 'פשט/ה רגל' : money(p.money)}</div>
+        <div class="cc-balance"></div>
         <div class="cc-sub"><span>חשבון בנק מונופול</span><span>🏠 ${props} נכסים</span></div>`;
-      // אנימציית שינוי יתרה
+      const balEl = card.querySelector('.cc-balance');
+      if (p.bankrupt) balEl.textContent = 'פשט/ה רגל';
+      else animateBalance(balEl, prevMoney[i] !== undefined ? prevMoney[i] : p.money, p.money);
       if (prevMoney[i] !== undefined && prevMoney[i] !== p.money && !p.bankrupt) {
         const diff = p.money - prevMoney[i];
         const f = el('div', `cc-float ${diff > 0 ? 'gain' : 'loss'}`,
           `${diff > 0 ? '+' : ''}${diff.toLocaleString('he-IL')} ₪`);
         card.appendChild(f);
-        setTimeout(() => f.remove(), 1400);
+        setTimeout(() => f.remove(), 1500);
       }
       panel.appendChild(card);
     });
     prevMoney = g.players.map((p) => p.money);
 
-    // יומן + הקראה + צלילים
+    // 6. יומן: צלילים, הקראה, קלפים מתהפכים
     const logEl = $('#log');
-    for (const entry of g.log) {
-      if (entry.id <= lastLogId) continue;
-      const e = el('div', `entry kind-${entry.kind}`, entry.text);
-      logEl.prepend(e);
-      if (entry.kind === 'dice') sounds.dice();
+    const newEntries = g.log.filter((entry) => entry.id > lastLogId);
+    lastLogId = g._logSeq;
+    for (const entry of newEntries) {
+      logEl.prepend(el('div', `entry kind-${entry.kind}`, entry.text));
       if (entry.kind === 'buy') sounds.buy();
       if (entry.kind === 'rent' || entry.kind === 'tax') sounds.pay();
       if (entry.kind === 'money') sounds.money();
       if (entry.kind === 'jail' || entry.kind === 'bankrupt') sounds.jail();
-      if (entry.kind === 'card') sounds.card();
-      if (entry.kind === 'win') sounds.win();
       if (SPOKEN_KINDS.has(entry.kind)) speak(entry.text);
-      if (entry.kind === 'card') showCardToast(entry.text);
+      if (entry.kind === 'card' && entry.deck) await showCardFlip(entry.deck, entry.cardText);
     }
-    lastLogId = g._logSeq;
 
-    // הבהוב משבצת נוכחית
+    // 7. הבהוב המשבצת הנוכחית
     const sqDiv = $(`#sq-${cur.pos}`);
     if (sqDiv) { sqDiv.classList.remove('flash'); void sqDiv.offsetWidth; sqDiv.classList.add('flash'); }
   }
@@ -243,7 +435,7 @@
       : `שכר דירה: הקוביות ×4<br>עם שתי החברות: הקוביות ×10`;
     return `
       <div class="deed">
-        <div class="deed-band" style="background:#546e7a">${SQ_EMOJI[sq.type]} ${sq.name}</div>
+        <div class="deed-band" style="background:#546E7A">${SQ_EMOJI[sq.type]} ${sq.name}</div>
         <div class="deed-body">${desc}<br>משכנתא: ${money(sq.price / 2)}</div>
       </div>`;
   }
@@ -256,7 +448,7 @@
     const d = openDialog(`
       <h2>רוצה לקנות? 🛍️</h2>
       ${deedHTML(g, pos)}
-      <p class="d-sub" style="margin-top:12px">מחיר: <b>${money(sq.price)}</b> · בחשבון שלך: <b>${money(p.money)}</b></p>
+      <p class="d-sub" style="margin-top:14px">מחיר: <b>${money(sq.price)}</b> · בחשבון שלך: <b>${money(p.money)}</b></p>
       ${canAfford ? '<p class="d-sub">💡 כדאי לקנות נכסים — הם מכניסים כסף!</p>' : '<p class="d-sub">😕 אין מספיק כסף בחשבון...</p>'}
       <div class="d-actions">
         <button class="big-btn green" id="d-buy" ${canAfford ? '' : 'disabled'}>💳 קונים!</button>
@@ -268,7 +460,6 @@
 
   function renderAuction(g, humanIdx, onBid, onPass) {
     const a = g.auction;
-    const sq = BOARD[a.pos];
     const isMyTurn = g.auctionTurn() === humanIdx && !g.players[humanIdx].bankrupt;
     const high = a.highBidder !== null ? g.players[a.highBidder] : null;
     const minBid = a.currentBid === 0 ? 10 : a.currentBid + 10;
@@ -277,7 +468,7 @@
     const d = openDialog(`
       <h2>מכירה פומבית! 🔨</h2>
       ${deedHTML(g, a.pos)}
-      <p class="d-sub" style="margin-top:12px">
+      <p class="d-sub" style="margin-top:14px">
         הצעה נוכחית: <b>${a.currentBid ? money(a.currentBid) : 'אין עדיין'}</b>
         ${high ? ` (של ${high.token} ${high.name})` : ''}
       </p>
@@ -313,7 +504,6 @@
     if (cardBtn) cardBtn.onclick = () => { closeDialog(); onCard(); };
   }
 
-  // דיאלוג חוב: מציג נכסים למכירה/משכון עד שיש כסף לשלם
   function showDebtDialog(g, humanIdx, { onAction, onSettle, onBankrupt }) {
     const debt = g.debt;
     const p = g.players[humanIdx];
@@ -334,7 +524,7 @@
       }
       if (!actions.length) continue;
       rows.push(`<div class="asset-row">
-        <span class="a-band" style="background:${grp ? grp.color : '#546e7a'}"></span>
+        <span class="a-band" style="background:${grp ? grp.color : '#546E7A'}"></span>
         <span class="a-name">${sq.name}${g.houses[pos] ? ' ' + (g.houses[pos] === 5 ? '🏨' : '🏠'.repeat(g.houses[pos])) : ''}</span>
         ${actions.join('')}
       </div>`);
@@ -360,7 +550,6 @@
     };
   }
 
-  // ניהול נכסים: בנייה, מכירה, משכנתא, פדיון
   function showManageDialog(g, humanIdx, { onAction, onClose }) {
     const props = g.playerProps(humanIdx);
     const p = g.players[humanIdx];
@@ -376,7 +565,7 @@
         actions.push(`<button data-act="unmortgage" data-pos="${pos}" ${p.money >= cost ? '' : 'disabled'}>פדיון ‎-${money(cost)}</button>`);
       }
       return `<div class="asset-row">
-        <span class="a-band" style="background:${grp ? grp.color : '#546e7a'}"></span>
+        <span class="a-band" style="background:${grp ? grp.color : '#546E7A'}"></span>
         <span class="a-name">${sq.name}${g.mortgaged[pos] ? ' 🔒' : ''}${g.houses[pos] ? ' ' + (g.houses[pos] === 5 ? '🏨' : '🏠'.repeat(g.houses[pos])) : ''}</span>
         ${actions.join('') || '<small>—</small>'}
       </div>`;
@@ -392,7 +581,6 @@
     d.querySelector('#d-close').onclick = () => { closeDialog(); if (onClose) onClose(); };
   }
 
-  // דיאלוג עסקה: האדם מציע למחשב
   function showTradeDialog(g, humanIdx, aiIdx, { onSubmit, onClose }) {
     const mkRows = (idx, side) => g.playerProps(idx)
       .filter((pos) => g.canTradeProp(idx, pos))
@@ -400,7 +588,7 @@
         const sq = BOARD[pos];
         const grp = sq.group ? GROUPS[sq.group] : null;
         return `<div class="asset-row selectable" data-side="${side}" data-pos="${pos}">
-          <span class="a-band" style="background:${grp ? grp.color : '#546e7a'}"></span>
+          <span class="a-band" style="background:${grp ? grp.color : '#546E7A'}"></span>
           <span class="a-name">${sq.name}${g.mortgaged[pos] ? ' 🔒' : ''}</span>
           <span>${money(sq.price)}</span>
         </div>`;
@@ -412,10 +600,10 @@
       <p class="d-sub">מסמנים נכסים להחלפה עם ${ai.token} ${ai.name}, ואפשר להוסיף כסף:</p>
       <div style="display:flex; gap:14px; text-align:right">
         <div style="flex:1"><b>אני נותן/ת:</b><div class="asset-list">${mkRows(humanIdx, 'give') || '<small>אין נכסים סחירים</small>'}</div>
-          <label style="font-size:14px">💳 כסף שלי: <input type="number" id="t-mgive" min="0" step="10" value="0" style="width:80px"></label>
+          <label style="font-size:14px">💳 כסף שלי: <input type="number" id="t-mgive" min="0" step="10" value="0"></label>
         </div>
         <div style="flex:1"><b>אני מקבל/ת:</b><div class="asset-list">${mkRows(aiIdx, 'get') || '<small>אין נכסים סחירים</small>'}</div>
-          <label style="font-size:14px">💳 כסף שלו: <input type="number" id="t-mget" min="0" step="10" value="0" style="width:80px"></label>
+          <label style="font-size:14px">💳 כסף שלו: <input type="number" id="t-mget" min="0" step="10" value="0"></label>
         </div>
       </div>
       <div class="d-actions">
@@ -436,15 +624,14 @@
     d.querySelector('#d-cancel').onclick = () => { closeDialog(); if (onClose) onClose(); };
   }
 
-  // המחשב מציע עסקה לאדם
   function showAiTradeOffer(g, aiIdx, pos, offer, { onAccept, onDecline }) {
     const sq = BOARD[pos];
     const ai = g.players[aiIdx];
     const d = openDialog(`
       <h2>${ai.token} ${ai.name} מציע עסקה!</h2>
       ${deedHTML(g, pos)}
-      <p class="d-sub" style="margin-top:12px">${ai.name} רוצה לקנות ממך את <b>"${sq.name}"</b><br>
-      תמורת <b style="font-size:22px">${money(offer)}</b> (המחיר בלוח: ${money(sq.price)})</p>
+      <p class="d-sub" style="margin-top:14px">${ai.name} רוצה לקנות ממך את <b>"${sq.name}"</b><br>
+      תמורת <b style="font-size:23px">${money(offer)}</b> (המחיר בלוח: ${money(sq.price)})</p>
       <div class="d-actions">
         <button class="big-btn green" id="d-acc">✅ מסכימים!</button>
         <button class="big-btn" id="d-dec">❌ לא מוכרים</button>
@@ -456,18 +643,13 @@
   function showWin(g, onRestart) {
     const w = g.players[g.winner];
     sounds.win();
+    confettiBurst(6000);
     const d = openDialog(`
       <div class="win-burst">🏆</div>
       <h2>${w.token} ${w.name} ניצח/ה במשחק!</h2>
       <p class="d-sub">כל הכבוד! ${w.name} נשאר/ה אחרון/ה במשחק עם ${money(w.money)} בחשבון.</p>
       <div class="d-actions"><button class="big-btn green" id="d-again">🎲 משחק חדש</button></div>`);
     d.querySelector('#d-again').onclick = onRestart;
-  }
-
-  function showCardToast(text) {
-    const t = el('div', 'toast', `🃏 ${text}`);
-    $('#toast-root').appendChild(t);
-    setTimeout(() => t.remove(), 3600);
   }
 
   function toast(text) {
@@ -485,9 +667,9 @@
   function isSoundOn() { return soundOn; }
 
   globalThis.MonopolyUI = {
-    buildBoard, render, openDialog, closeDialog,
+    buildBoard, render, animateDice, openDialog, closeDialog,
     showBuyDialog, renderAuction, showJailDialog, showDebtDialog,
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
-    toast, speak, setSound, isSoundOn, sounds,
+    toast, speak, setSound, isSoundOn, sounds, confettiBurst,
   };
 })();

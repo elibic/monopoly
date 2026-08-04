@@ -383,7 +383,7 @@
       }
       this.lastDrawnCard = { deck: deckName, card };
       const label = deckName === 'chance' ? 'הפתעה' : 'תיבת המזל';
-      this._log(`קלף ${label}: "${card.text}"`, 'card');
+      this._log(`קלף ${label}: "${card.text}"`, 'card', { deck: deckName, cardText: card.text });
 
       const p = this.current();
       const act = card.action;
