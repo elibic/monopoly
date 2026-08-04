@@ -17,6 +17,13 @@
   let tradeOfferedThisRound = false;
   let aiRoundStartSeq = null; // מיקום היומן כשתור המחשב/ים התחיל — לסיכום
   let summaryPending = false;  // ממתינים לאישור השחקן על סיכום תור המחשב
+  let wealthHistory = [];      // מדגם שווי-נטו של כל השחקנים לאורך המשחק (לגרף הסיכום)
+
+  function sampleWealth() {
+    if (!game) return;
+    wealthHistory.push(game.players.map((p) => game.netWorth(p.idx)));
+    if (wealthHistory.length > 200) wealthHistory.shift(); // תקרה בטיחותית
+  }
 
   /* ---------- שמירה אוטומטית (עד איפוס ידני) ---------- */
 
@@ -139,6 +146,8 @@
 
     $('#start-btn').onclick = startGame;
     $('#download-btn').onclick = showDownloadDialog;
+    const albumBtn = $('#album-btn');
+    if (albumBtn) albumBtn.onclick = () => UI.showStickerAlbum();
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
   }
 
@@ -181,6 +190,7 @@
     game = new Game(spec, { auctions: chosenAuctions, pot: chosenPot, difficulty: chosenDifficulty });
     aiRoundStartSeq = null;
     summaryPending = false;
+    wealthHistory = [];
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
     UI.music.resumeIfOn(); // הפעלת מוזיקת רקע (אחרי לחיצת המשתמש)
@@ -242,7 +252,8 @@
 
       if (game.phase === 'gameover') {
         clearSave();
-        UI.showWin(game, () => location.reload());
+        sampleWealth(); // מדגם אחרון — מצב הסיום
+        UI.showWin(game, () => location.reload(), { humanIdx, history: wealthHistory });
         break;
       }
 
@@ -296,6 +307,7 @@
   // הטלת קוביות עם אנימציית תלת-ממד — לאדם ולמחשב
   async function doRoll() {
     $('#roll-btn').disabled = true;
+    sampleWealth(); // מדגם שווי-נטו לפני ההטלה — לגרף בסיכום המשחק
     game.rollDice();
     await UI.animateDice(game.dice[0], game.dice[1]);
     tick();

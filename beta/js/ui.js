@@ -277,7 +277,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=b3`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=b4`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -1197,17 +1197,121 @@
     d.querySelector('#d-dec').onclick = () => { closeDialog(); onDecline(); };
   }
 
-  function showWin(g, onRestart) {
+  /* ==================== מדבקות והישגים ==================== */
+
+  // כל מדבקה: תנאי שמחושב ממצב סוף המשחק עבור השחקן האנושי.
+  const STICKERS = [
+    { id: 'winner',     emoji: '🏆', label: 'מנצח/ת!',        cond: (g, i) => g.winner === i },
+    { id: 'monopoly',   emoji: '🌈', label: 'מונופול שלם',    cond: (g, i) => Object.keys(GROUPS).some((k) => g.ownsFullGroup(i, k)) },
+    { id: 'builder',    emoji: '🏠', label: 'בנאי/ת',          cond: (g, i) => g.houses.some((h, p) => h >= 1 && h <= 4 && g.owner[p] === i) },
+    { id: 'hotelier',   emoji: '🏨', label: 'בעל/ת מלון',      cond: (g, i) => g.houses.some((h, p) => h === 5 && g.owner[p] === i) },
+    { id: 'railking',   emoji: '🚂', label: 'שליט/ת הרכבות',   cond: (g, i) => g.countOwned(i, 'rail') >= 2 },
+    { id: 'landlord',   emoji: '🏘️', label: 'אספן/ית נכסים',   cond: (g, i) => g.playerProps(i).length >= 5 },
+    { id: 'millionaire',emoji: '💰', label: 'עשיר/ה גדול/ה',   cond: (g, i) => g.netWorth(i) >= 2500 },
+    { id: 'player',     emoji: '🎮', label: 'שיחקתי מונופול!', cond: () => true },
+  ];
+  const ALBUM_KEY = 'monopoly-beta-stickers';
+
+  function loadAlbum() {
+    try { return new Set(JSON.parse(localStorage.getItem(ALBUM_KEY) || '[]')); } catch (e) { return new Set(); }
+  }
+  function saveAlbum(set) {
+    try { localStorage.setItem(ALBUM_KEY, JSON.stringify([...set])); } catch (e) { /* */ }
+  }
+
+  // גרף שווי-נטו לאורך המשחק — SVG פשוט, קו לכל שחקן
+  function wealthChart(g, history) {
+    if (!history || history.length < 2) return '';
+    const n = g.players.length;
+    const W = 300, H = 120, pad = 6;
+    let max = 1;
+    for (const row of history) for (const v of row) if (v > max) max = v;
+    const x = (i) => pad + (i / (history.length - 1)) * (W - 2 * pad);
+    const y = (v) => H - pad - (v / max) * (H - 2 * pad);
+    let lines = '';
+    for (let pi = 0; pi < n; pi++) {
+      const pts = history.map((row, i) => `${x(i).toFixed(1)},${y(row[pi] || 0).toFixed(1)}`).join(' ');
+      lines += `<polyline points="${pts}" fill="none" stroke="${PLAYER_COLORS[pi]}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" opacity="${g.players[pi].bankrupt ? .45 : 1}"/>`;
+    }
+    const legend = g.players.map((p) =>
+      `<span class="wc-leg"><span class="wc-dot" style="background:${PLAYER_COLORS[p.idx]}"></span>${p.token} ${p.name}</span>`).join('');
+    return `<div class="wealth-chart">
+      <div class="wc-title">📈 העושר במהלך המשחק</div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${lines}</svg>
+      <div class="wc-legend">${legend}</div>
+    </div>`;
+  }
+
+  // תצוגת אלבום המדבקות שנאספו (מכל המשחקים)
+  function showStickerAlbum() {
+    const album = loadAlbum();
+    const cells = STICKERS.map((s) => {
+      const has = album.has(s.id);
+      return `<div class="sticker ${has ? 'earned' : 'locked'}">
+        <div class="sticker-emoji">${has ? s.emoji : '❔'}</div>
+        <div class="sticker-label">${has ? s.label : '???'}</div>
+      </div>`;
+    }).join('');
+    const d = openDialog(`
+      <h2>אלבום המדבקות שלי 🏅</h2>
+      <p class="d-sub">${album.size} מתוך ${STICKERS.length} מדבקות נאספו</p>
+      <div class="sticker-grid">${cells}</div>
+      <div class="d-actions"><button class="big-btn" id="al-close">סגירה</button></div>`);
+    d.querySelector('#al-close').onclick = () => closeDialog();
+  }
+
+  function showWin(g, onRestart, extra = {}) {
     const w = g.players[g.winner];
     const isF = w.gender === 'f';
+    const humanIdx = extra.humanIdx != null ? extra.humanIdx : 0;
     sounds.win();
     confettiBurst(6000);
+
+    // דירוג סופי לפי שווי-נטו
+    const standings = g.players.slice().sort((a, b) => g.netWorth(b.idx) - g.netWorth(a.idx));
+    const rows = standings.map((p, i) => {
+      const medal = ['🥇', '🥈', '🥉'][i] || '🎖️';
+      return `<div class="stand-row ${p.idx === humanIdx ? 'me' : ''} ${p.bankrupt ? 'out' : ''}">
+        <span class="stand-medal">${medal}</span>
+        <span class="stand-name">${p.token} ${p.name}</span>
+        <span class="stand-worth">${money(g.netWorth(p.idx))}</span>
+      </div>`;
+    }).join('');
+
+    // מדבקות שהושגו בתפקיד השחקן האנושי
+    const album = loadAlbum();
+    const earned = STICKERS.filter((s) => s.cond(g, humanIdx));
+    const fresh = earned.filter((s) => !album.has(s.id));
+    earned.forEach((s) => album.add(s.id));
+    saveAlbum(album);
+    const stickerHTML = earned.map((s) => {
+      const isNew = fresh.some((f) => f.id === s.id);
+      return `<div class="sticker earned ${isNew ? 'new-sticker' : ''}">
+        ${isNew ? '<span class="new-badge">חדש!</span>' : ''}
+        <div class="sticker-emoji">${s.emoji}</div>
+        <div class="sticker-label">${s.label}</div>
+      </div>`;
+    }).join('');
+
+    const humanWon = g.winner === humanIdx;
+    const title = humanWon
+      ? `${w.token} ${w.name} ${isF ? 'ניצחת! את האלופה' : 'ניצחת! אתה האלוף'}! 🎉`
+      : `${w.token} ${w.name} ${isF ? 'ניצחה' : 'ניצח'} במשחק`;
+
     const d = openDialog(`
       <div class="win-burst">🏆</div>
-      <h2>${w.token} ${w.name} ${isF ? 'ניצחה' : 'ניצח'} במשחק!</h2>
-      <p class="d-sub">כל הכבוד! ${w.name} ${isF ? 'נשארה אחרונה' : 'נשאר אחרון'} במשחק עם ${money(w.money)} בחשבון.</p>
-      <div class="d-actions"><button class="big-btn green" id="d-again">🎲 משחק חדש</button></div>`);
+      <h2>${title}</h2>
+      <div class="win-standings">${rows}</div>
+      ${wealthChart(g, extra.history)}
+      <div class="win-stickers-title">המדבקות שהרווחת 🏅</div>
+      <div class="sticker-strip">${stickerHTML}</div>
+      <div class="d-actions">
+        <button class="big-btn green" id="d-again">🎲 משחק חדש</button>
+        <button class="big-btn" id="d-album">🏅 האוסף שלי</button>
+      </div>`);
+    if (fresh.length) setTimeout(() => sounds.sticker(), 500);
     d.querySelector('#d-again').onclick = onRestart;
+    d.querySelector('#d-album').onclick = () => showStickerAlbum();
   }
 
   function toast(text) {
@@ -1270,5 +1374,6 @@
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
     primeFromRestore, announce, SVG, narrator, showTurnSummary,
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
+    showStickerAlbum,
   };
 })();
