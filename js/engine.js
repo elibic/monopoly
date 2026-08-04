@@ -10,6 +10,8 @@
   const { CONSTANTS: C, BOARD, GROUPS, RAIL_RENTS } = D;
 
   const money = (n) => `${n.toLocaleString('he-IL')} ש"ח`;
+  // פועל מותאם מגדר: v(p, 'קנה', 'קנתה')
+  const v = (p, masc, fem) => (p.gender === 'f' ? fem : masc);
 
   function shuffle(arr, rand) {
     const a = arr.slice();
@@ -34,6 +36,7 @@
         idx,
         name: p.name,
         token: p.token,
+        gender: p.gender === 'f' ? 'f' : 'm',
         isAI: !!p.isAI,
         money: C.START_MONEY,
         pos: 0,
@@ -160,14 +163,14 @@
       this.dice = this._rollPair();
       const [a, b] = this.dice;
       const isDouble = a === b;
-      this._log(`${p.name} הטיל/ה ${a} ו-${b}${isDouble ? ' — דאבל!' : ''}`, 'dice');
+      this._log(`${p.name} ${v(p, 'הטיל', 'הטילה')} ${a} ו-${b}${isDouble ? ' — דאבל!' : ''}`, 'dice');
 
       if (p.inJail) return this._jailRoll(isDouble, a + b);
 
       if (isDouble) {
         this.doubles++;
         if (this.doubles === 3) {
-          this._log(`דאבל שלישי ברצף! ${p.name} נשלח/ת לכלא.`, 'jail');
+          this._log(`דאבל שלישי ברצף! ${p.name} ${v(p, 'נשלח', 'נשלחת')} לכלא.`, 'jail');
           this._goToJail(p);
           return;
         }
@@ -178,7 +181,7 @@
     _jailRoll(isDouble, total) {
       const p = this.current();
       if (isDouble) {
-        this._log(`${p.name} הטיל/ה דאבל ויוצא/ת מהכלא!`, 'jail');
+        this._log(`${p.name} ${v(p, 'הטיל דאבל ויוצא', 'הטילה דאבל ויוצאת')} מהכלא!`, 'jail');
         p.inJail = false;
         p.jailRolls = 0;
         this.doubles = 0; // אין תור נוסף אחרי יציאה בדאבל
@@ -186,14 +189,14 @@
       } else {
         p.jailRolls++;
         if (p.jailRolls >= 3) {
-          this._log(`ניסיון שלישי ללא דאבל — ${p.name} חייב/ת לשלם קנס ${money(C.JAIL_FINE)} ולצאת.`, 'jail');
+          this._log(`ניסיון שלישי ללא דאבל — ${p.name} ${v(p, 'חייב', 'חייבת')} לשלם קנס ${money(C.JAIL_FINE)} ולצאת.`, 'jail');
           p.inJail = false;
           p.jailRolls = 0;
           this._charge(p.idx, C.JAIL_FINE, null, 'קנס יציאה מהכלא', () => {
             this._move(p, total, { noExtraRoll: true });
           }, { kind: 'jailMove', total });
         } else {
-          this._log(`${p.name} נשאר/ת בכלא (ניסיון ${p.jailRolls} מתוך 3).`, 'jail');
+          this._log(`${p.name} ${v(p, 'נשאר', 'נשארת')} בכלא (ניסיון ${p.jailRolls} מתוך 3).`, 'jail');
           this.phase = 'end';
         }
       }
@@ -215,13 +218,13 @@
 
     _salary(p) {
       p.money += C.GO_SALARY;
-      this._log(`${p.name} עבר/ה ב"דרך צלחה" וקיבל/ה משכורת ${money(C.GO_SALARY)}!`, 'money');
+      this._log(`${p.name} ${v(p, 'עבר ב"דרך צלחה" וקיבל', 'עברה ב"דרך צלחה" וקיבלה')} משכורת ${money(C.GO_SALARY)}!`, 'money');
     }
 
     _resolveLanding(opts = {}) {
       const p = this.current();
       const sq = this.square(p.pos);
-      this._log(`${p.name} הגיע/ה אל "${sq.name}".`, 'move');
+      this._log(`${p.name} ${v(p, 'הגיע', 'הגיעה')} אל "${sq.name}".`, 'move');
 
       switch (sq.type) {
         case 'street':
@@ -241,12 +244,12 @@
           }
           const rent = this.rentOf(p.pos, this.dice[0] + this.dice[1]);
           const ownerP = this.players[ownerIdx];
-          this._log(`שכר דירה: ${p.name} משלם/ת ${money(rent)} ל${ownerP.name}.`, 'rent');
+          this._log(`שכר דירה: ${p.name} ${v(p, 'משלם', 'משלמת')} ${money(rent)} ל${ownerP.name}.`, 'rent');
           this._charge(p.idx, rent, ownerIdx, `שכר דירה על ${sq.name}`, () => this._afterAction(opts));
           return;
         }
         case 'tax':
-          this._log(`${sq.name}: ${p.name} משלם/ת ${money(sq.amount)} לבנק.`, 'tax');
+          this._log(`${sq.name}: ${p.name} ${v(p, 'משלם', 'משלמת')} ${money(sq.amount)} לבנק.`, 'tax');
           this._charge(p.idx, sq.amount, null, sq.name, () => this._afterAction(opts));
           return;
         case 'chance':
@@ -254,7 +257,7 @@
         case 'chest':
           return this._drawCard('chest', opts);
         case 'gotojail':
-          this._log(`${p.name} נשלח/ת ישר לכלא!`, 'jail');
+          this._log(`${p.name} ${v(p, 'נשלח', 'נשלחת')} ישר לכלא!`, 'jail');
           this._goToJail(p);
           return;
         default:
@@ -271,7 +274,7 @@
       if (p.bankrupt) return this._advanceTurn();
       if (this.doubles > 0 && !p.inJail && !opts.noExtraRoll) {
         this.phase = 'roll';
-        this._log(`דאבל! ${p.name} מטיל/ה שוב.`, 'turn');
+        this._log(`דאבל! ${p.name} ${v(p, 'מטיל', 'מטילה')} שוב.`, 'turn');
       } else {
         this.phase = 'end';
       }
@@ -288,7 +291,7 @@
       p.money -= sq.price;
       this.owner[pos] = p.idx;
       this.pendingBuy = null;
-      this._log(`${p.name} קנה/תה את "${sq.name}" ב-${money(sq.price)}! 🎉`, 'buy');
+      this._log(`${p.name} ${v(p, 'קנה', 'קנתה')} את "${sq.name}" ב-${money(sq.price)}! 🎉`, 'buy');
       this._afterAction();
     }
 
@@ -324,7 +327,7 @@
       if (this.players[idx].money < amount) throw new Error('אין כיסוי להצעה');
       a.currentBid = amount;
       a.highBidder = idx;
-      this._log(`${this.players[idx].name} מציע/ה ${money(amount)} על "${this.square(a.pos).name}".`, 'auction');
+      this._log(`${this.players[idx].name} ${v(this.players[idx], 'מציע', 'מציעה')} ${money(amount)} על "${this.square(a.pos).name}".`, 'auction');
       this._advanceAuction();
     }
 
@@ -335,7 +338,7 @@
       if (a.highBidder === idx) { this._advanceAuction(); return; } // המוביל נשאר במכירה
       a.active.splice(a.ptr, 1);
       if (a.ptr >= a.active.length) a.ptr = 0;
-      this._log(`${this.players[idx].name} פורש/ת מהמכירה.`, 'auction');
+      this._log(`${this.players[idx].name} ${v(this.players[idx], 'פורש', 'פורשת')} מהמכירה.`, 'auction');
       this._checkAuctionEnd();
     }
 
@@ -356,7 +359,7 @@
         const winner = this.players[a.highBidder];
         winner.money -= a.currentBid;
         this.owner[a.pos] = winner.idx;
-        this._log(`${winner.name} זכה/תה במכירה! "${this.square(a.pos).name}" ב-${money(a.currentBid)}.`, 'buy');
+        this._log(`${winner.name} ${v(winner, 'זכה', 'זכתה')} במכירה! "${this.square(a.pos).name}" ב-${money(a.currentBid)}.`, 'buy');
         this.auction = null;
         return this._afterAction();
       }
@@ -383,7 +386,7 @@
       }
       this.lastDrawnCard = { deck: deckName, card };
       const label = deckName === 'chance' ? 'הפתעה' : 'תיבת המזל';
-      this._log(`קלף ${label}: "${card.text}"`, 'card', { deck: deckName, cardText: card.text });
+      this._log(`קלף ${label}: "${card.text}"`, 'card', { deck: deckName, cardText: card.text, cardId: card.id });
 
       const p = this.current();
       const act = card.action;
@@ -476,7 +479,7 @@
       p.money -= C.JAIL_FINE;
       p.inJail = false;
       p.jailRolls = 0;
-      this._log(`${p.name} שילם/ה קנס ${money(C.JAIL_FINE)} ויצא/ה מהכלא.`, 'jail');
+      this._log(`${p.name} ${v(p, 'שילם קנס', 'שילמה קנס')} ${money(C.JAIL_FINE)} ${v(p, 'ויצא', 'ויצאה')} מהכלא.`, 'jail');
     }
 
     useJailCard() {
@@ -487,7 +490,7 @@
       this.decks[held.deck].push(held.card);
       p.inJail = false;
       p.jailRolls = 0;
-      this._log(`${p.name} השתמש/ה בכרטיס "צא מהכלא חינם"!`, 'jail');
+      this._log(`${p.name} ${v(p, 'השתמש', 'השתמשה')} בכרטיס "צא מהכלא חינם"!`, 'jail');
     }
 
     /* ---------- בנייה ---------- */
@@ -519,11 +522,11 @@
         this.houses[pos] = 5;
         this.hotelsLeft--;
         this.housesLeft += 4; // 4 הבתים חוזרים לבנק
-        this._log(`${p.name} בנה/תה מלון 🏨 ב"${sq.name}" (${money(cost)}).`, 'build');
+        this._log(`${p.name} ${v(p, 'בנה', 'בנתה')} מלון 🏨 ב"${sq.name}" (${money(cost)}).`, 'build');
       } else {
         this.houses[pos]++;
         this.housesLeft--;
-        this._log(`${p.name} בנה/תה בית 🏠 ב"${sq.name}" (${money(cost)}). סה"כ ${this.houses[pos]} בתים.`, 'build');
+        this._log(`${p.name} ${v(p, 'בנה', 'בנתה')} בית 🏠 ב"${sq.name}" (${money(cost)}). סה"כ ${this.houses[pos]} בתים.`, 'build');
       }
     }
 
@@ -548,19 +551,19 @@
           this.hotelsLeft++;
           this.housesLeft -= 4;
           p.money += cost / 2;
-          this._log(`${p.name} מכר/ה מלון ב"${sq.name}" תמורת ${money(cost / 2)} (נשארו 4 בתים).`, 'build');
+          this._log(`${p.name} ${v(p, 'מכר', 'מכרה')} מלון ב"${sq.name}" תמורת ${money(cost / 2)} (נשארו 4 בתים).`, 'build');
         } else {
           // אין בתים במלאי — המלון נמכר כולו (5 יחידות בחצי מחיר)
           this.houses[pos] = 0;
           this.hotelsLeft++;
           p.money += (5 * cost) / 2;
-          this._log(`${p.name} מכר/ה מלון ב"${sq.name}" בשלמותו תמורת ${money((5 * cost) / 2)}.`, 'build');
+          this._log(`${p.name} ${v(p, 'מכר', 'מכרה')} מלון ב"${sq.name}" בשלמותו תמורת ${money((5 * cost) / 2)}.`, 'build');
         }
       } else {
         this.houses[pos]--;
         this.housesLeft++;
         p.money += cost / 2;
-        this._log(`${p.name} מכר/ה בית ב"${sq.name}" תמורת ${money(cost / 2)}.`, 'build');
+        this._log(`${p.name} ${v(p, 'מכר', 'מכרה')} בית ב"${sq.name}" תמורת ${money(cost / 2)}.`, 'build');
       }
     }
 
@@ -582,7 +585,7 @@
       const sq = this.square(pos);
       this.mortgaged[pos] = true;
       this.players[idx].money += sq.price / 2;
-      this._log(`${this.players[idx].name} משכן/ה את "${sq.name}" וקיבל/ה ${money(sq.price / 2)} מהבנק.`, 'mortgage');
+      this._log(`${this.players[idx].name} ${v(this.players[idx], 'משכן את', 'משכנה את')} "${sq.name}" ${v(this.players[idx], 'וקיבל', 'וקיבלה')} ${money(sq.price / 2)} מהבנק.`, 'mortgage');
     }
 
     unmortgage(pos) {
@@ -594,7 +597,7 @@
       if (p.money < cost) throw new Error('אין מספיק כסף לפדיון');
       p.money -= cost;
       this.mortgaged[pos] = false;
-      this._log(`${p.name} פדה/תה את "${sq.name}" מהמשכנתא תמורת ${money(cost)} (כולל 10% ריבית).`, 'mortgage');
+      this._log(`${p.name} ${v(p, 'פדה', 'פדתה')} את "${sq.name}" מהמשכנתא תמורת ${money(cost)} (כולל 10% ריבית).`, 'mortgage');
     }
 
     /* ---------- מסחר ---------- */
@@ -630,7 +633,7 @@
         const to = this.players[toIdx];
         const paid = Math.min(fee, to.money);
         to.money -= paid;
-        this._log(`"${this.square(pos).name}" ממושכן — ${to.name} משלם/ת ${money(paid)} ריבית לבנק.`, 'mortgage');
+        this._log(`"${this.square(pos).name}" ממושכן — ${to.name} ${v(to, 'משלם', 'משלמת')} ${money(paid)} ריבית לבנק.`, 'mortgage');
       }
     }
 
@@ -659,7 +662,7 @@
       p.money -= d.amount;
       if (d.creditor !== null) this.players[d.creditor].money += d.amount;
       this.debt = null;
-      this._log(`${p.name} שילם/ה את החוב (${money(d.amount)}).`, 'money');
+      this._log(`${p.name} ${v(p, 'שילם', 'שילמה')} את החוב (${money(d.amount)}).`, 'money');
       this.phase = 'end';
       if (d.onPaid) d.onPaid();
       else if (d.cont && d.cont.kind === 'jailMove') this._move(p, d.cont.total, { noExtraRoll: true });
@@ -675,7 +678,7 @@
       if (this.phase !== 'debt') throw new Error('אין חוב פתוח');
       const d = this.debt;
       const p = this.players[d.debtor];
-      this._log(`${p.name} פשט/ה רגל! 💥`, 'bankrupt');
+      this._log(`${p.name} ${v(p, 'פשט', 'פשטה')} רגל! 💥`, 'bankrupt');
 
       // מוכרים את כל הבניינים לבנק (חצי מחיר) — הכסף נכנס לקופת החייב
       for (const pos of this.playerProps(p.idx)) {
@@ -707,7 +710,7 @@
       if (alive.length === 1) {
         this.winner = alive[0].idx;
         this.phase = 'gameover';
-        this._log(`🏆 ${alive[0].name} ניצח/ה במשחק! 🏆`, 'win');
+        this._log(`🏆 ${alive[0].name} ${v(alive[0], 'ניצח', 'ניצחה')} במשחק! 🏆`, 'win');
         return;
       }
       // _afterAction מטפל גם בתור המכירות הפומביות וגם בהעברת התור הלאה
@@ -736,7 +739,7 @@
     toJSON() {
       return {
         v: 1,
-        playersSpec: this.players.map((p) => ({ name: p.name, token: p.token, isAI: p.isAI })),
+        playersSpec: this.players.map((p) => ({ name: p.name, token: p.token, isAI: p.isAI, gender: p.gender })),
         players: this.players.map((p) => ({
           ...p,
           jailCards: p.jailCards.map((h) => ({ deck: h.deck, id: h.card.id })),
