@@ -228,6 +228,36 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 .big-btn.blue { background: linear-gradient(180deg, #5FA9E8, var(--blue-btn)); box-shadow: 0 6px 0 var(--blue-btn-deep), 0 12px 20px rgba(0,0,0,.25); }
 .big-btn.blue:active { box-shadow: 0 1px 0 var(--blue-btn-deep); }
 
+.link-btn {
+  display: block;
+  margin: 14px auto 0;
+  background: none;
+  border: none;
+  color: var(--blue-btn-deep);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-btn:hover { color: var(--red); }
+
+.dl-link {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  margin: 6px auto 16px;
+  max-width: 320px;
+}
+.dl-steps {
+  text-align: right;
+  padding-right: 22px;
+  line-height: 1.7;
+  font-size: 15.5px;
+  color: var(--ink);
+}
+.dl-steps li { margin-bottom: 4px; }
+
 .mid-btn {
   font-family: var(--font-body);
   font-size: 15px;

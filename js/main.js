@@ -123,7 +123,26 @@
     });
 
     $('#start-btn').onclick = startGame;
+    $('#download-btn').onclick = showDownloadDialog;
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
+  }
+
+  // הורדת המשחק לשימוש מקומי בלי אינטרנט
+  function showDownloadDialog() {
+    const zipUrl = 'https://github.com/elibic/monopoly/archive/refs/heads/gh-pages.zip';
+    const d = UI.openDialog(`
+      <h2>הורדה למשחק בלי אינטרנט 💻</h2>
+      <p class="d-sub">אפשר לשמור את המשחק במחשב ולשחק בלי חיבור לרשת — הקול,
+      הלוח והכול נשמרים אצלך.</p>
+      <a class="big-btn green dl-link" href="${zipUrl}" download>⬇️ הורדת המשחק (קובץ ZIP)</a>
+      <ol class="dl-steps">
+        <li>לוחצים על הכפתור למעלה — יורד קובץ ZIP.</li>
+        <li>פותחים אותו (לחיצה ימנית ← "חלץ הכול" / Extract).</li>
+        <li>נכנסים לתיקייה ולוחצים לחיצה כפולה על <b>index.html</b>.</li>
+        <li>המשחק ייפתח בדפדפן ויעבוד גם בלי אינטרנט! 🎉</li>
+      </ol>
+      <div class="d-actions"><button class="big-btn" id="dl-close">סגירה</button></div>`);
+    d.querySelector('#dl-close').onclick = () => UI.closeDialog();
   }
 
   function startGame() {
@@ -231,7 +250,9 @@
         aiRoundStartSeq = null;
         summaryPending = true;
         updateButtons(); // חוסם את כפתור ההטלה כל עוד הסיכום פתוח
-        const shown = UI.showTurnSummary(entries, () => { summaryPending = false; updateButtons(); });
+        const bots = game.players.filter((p) => p.isAI && !p.bankrupt);
+        const botLabel = bots.length === 1 ? bots[0].name : 'הבוטים';
+        const shown = UI.showTurnSummary(entries, () => { summaryPending = false; updateButtons(); }, botLabel);
         if (!shown) { summaryPending = false; updateButtons(); }
       }
     } while (tickQueued);
@@ -330,7 +351,7 @@
         if (ok) {
           try {
             game.executeTrade(humanIdx, aiIdx, { propsA: give, propsB: get, moneyA: moneyGive, moneyB: moneyGet });
-            UI.toast('🎉 המחשב הסכים לעסקה!');
+            UI.toast(`🎉 ${game.players[aiIdx].name} הסכים לעסקה!`);
             UI.speak('עשינו עסק!');
           } catch (e) { UI.toast(e.message); }
         } else {
