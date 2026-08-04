@@ -18,6 +18,28 @@
   const money = (n) => `${n.toLocaleString('he-IL')} ₪`;
   const PLAYER_COLORS = ['#E0393E', '#3D8FD1', '#2FA671', '#8E44AD', '#E67E22', '#16A085'];
 
+  // ---------- קצב המשחק ----------
+  // mult גדול = איטי יותר. משפיע על אנימציות, כרזות, הקראה והשהיות המחשב.
+  const SPEED_PRESETS = {
+    slow:   { mult: 1.5,  aiDelay: 1500, rate: -12, icon: '🐢', label: 'רגוע' },
+    normal: { mult: 1.0,  aiDelay: 950,  rate: 8,   icon: '🚶', label: 'רגיל' },
+    fast:   { mult: 0.55, aiDelay: 450,  rate: 22,  icon: '🐇', label: 'מהיר' },
+  };
+  const SPEED_KEY = 'monopoly-hebrew-speed';
+  let speed = 'normal';
+  try { const s = localStorage.getItem(SPEED_KEY); if (s && SPEED_PRESETS[s]) speed = s; } catch (e) { /* */ }
+  const sp = () => SPEED_PRESETS[speed];
+  const scaled = (ms) => Math.round(ms * sp().mult);
+  function setSpeed(s) {
+    if (!SPEED_PRESETS[s]) return;
+    speed = s;
+    try { localStorage.setItem(SPEED_KEY, s); } catch (e) { /* */ }
+    const btn = $('#speed-btn');
+    if (btn) { btn.textContent = sp().icon; btn.title = `קצב: ${sp().label}`; }
+  }
+  const getSpeed = () => speed;
+  const aiDelay = () => sp().aiDelay;
+
   /* ==================== איורי SVG ==================== */
 
   const SVG = {
@@ -144,7 +166,7 @@
     const final = raw ? text : vocalize(text);
     const u = new SpeechSynthesisUtterance(final);
     u.lang = 'he-IL';
-    u.rate = 0.95;
+    u.rate = 1 + sp().rate / 100;
     const voices = speechSynthesis.getVoices().filter((vc) => vc.lang && vc.lang.startsWith('he'));
     const voice = voices.find((vc) => /google/i.test(vc.name)) || voices[0];
     if (voice) u.voice = voice;
@@ -345,7 +367,7 @@
     if (reducedMotion()) { setDieFace('die1', v1); setDieFace('die2', v2); return; }
     setDieFace('die1', v1, true);
     setDieFace('die2', v2, true);
-    await wait(1080);
+    await wait(scaled(1080));
   }
 
   /* ==================== אנימציית תנועת כלי ==================== */
@@ -382,7 +404,7 @@
     layer.appendChild(fly);
     await wait(30);
 
-    const stepMs = path.length > 8 ? 130 : 165;
+    const stepMs = scaled(path.length > 8 ? 130 : 165);
     for (const pos of path) {
       const c = squareCenter(pos);
       fly.classList.remove('hop');
@@ -427,9 +449,9 @@
       `<span class="eb-avatar">${avatarSvg || SVG.mascot}</span>
        <span class="eb-bubble"><span class="eb-icon">${icon}</span><span>${text}</span></span>`);
     root.appendChild(b);
-    await wait(reducedMotion() ? 350 : 1400);
+    await wait(reducedMotion() ? 350 : scaled(1400));
     b.classList.add('out');
-    await wait(reducedMotion() ? 10 : 220);
+    await wait(reducedMotion() ? 10 : scaled(220));
     b.remove();
   }
 
@@ -557,7 +579,7 @@
         else resolve();
       });
     } else {
-      await wait(reducedMotion() ? 700 : 2600);
+      await wait(reducedMotion() ? 700 : scaled(2600));
     }
     root.classList.add('hidden');
     root.innerHTML = '';
@@ -609,7 +631,7 @@
   function animateBalance(elBalance, from, to) {
     if (from === to || reducedMotion()) { elBalance.textContent = money(to); return; }
     const t0 = performance.now();
-    const dur = 750;
+    const dur = scaled(750);
     (function frame(t) {
       const k = Math.min(1, (t - t0) / dur);
       const eased = 1 - Math.pow(1 - k, 3);
@@ -1050,5 +1072,6 @@
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
     primeFromRestore, announce, SVG, narrator,
+    setSpeed, getSpeed, aiDelay,
   };
 })();

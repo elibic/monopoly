@@ -10,7 +10,6 @@
   const $ = (sel) => document.querySelector(sel);
 
   const AI_NAMES = ['רובי הרובוט', 'ביפ-בופ', 'צ\'יפי'];
-  const AI_DELAY = 950; // השהיה "אנושית" בין פעולות מחשב
 
   let game = null;
   const humanIdx = 0;
@@ -77,6 +76,17 @@
       b.onclick = () => {
         $('#opponent-picker').querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
         b.classList.add('selected');
+      };
+    });
+
+    // בורר קצב — משקף את הבחירה השמורה
+    const speedPicker = $('#speed-picker');
+    speedPicker.querySelectorAll('.opt-btn').forEach((b) => {
+      b.classList.toggle('selected', b.dataset.speed === UI.getSpeed());
+      b.onclick = () => {
+        speedPicker.querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
+        b.classList.add('selected');
+        UI.setSpeed(b.dataset.speed);
       };
     });
 
@@ -196,11 +206,16 @@
   /* ---------- פעולות השחקן האנושי ---------- */
 
   function onHumanBid(amount) {
+    // הגנה: מתעלמים מלחיצה על דיאלוג ישן שהמצב כבר עבר אותו
+    if (!game || game.phase !== 'auction' || game.auctionTurn() !== humanIdx) return;
+    UI.closeDialog(); // מסירים מיד את הכפתורים כדי למנוע לחיצה כפולה בזמן אנימציה
     try { game.placeBid(humanIdx, amount); } catch (e) { UI.toast(e.message); }
     tick();
   }
 
   function onHumanPassAuction() {
+    if (!game || game.phase !== 'auction' || game.auctionTurn() !== humanIdx) return;
+    UI.closeDialog();
     try { game.passAuction(humanIdx); } catch (e) { UI.toast(e.message); }
     tick();
   }
@@ -278,7 +293,7 @@
 
   function scheduleAi() {
     if (aiTimer) return;
-    aiTimer = setTimeout(() => { aiTimer = null; aiStep(); }, AI_DELAY);
+    aiTimer = setTimeout(() => { aiTimer = null; aiStep(); }, UI.aiDelay());
   }
 
   async function aiStep() {
@@ -355,6 +370,12 @@
     $('#manage-btn').onclick = () => { if (!$('#manage-btn').disabled) showManage(); };
     $('#trade-btn').onclick = () => { if (!$('#trade-btn').disabled) chooseTradePartner(); };
     $('#sound-btn').onclick = () => UI.setSound(!UI.isSoundOn());
+    $('#speed-btn').onclick = () => {
+      const order = ['slow', 'normal', 'fast'];
+      const next = order[(order.indexOf(UI.getSpeed()) + 1) % order.length];
+      UI.setSpeed(next);
+      UI.toast(`קצב: ${next === 'slow' ? '🐢 רגוע' : next === 'fast' ? '🐇 מהיר' : '🚶 רגיל'}`);
+    };
     $('#restart-btn').onclick = () => {
       if (confirm('לאפס את המשחק? המשחק השמור יימחק ונתחיל מחדש.')) {
         game = null; // מונע מ-beforeunload לשמור שוב אחרי המחיקה
@@ -369,6 +390,7 @@
     initSetup();
     UI.buildBoard();
     initGameButtons();
+    UI.setSpeed(UI.getSpeed()); // מסנכרן את אייקון כפתור הקצב עם הבחירה השמורה
     UI.narrator.init(); // טעינת רשימת קליפי הקריינות (אם קיימים)
     const saved = loadSave();
     if (saved) offerResume(saved);
