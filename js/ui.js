@@ -766,7 +766,8 @@
       const ack = ackFor(g, entry);
       if (ack) {
         await showAckDialog(ack);
-      } else if (BANNER_KINDS.has(entry.kind)) {
+      } else if (BANNER_KINDS.has(entry.kind) && !g.current().isAI) {
+        // כרזות מהבהבות רק בתור השחקן; בתור הרובוט הכול מרוכז בחלונית הסיכום
         await announce(entry.text, BANNER_ICONS[entry.kind] || '⭐', avatarFor(g, entry));
       }
     }
@@ -1045,6 +1046,31 @@
     setTimeout(() => t.remove(), 3600);
   }
 
+  // חלונית סיכום תור הרובוט/ים — מה עשו מאז התור הקודם של השחקן
+  const TS_ICON = {
+    dice: '🎲', move: '📍', buy: '🛍️', rent: '💸', tax: '🧾', money: '💰',
+    jail: '👮', card: '🃏', pot: '🎁', build: '🏠', mortgage: '🏦',
+    auction: '🔨', bankrupt: '💥', trade: '🤝', win: '🏆',
+  };
+  const TS_NOTABLE = new Set(['buy', 'rent', 'tax', 'money', 'jail', 'card', 'pot', 'build', 'mortgage', 'auction', 'bankrupt']);
+
+  // מחזיר true אם הוצגה חלונית (כלומר קרה משהו שכדאי לספר עליו)
+  function showTurnSummary(entries, onOk) {
+    const notable = entries.some((e) => TS_NOTABLE.has(e.kind));
+    if (!notable) { onOk(); return false; }
+
+    const rows = entries
+      .filter((e) => TS_ICON[e.kind])
+      .map((e) => `<div class="ts-row ts-${e.kind}"><span class="ts-ic">${TS_ICON[e.kind]}</span><span>${e.text}</span></div>`);
+
+    const d = openDialog(`
+      <h2><span class="ts-bot">${SVG.robot}</span> מה עשה המחשב?</h2>
+      <div class="turn-summary">${rows.join('')}</div>
+      <div class="d-actions"><button class="big-btn green" id="ts-ok">👍 הבנתי, תורי!</button></div>`);
+    d.querySelector('#ts-ok').onclick = () => { closeDialog(); onOk(); };
+    return true;
+  }
+
   // אתחול התצוגה אחרי שחזור משחק שמור: היומן נטען בלי צלילים והקראות
   function primeFromRestore(g) {
     const logEl = $('#log');
@@ -1071,7 +1097,7 @@
     showBuyDialog, renderAuction, showJailDialog, showDebtDialog,
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
-    primeFromRestore, announce, SVG, narrator,
+    primeFromRestore, announce, SVG, narrator, showTurnSummary,
     setSpeed, getSpeed, aiDelay,
   };
 })();
