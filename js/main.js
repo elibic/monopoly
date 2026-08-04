@@ -172,6 +172,9 @@
         break;
       }
 
+      // המכירה הסתיימה אך דיאלוג המכירה עדיין פתוח — סוגרים אותו כדי שלא ייתקע
+      if (game.phase !== 'auction') UI.closeAuctionDialog();
+
       if (game.phase === 'auction') {
         UI.renderAuction(game, humanIdx, onHumanBid, onHumanPassAuction);
       } else if (game.phase === 'buy' && !isAI(game.turn)) {
@@ -225,17 +228,19 @@
   /* ---------- פעולות השחקן האנושי ---------- */
 
   function onHumanBid(amount) {
-    // הגנה: מתעלמים מלחיצה על דיאלוג ישן שהמצב כבר עבר אותו
-    if (!game || game.phase !== 'auction' || game.auctionTurn() !== humanIdx) return;
-    UI.closeDialog(); // מסירים מיד את הכפתורים כדי למנוע לחיצה כפולה בזמן אנימציה
-    try { game.placeBid(humanIdx, amount); } catch (e) { UI.toast(e.message); }
+    UI.closeDialog(); // סוגרים תמיד — גם דיאלוג ישן ותקוע נסגר בלחיצה
+    // הגנה: אם המצב כבר עבר את שלב המכירה, רק מרעננים בלי לפעול
+    if (game && game.phase === 'auction' && game.auctionTurn() === humanIdx) {
+      try { game.placeBid(humanIdx, amount); } catch (e) { UI.toast(e.message); }
+    }
     tick();
   }
 
   function onHumanPassAuction() {
-    if (!game || game.phase !== 'auction' || game.auctionTurn() !== humanIdx) return;
-    UI.closeDialog();
-    try { game.passAuction(humanIdx); } catch (e) { UI.toast(e.message); }
+    UI.closeDialog(); // סוגרים תמיד — גם דיאלוג ישן ותקוע נסגר בלחיצה
+    if (game && game.phase === 'auction' && game.auctionTurn() === humanIdx) {
+      try { game.passAuction(humanIdx); } catch (e) { UI.toast(e.message); }
+    }
     tick();
   }
 
