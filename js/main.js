@@ -1,0 +1,359 @@
+/* חיבור הכול יחד: מסך פתיחה, לולאת תורות, קלט השחקן והפעלת המחשב. */
+(function () {
+  'use strict';
+
+  const D = globalThis.MONOPOLY_DATA;
+  const UI = globalThis.MonopolyUI;
+  const AI = globalThis.MonopolyAI;
+  const { Game } = globalThis.MonopolyEngine;
+
+  const $ = (sel) => document.querySelector(sel);
+
+  const AI_NAMES = ['רובי הרובוט', 'ביפ-בופ', 'צ\'יפי'];
+  const AI_DELAY = 750; // השהיה "אנושית" בין פעולות מחשב
+
+  let game = null;
+  const humanIdx = 0;
+  let aiTimer = null;
+  let tradeOfferedThisRound = false;
+
+  /* ---------- שמירה אוטומטית (עד איפוס ידני) ---------- */
+
+  const SAVE_KEY = 'monopoly-hebrew-save';
+
+  function saveGame() {
+    if (!game || game.phase === 'gameover') return;
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(game.toJSON())); } catch (e) { /* אחסון מלא/חסום */ }
+  }
+
+  function clearSave() {
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* התעלמות */ }
+  }
+
+  function loadSave() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || data.v !== 1) return null;
+      return data;
+    } catch (e) { return null; }
+  }
+
+  /* ---------- מסך פתיחה ---------- */
+
+  let chosenToken = D.TOKENS[0];
+
+  function initSetup() {
+    const picker = $('#token-picker');
+    D.TOKENS.forEach((t, i) => {
+      const b = document.createElement('button');
+      b.className = 'token-btn' + (i === 0 ? ' selected' : '');
+      b.textContent = t.emoji;
+      b.title = t.name;
+      b.onclick = () => {
+        picker.querySelectorAll('.token-btn').forEach((x) => x.classList.remove('selected'));
+        b.classList.add('selected');
+        chosenToken = t;
+      };
+      picker.appendChild(b);
+    });
+
+    $('#opponent-picker').querySelectorAll('.opt-btn').forEach((b) => {
+      b.onclick = () => {
+        $('#opponent-picker').querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
+        b.classList.add('selected');
+      };
+    });
+
+    $('#start-btn').onclick = startGame;
+    if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
+  }
+
+  function startGame() {
+    const name = $('#player-name').value.trim() || 'אלוף/ה';
+    const nAI = Number($('#opponent-picker .selected').dataset.n);
+    const aiTokens = D.TOKENS.filter((t) => t.id !== chosenToken.id);
+
+    const spec = [{ name, token: chosenToken.emoji, isAI: false }];
+    for (let i = 0; i < nAI; i++) {
+      spec.push({ name: AI_NAMES[i], token: aiTokens[i].emoji, isAI: true });
+    }
+
+    game = new Game(spec);
+    $('#setup-screen').classList.add('hidden');
+    $('#game-screen').classList.remove('hidden');
+    UI.speak(`שלום ${name}! בהצלחה במשחק!`);
+    tick();
+  }
+
+  // שחזור משחק שמור מהביקור הקודם
+  function resumeGame(data) {
+    game = Game.restore(data);
+    $('#setup-screen').classList.add('hidden');
+    $('#game-screen').classList.remove('hidden');
+    UI.primeFromRestore(game);
+    UI.toast('👋 ממשיכים מאיפה שהפסקנו!');
+    tick();
+  }
+
+  function offerResume(data) {
+    const who = data.playersSpec.map((p) => `${p.token} ${p.name}`).join(' · ');
+    const d = UI.openDialog(`
+      <h2>יש משחק שמור! 💾</h2>
+      <p class="d-sub">${who}</p>
+      <p class="d-sub">רוצים להמשיך מאיפה שהפסקתם, או להתחיל מחדש?</p>
+      <div class="d-actions">
+        <button class="big-btn green" id="d-resume">▶️ ממשיכים לשחק</button>
+        <button class="big-btn" id="d-new">🆕 משחק חדש</button>
+      </div>`);
+    d.querySelector('#d-resume').onclick = () => { UI.closeDialog(); resumeGame(data); };
+    d.querySelector('#d-new').onclick = () => { UI.closeDialog(); clearSave(); };
+  }
+
+  /* ---------- לולאת המשחק ---------- */
+
+  function currentActor() {
+    if (game.phase === 'auction') return game.auctionTurn();
+    if (game.phase === 'debt') return game.debt.debtor;
+    return game.turn;
+  }
+
+  function isAI(idx) { return game.players[idx].isAI; }
+
+  // tick אסינכרוני: הרינדור כולל אנימציות (דילוגי כלים, קלף מתהפך).
+  // דגל busy מונע ריצות חופפות; קריאה בזמן ריצה נרשמת לריצה נוספת בסוף.
+  let ticking = false;
+  let tickQueued = false;
+
+  async function tick() {
+    if (ticking) { tickQueued = true; return; }
+    ticking = true;
+    do {
+      tickQueued = false;
+      await UI.render(game);
+      updateButtons();
+      saveGame(); // שמירה אוטומטית אחרי כל שינוי מצב
+
+      if (game.phase === 'gameover') {
+        clearSave();
+        UI.showWin(game, () => location.reload());
+        break;
+      }
+
+      if (game.phase === 'auction') {
+        UI.renderAuction(game, humanIdx, onHumanBid, onHumanPassAuction);
+      } else if (game.phase === 'buy' && !isAI(game.turn)) {
+        UI.showBuyDialog(game, () => { game.buy(); tick(); }, () => { game.declineBuy(); tick(); });
+      } else if (game.phase === 'debt' && !isAI(game.debt.debtor)) {
+        showHumanDebt();
+      } else if (game.phase === 'roll' && !isAI(game.turn) && game.current().inJail) {
+        UI.showJailDialog(game, {
+          onPay: () => { game.payJailFine(); tick(); },
+          onCard: () => { game.useJailCard(); tick(); },
+          onRoll: () => { doRoll(); },
+        });
+      }
+
+      const actor = currentActor();
+      if (isAI(actor)) scheduleAi();
+    } while (tickQueued);
+    ticking = false;
+  }
+
+  function updateButtons() {
+    const humanTurn = game.turn === humanIdx && !game.players[humanIdx].bankrupt;
+    const free = !['auction', 'debt', 'gameover'].includes(game.phase);
+    $('#roll-btn').disabled = !(humanTurn && game.phase === 'roll' && !game.current().inJail);
+    $('#end-turn-btn').disabled = !(humanTurn && game.phase === 'end');
+    $('#manage-btn').disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));
+    $('#trade-btn').disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));
+  }
+
+  // הטלת קוביות עם אנימציית תלת-ממד — לאדם ולמחשב
+  async function doRoll() {
+    $('#roll-btn').disabled = true;
+    game.rollDice();
+    await UI.animateDice(game.dice[0], game.dice[1]);
+    tick();
+  }
+
+  /* ---------- פעולות השחקן האנושי ---------- */
+
+  function onHumanBid(amount) {
+    try { game.placeBid(humanIdx, amount); } catch (e) { UI.toast(e.message); }
+    tick();
+  }
+
+  function onHumanPassAuction() {
+    try { game.passAuction(humanIdx); } catch (e) { UI.toast(e.message); }
+    tick();
+  }
+
+  function showHumanDebt() {
+    UI.showDebtDialog(game, humanIdx, {
+      onAction: async (act, pos) => {
+        try {
+          if (act === 'mortgage') game.mortgage(pos);
+          if (act === 'sellHouse') game.sellHouse(pos);
+        } catch (e) { UI.toast(e.message); }
+        await UI.render(game);
+        showHumanDebt(); // רענון הדיאלוג עם המצב החדש
+      },
+      onSettle: () => { try { game.settleDebt(); } catch (e) { UI.toast(e.message); } tick(); },
+      onBankrupt: () => { game.declareBankruptcy(); tick(); },
+    });
+  }
+
+  function showManage() {
+    UI.showManageDialog(game, humanIdx, {
+      onAction: async (act, pos) => {
+        try {
+          if (act === 'build') game.buildHouse(pos);
+          if (act === 'sellHouse') game.sellHouse(pos);
+          if (act === 'mortgage') game.mortgage(pos);
+          if (act === 'unmortgage') game.unmortgage(pos);
+        } catch (e) { UI.toast(e.message); }
+        await UI.render(game);
+        showManage(); // רענון
+      },
+      onClose: () => tick(),
+    });
+  }
+
+  function chooseTradePartner() {
+    const ais = game.players.filter((p) => p.isAI && !p.bankrupt);
+    if (!ais.length) return;
+    if (ais.length === 1) return showTrade(ais[0].idx);
+    const d = UI.openDialog(`
+      <h2>עם מי עושים עסקה? 🤝</h2>
+      <div class="d-actions">
+        ${ais.map((p) => `<button class="big-btn blue" data-idx="${p.idx}">${p.token} ${p.name}</button>`).join('')}
+      </div>`);
+    d.querySelectorAll('button[data-idx]').forEach((b) => {
+      b.onclick = () => { UI.closeDialog(); showTrade(Number(b.dataset.idx)); };
+    });
+  }
+
+  function showTrade(aiIdx) {
+    UI.showTradeDialog(game, humanIdx, aiIdx, {
+      onSubmit: ({ give, get, moneyGive, moneyGet }) => {
+        if (!give.length && !get.length) { UI.toast('לא נבחרו נכסים 🤔'); tick(); return; }
+        // הערכת העסקה מנקודת המבט של המחשב
+        const ok = AI.evaluateTrade(game, aiIdx, {
+          propsGive: get, propsGet: give, moneyGive: moneyGet, moneyGet: moneyGive,
+        });
+        if (ok) {
+          try {
+            game.executeTrade(humanIdx, aiIdx, { propsA: give, propsB: get, moneyA: moneyGive, moneyB: moneyGet });
+            UI.toast('🎉 המחשב הסכים לעסקה!');
+            UI.speak('עשינו עסק!');
+          } catch (e) { UI.toast(e.message); }
+        } else {
+          UI.toast(`${game.players[aiIdx].name} מסרב לעסקה 🙅`);
+          UI.speak('לא משתלם לי, מצטער!');
+        }
+        tick();
+      },
+      onClose: () => tick(),
+    });
+  }
+
+  /* ---------- תור המחשב ---------- */
+
+  function scheduleAi() {
+    if (aiTimer) return;
+    aiTimer = setTimeout(() => { aiTimer = null; aiStep(); }, AI_DELAY);
+  }
+
+  async function aiStep() {
+    if (!game || game.phase === 'gameover') { tick(); return; }
+    const idx = currentActor();
+    if (!isAI(idx)) { tick(); return; }
+    const g = game;
+
+    try {
+      if (g.phase === 'auction') {
+        const dec = AI.decideAuction(g, idx);
+        if (dec === 'pass' || dec === null) g.passAuction(idx);
+        else g.placeBid(idx, dec);
+      } else if (g.phase === 'buy') {
+        if (AI.decideBuy(g, idx)) g.buy();
+        else g.declineBuy();
+      } else if (g.phase === 'debt') {
+        AI.handleDebt(g, idx);
+      } else if (g.phase === 'roll') {
+        const p = g.players[idx];
+        if (p.inJail) {
+          const strat = AI.jailStrategy(g, idx);
+          if (strat === 'card') { g.useJailCard(); tick(); return; }
+          if (strat === 'pay') { g.payJailFine(); tick(); return; }
+        }
+        await doRoll();
+        return; // doRoll כבר קורא ל-tick
+      } else if (g.phase === 'end') {
+        AI.manageAssets(g, idx);
+        // הצעת עסקה לאדם — לכל היותר פעם בסבב, ורק אם האדם עדיין במשחק
+        if (!tradeOfferedThisRound && !g.players[humanIdx].bankrupt) {
+          const offer = AI.proposeTrade(g, idx, humanIdx);
+          if (offer) {
+            tradeOfferedThisRound = true;
+            await UI.render(game);
+            UI.showAiTradeOffer(g, idx, offer.pos, offer.offer, {
+              onAccept: () => {
+                try {
+                  g.executeTrade(humanIdx, idx, { propsA: [offer.pos], moneyB: offer.offer });
+                } catch (e) { UI.toast(e.message); }
+                g.endTurn(); tick();
+              },
+              onDecline: () => { g.endTurn(); tick(); },
+            });
+            return; // מחכים לתשובת האדם
+          }
+        }
+        g.endTurn();
+        if (g.turn === humanIdx) tradeOfferedThisRound = false;
+      }
+    } catch (e) {
+      // הגנה: תקלה בתור המחשב לא תתקע את המשחק
+      console.error('AI error:', e);
+      try {
+        if (g.phase === 'end') g.endTurn();
+        else if (g.phase === 'buy') g.declineBuy();
+        else if (g.phase === 'auction') g.passAuction(idx);
+        else if (g.phase === 'debt') g.declareBankruptcy();
+      } catch (e2) { console.error(e2); }
+    }
+    tick();
+  }
+
+  /* ---------- כפתורים קבועים ---------- */
+
+  function initGameButtons() {
+    $('#roll-btn').onclick = () => { if (!$('#roll-btn').disabled) doRoll(); };
+    $('#end-turn-btn').onclick = () => {
+      if ($('#end-turn-btn').disabled) return;
+      game.endTurn();
+      tick();
+    };
+    $('#manage-btn').onclick = () => { if (!$('#manage-btn').disabled) showManage(); };
+    $('#trade-btn').onclick = () => { if (!$('#trade-btn').disabled) chooseTradePartner(); };
+    $('#sound-btn').onclick = () => UI.setSound(!UI.isSoundOn());
+    $('#restart-btn').onclick = () => {
+      if (confirm('לאפס את המשחק? המשחק השמור יימחק ונתחיל מחדש.')) {
+        game = null; // מונע מ-beforeunload לשמור שוב אחרי המחיקה
+        clearSave();
+        location.reload();
+      }
+    };
+    window.addEventListener('beforeunload', saveGame);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initSetup();
+    UI.buildBoard();
+    initGameButtons();
+    const saved = loadSave();
+    if (saved) offerResume(saved);
+  });
+})();
