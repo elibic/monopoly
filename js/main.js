@@ -10,7 +10,7 @@
   const $ = (sel) => document.querySelector(sel);
 
   const AI_NAMES = ['רובי הרובוט', 'ביפ-בופ', 'צ\'יפי'];
-  const AI_DELAY = 750; // השהיה "אנושית" בין פעולות מחשב
+  const AI_DELAY = 1250; // השהיה "אנושית" בין פעולות מחשב — קצב נינוח לילדים
 
   let game = null;
   const humanIdx = 0;
@@ -43,8 +43,22 @@
   /* ---------- מסך פתיחה ---------- */
 
   let chosenToken = D.TOKENS[0];
+  let chosenGender = 'm';
 
   function initSetup() {
+    // הקמע בפתיחה ובמרכז הלוח
+    const setupMascot = $('#setup-mascot');
+    if (setupMascot) setupMascot.innerHTML = UI.SVG.mascot;
+    const centerMascot = $('#center-mascot');
+    if (centerMascot) centerMascot.innerHTML = UI.SVG.mascot;
+
+    $('#gender-picker').querySelectorAll('.opt-btn').forEach((b) => {
+      b.onclick = () => {
+        $('#gender-picker').querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
+        b.classList.add('selected');
+        chosenGender = b.dataset.g;
+      };
+    });
     const picker = $('#token-picker');
     D.TOKENS.forEach((t, i) => {
       const b = document.createElement('button');
@@ -75,15 +89,15 @@
     const nAI = Number($('#opponent-picker .selected').dataset.n);
     const aiTokens = D.TOKENS.filter((t) => t.id !== chosenToken.id);
 
-    const spec = [{ name, token: chosenToken.emoji, isAI: false }];
+    const spec = [{ name, token: chosenToken.emoji, isAI: false, gender: chosenGender }];
     for (let i = 0; i < nAI; i++) {
-      spec.push({ name: AI_NAMES[i], token: aiTokens[i].emoji, isAI: true });
+      spec.push({ name: AI_NAMES[i], token: aiTokens[i].emoji, isAI: true, gender: 'm' });
     }
 
     game = new Game(spec);
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
-    UI.speak(`שלום ${name}! בהצלחה במשחק!`);
+    UI.speak(`שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`, { raw: true });
     tick();
   }
 
@@ -127,6 +141,7 @@
   let tickQueued = false;
 
   async function tick() {
+    if (!game) return;
     if (ticking) { tickQueued = true; return; }
     ticking = true;
     do {
@@ -267,7 +282,8 @@
   }
 
   async function aiStep() {
-    if (!game || game.phase === 'gameover') { tick(); return; }
+    if (!game) return;
+    if (game.phase === 'gameover') { tick(); return; }
     const idx = currentActor();
     if (!isAI(idx)) { tick(); return; }
     const g = game;

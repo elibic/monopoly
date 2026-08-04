@@ -265,8 +265,8 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 #game-screen {
   display: flex;
   gap: 16px;
-  padding: 14px;
-  height: 100vh;
+  padding: 12px;
+  height: 100dvh;
   align-items: stretch;
 }
 
@@ -284,13 +284,16 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   display: grid;
   grid-template-columns: 1.55fr repeat(9, 1fr) 1.55fr;
   grid-template-rows: 1.55fr repeat(9, 1fr) 1.55fr;
-  width: min(96vh, 100%);
+  width: min(100%, calc(100dvh - 24px));
   aspect-ratio: 1;
+  container-type: size;
   background: var(--board-face);
   border: 7px solid var(--board-edge);
   border-radius: 16px;
   box-shadow:
     inset 0 0 0 3px #D9CCA8,
+    0 0 0 10px #6B4A2B,
+    0 0 0 12px #4A3018,
     0 30px 70px rgba(0, 0, 0, .55),
     0 6px 18px rgba(0, 0, 0, .35);
   animation: board-land .9s cubic-bezier(.2, .8, .3, 1.05);
@@ -309,9 +312,26 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  font-size: clamp(6px, 1.02vh, 12px);
+  font-size: clamp(5.5px, 1.2cqw, 13px);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
 }
+
+/* איורי משבצות (SVG) */
+.sq-art {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding-top: 4%;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+.sq-art svg { width: 68%; max-height: 3.4em; }
+.square.corner { justify-content: space-between; }
+.square.corner .sq-art { flex: 0 1 auto; padding-top: 6%; }
+.square.corner .sq-art svg { width: 72%; max-height: 3.6em; }
+/* בפינת ההתחלה השם נמצא בתוך האיור עצמו */
+.square.t-go .sq-name { display: none; }
+.square.t-go .sq-art svg { width: 88%; max-height: 5em; }
 
 .square .band {
   height: 24%;
@@ -337,12 +357,10 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 }
 
 .square.corner {
-  font-size: clamp(8px, 1.45vh, 16px);
+  font-size: clamp(8px, 1.7cqw, 17px);
   background: linear-gradient(135deg, #F3ECD4, #E7DDBB);
 }
-.square.corner .sq-name { margin: 2px auto auto; }
-.square .sq-emoji { text-align: center; font-size: 2.1em; line-height: 1.15; filter: drop-shadow(0 2px 2px rgba(0,0,0,.2)); }
-.square.corner .sq-emoji { font-size: 2.6em; margin-top: auto; }
+.square.corner .sq-name { margin: 1px auto 3px; line-height: 1.05; }
 
 /* בעלות: דגלון צבעוני בפינת האריח */
 .square .owner-flag {
@@ -374,10 +392,12 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   position: absolute;
   top: 24%;
   right: 2px;
-  font-size: 1.15em;
-  line-height: 1;
+  display: flex;
+  gap: 1px;
   filter: drop-shadow(0 1px 1px rgba(0,0,0,.35));
 }
+.sq-houses svg.svg-house { height: 1.3em; width: auto; }
+.sq-houses svg.svg-hotel { height: 1.55em; width: auto; }
 
 .sq-tokens {
   position: absolute;
@@ -406,7 +426,7 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 }
 .fly-token {
   position: absolute;
-  font-size: clamp(20px, 3.4vh, 34px);
+  font-size: clamp(18px, 3.6cqw, 36px);
   line-height: 1;
   transform: translate(-50%, -50%);
   filter: drop-shadow(0 6px 6px rgba(0, 0, 0, .5));
@@ -424,29 +444,53 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 
 #board-center {
   grid-area: 2 / 2 / 11 / 11;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 10px;
+  gap: 1.4cqw;
+  padding: 1cqw;
   background:
     radial-gradient(circle at 50% 26%, rgba(255, 255, 255, .5), transparent 55%),
     repeating-linear-gradient(45deg, transparent 0 34px, rgba(163, 143, 96, .07) 34px 35px),
     var(--board-face);
+  overflow: hidden;
 }
 
-.center-logo {
-  font-size: clamp(24px, 4.6vh, 48px);
-  color: white;
-  background: var(--red);
-  border: 3px solid #7C1519;
-  padding: 4px 30px 7px;
-  border-radius: 13px;
-  transform: rotate(-3deg);
-  box-shadow: 0 6px 0 var(--red-deep), 0 14px 24px rgba(0, 0, 0, .25);
-  text-shadow: 0 2px 0 var(--red-deep);
+/* הפס האדום האלכסוני הקלאסי + הקמע */
+.center-stripe {
+  position: relative;
+  width: 112%;
+  background: linear-gradient(180deg, #F2555A, var(--red) 45%, var(--red-deep));
+  border-top: 0.4cqw solid #7C1519;
+  border-bottom: 0.4cqw solid #7C1519;
+  transform: rotate(-7deg);
+  text-align: center;
+  padding: 1cqw 0 1.3cqw;
+  box-shadow: 0 1.2cqw 2.4cqw rgba(0, 0, 0, .3);
 }
+.center-stripe span {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 5.4cqw, 58px);
+  color: white;
+  letter-spacing: 0.35cqw;
+  text-shadow: 0 0.35cqw 0 var(--red-deep);
+}
+
+.center-mascot {
+  position: absolute;
+  top: 2%;
+  left: 7%;
+  width: clamp(44px, 11cqw, 110px);
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .25));
+  transform: rotate(6deg);
+  pointer-events: none;
+}
+.center-mascot svg { width: 100%; }
+
+.setup-mascot { width: 92px; margin: -10px auto 2px; }
+.setup-mascot svg { width: 100%; }
 
 #turn-banner {
   font-size: clamp(14px, 2.3vh, 23px);
@@ -648,7 +692,7 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   padding: 20px 26px;
   text-align: center;
 }
-.flip-back { font-size: 74px; color: rgba(255,255,255,.95); }
+.flip-back svg { width: 34%; max-height: 70%; }
 .flip-front { transform: rotateY(180deg); }
 .flip-card.chance .flip-face { background: linear-gradient(160deg, #FFCF67, #F5A623); }
 .flip-card.chest .flip-face { background: linear-gradient(160deg, #8CC8F5, #4E97D8); }
@@ -705,6 +749,15 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   box-shadow: 0 10px 22px rgba(0, 0, 0, .18);
   transform: rotate(-1.2deg);
 }
+.deed-top {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #8A8060;
+  padding: 5px 0 3px;
+  border-bottom: 1px solid #E8E0C8;
+}
 .deed-band {
   padding: 9px;
   color: white;
@@ -712,6 +765,8 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
   border-bottom: 3px solid rgba(0, 0, 0, .25);
 }
+.deed-band.deed-art { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.deed-band.deed-art svg { width: 40px; }
 .deed-band small { font-family: var(--font-body); font-size: 12px; font-weight: 700; }
 .deed-body { padding: 10px 14px; font-size: 14px; }
 .deed-body table { width: 100%; border-collapse: collapse; }
@@ -769,6 +824,57 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
    טוסטים, קונפטי, ניצחון
    ========================================================================== */
 
+/* כרזות אירוע — מסבירות לילד מה קרה */
+#banner-root {
+  position: fixed;
+  top: 12%;
+  right: 50%;
+  transform: translateX(50%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  z-index: 65;
+  pointer-events: none;
+}
+.event-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(180deg, white, var(--cream));
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  padding: 10px 28px 12px;
+  font-family: var(--font-display);
+  font-size: clamp(16px, 2.6vh, 26px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .35), inset 0 0 0 3px rgba(245, 185, 64, .5);
+  animation: banner-in .4s cubic-bezier(.2, 1.1, .4, 1.15);
+  max-width: min(88vw, 640px);
+  text-align: center;
+}
+.event-banner.out { animation: banner-out .25s ease forwards; }
+.eb-icon { font-size: 1.35em; }
+@keyframes banner-in { from { transform: translateY(-26px) scale(.8); opacity: 0; } }
+@keyframes banner-out { to { transform: translateY(-18px); opacity: 0; } }
+
+/* מטבעות עפים בין חשבונות */
+#fx-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 80;
+}
+.fx-coin {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  transform: translate(-50%, -50%);
+  transition: left .6s cubic-bezier(.35, .1, .45, 1), top .6s cubic-bezier(.35, .1, .45, 1);
+}
+.fx-coin svg { width: 100%; height: 100%; filter: drop-shadow(0 4px 5px rgba(0, 0, 0, .35)); }
+.fx-coin.pop { animation: coin-pop .18s ease forwards; }
+@keyframes coin-pop { to { transform: translate(-50%, -50%) scale(1.7); opacity: 0; } }
+
 #toast-root {
   position: fixed;
   top: 16px;
@@ -814,10 +920,24 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 
-@media (max-width: 900px) {
-  #game-screen { flex-direction: column; height: auto; }
-  #board { width: min(96vw, 96vh); margin: 0 auto; }
+@media (max-width: 980px) {
+  #game-screen { flex-direction: column; height: auto; min-height: 100dvh; }
+  #board { width: min(100%, calc(100dvh - 130px)); margin: 0 auto; }
   #side-panel { width: 100%; }
   #cards-panel { flex-direction: row; flex-wrap: wrap; }
   .credit-card { flex: 1 1 220px; }
+  #log { max-height: 180px; }
+  #banner-root { top: 8%; }
+}
+
+@media (max-width: 560px) {
+  #game-screen { padding: 8px; gap: 10px; }
+  #board { width: 100%; }
+  .setup-card { padding: 24px 20px 30px; }
+  /* בטלפון: מפנים את מרכז הלוח לכפתורים בלבד */
+  .center-stripe, .center-mascot { display: none; }
+  #action-buttons .big-btn { font-size: 16px; padding: 9px 16px 11px; }
+  #action-buttons .mid-btn { font-size: 12px; padding: 7px 9px; }
+  .die3d-scene { width: 40px; height: 40px; }
+  #turn-banner { font-size: 13px; padding: 5px 14px 7px; }
 }
