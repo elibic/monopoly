@@ -866,10 +866,19 @@
         </div>`
         : `<p class="d-sub">⏳ המחשב חושב...</p>`}
     `);
+    d.dataset.auction = '1'; // סימון לזיהוי דיאלוג מכירה לצורך סגירה אוטומטית
     if (isMyTurn) {
       d.querySelector('#d-bid10').onclick = () => onBid(minBid);
       d.querySelector('#d-bid50').onclick = () => onBid(a.currentBid + 50);
       d.querySelector('#d-pass').onclick = () => onPass();
+    }
+  }
+
+  // סוגר דיאלוג מכירה שנותר פתוח אחרי סיום המכירה (לא נוגע בדיאלוגים אחרים)
+  function closeAuctionDialog() {
+    const root = $('#dialog-root');
+    if (!root.classList.contains('hidden') && root.querySelector('[data-auction]')) {
+      closeDialog();
     }
   }
 
@@ -1098,6 +1107,6 @@
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
     primeFromRestore, announce, SVG, narrator, showTurnSummary,
-    setSpeed, getSpeed, aiDelay,
+    setSpeed, getSpeed, aiDelay, closeAuctionDialog,
   };
 })();
