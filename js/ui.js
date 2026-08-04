@@ -209,7 +209,8 @@
       return new Promise((resolve) => {
         if (!soundOn) return resolve();
         let a = this.cache[id];
-        if (!a) { a = new Audio(`audio/${id}.mp3`); a.preload = 'auto'; this.cache[id] = a; }
+        // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=10`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -886,7 +887,7 @@
           <button class="big-btn blue" id="d-bid50" ${myMoney >= a.currentBid + 50 ? '' : 'disabled'}>הצעה: ${money(a.currentBid + 50)}</button>
           <button class="big-btn" id="d-pass" ${iAmHigh ? 'disabled' : ''}>פורש 🏳️</button>
         </div>`
-        : `<p class="d-sub">⏳ המחשב חושב...</p>`}
+        : `<p class="d-sub">⏳ ${g.players[g.auctionTurn()].name} חושב...</p>`}
     `);
     d.dataset.auction = '1'; // סימון לזיהוי דיאלוג מכירה לצורך סגירה אוטומטית
     if (isMyTurn) {
@@ -1086,7 +1087,7 @@
   const TS_NOTABLE = new Set(['buy', 'rent', 'tax', 'money', 'jail', 'card', 'pot', 'build', 'mortgage', 'auction', 'bankrupt']);
 
   // מחזיר true אם הוצגה חלונית (כלומר קרה משהו שכדאי לספר עליו)
-  function showTurnSummary(entries, onOk) {
+  function showTurnSummary(entries, onOk, botLabel = 'המחשב') {
     const notable = entries.some((e) => TS_NOTABLE.has(e.kind));
     if (!notable) { onOk(); return false; }
 
@@ -1095,7 +1096,7 @@
       .map((e) => `<div class="ts-row ts-${e.kind}"><span class="ts-ic">${TS_ICON[e.kind]}</span><span>${e.text}</span></div>`);
 
     const d = openDialog(`
-      <h2><span class="ts-bot">${SVG.robot}</span> מה עשה המחשב?</h2>
+      <h2><span class="ts-bot">${SVG.robot}</span> מה עשה ${botLabel}?</h2>
       <div class="turn-summary">${rows.join('')}</div>
       <div class="d-actions"><button class="big-btn green" id="ts-ok">👍 הבנתי, תורי!</button></div>`);
     d.querySelector('#ts-ok').onclick = () => { closeDialog(); onOk(); };
