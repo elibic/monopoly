@@ -51,6 +51,9 @@
   const POT_KEY = 'monopoly-beta-pot';
   let chosenPot = true;
   try { chosenPot = localStorage.getItem(POT_KEY) !== 'off'; } catch (e) { /* */ }
+  const DIFF_KEY = 'monopoly-beta-difficulty';
+  let chosenDifficulty = 'easy'; // ברירת מחדל ידידותית לילדים
+  try { chosenDifficulty = localStorage.getItem(DIFF_KEY) || 'easy'; } catch (e) { /* */ }
 
   function initSetup() {
     // הקמע בפתיחה ובמרכז הלוח
@@ -84,6 +87,18 @@
       b.onclick = () => {
         $('#opponent-picker').querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
         b.classList.add('selected');
+      };
+    });
+
+    // בורר רמת קושי — משקף את הבחירה השמורה
+    const diffPicker = $('#difficulty-picker');
+    if (diffPicker) diffPicker.querySelectorAll('.opt-btn').forEach((b) => {
+      b.classList.toggle('selected', b.dataset.diff === chosenDifficulty);
+      b.onclick = () => {
+        diffPicker.querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
+        b.classList.add('selected');
+        chosenDifficulty = b.dataset.diff;
+        try { localStorage.setItem(DIFF_KEY, chosenDifficulty); } catch (e) { /* */ }
       };
     });
 
@@ -163,7 +178,7 @@
       spec.push({ name: AI_NAMES[i], token: aiTokens[i].emoji, isAI: true, gender: 'm' });
     }
 
-    game = new Game(spec, { auctions: chosenAuctions, pot: chosenPot });
+    game = new Game(spec, { auctions: chosenAuctions, pot: chosenPot, difficulty: chosenDifficulty });
     aiRoundStartSeq = null;
     summaryPending = false;
     $('#setup-screen').classList.add('hidden');

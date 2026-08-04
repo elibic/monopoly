@@ -6,7 +6,49 @@
   const D = globalThis.MONOPOLY_DATA;
   const { GROUPS } = D;
 
-  const RESERVE = 120; // כרית ביטחון שהמחשב שומר בחשבון
+  // פרופילי קושי — כל רמה מכווננת את התוקפנות, הרזרבה והדיוק של הבוט.
+  const PROFILES = {
+    easy: {
+      reserve: 320,        // שומר הרבה מזומן — קונה מעט
+      auctionMul: 0.45,    // הצעות נמוכות במכירה פומבית
+      auctionMonoMul: 0.7,
+      buildReserve: 400,   // בונה רק כשיש עודף גדול מאוד
+      unmortgageSlack: 500,
+      buysMistake: 0.35,   // סיכוי לוותר על קנייה טובה (טעות)
+      bidMistake: 0.5,     // סיכוי לפרוש ממכירה מוקדם
+      trades: false,       // לא יוזם עסקאות
+      tradeLenient: true,  // מקבל עסקאות גם כשהן פחות טובות לו
+      jailPayRatio: 0.4,
+    },
+    medium: {
+      reserve: 120,
+      auctionMul: 0.75,
+      auctionMonoMul: 1.2,
+      buildReserve: 80,
+      unmortgageSlack: 200,
+      buysMistake: 0,
+      bidMistake: 0,
+      trades: true,
+      tradeLenient: false,
+      jailPayRatio: 0.6,
+    },
+    hard: {
+      reserve: 70,         // כמעט לא שומר עתודה — קונה תוקפני
+      auctionMul: 0.95,
+      auctionMonoMul: 1.6,
+      buildReserve: 40,    // בונה בכל הזדמנות
+      unmortgageSlack: 120,
+      buysMistake: 0,
+      bidMistake: 0,
+      trades: true,
+      tradeLenient: false,
+      jailPayRatio: 0.75,
+    },
+  };
+
+  function profile(g) { return PROFILES[g && g.difficulty] || PROFILES.medium; }
+
+  const RESERVE = 120; // ברירת מחדל היסטורית (נשמרת לתאימות)
 
   // כמה רחובות חסרים למחשב כדי להשלים את הקבוצה של pos
   function missingForGroup(g, idx, pos) {
@@ -20,12 +62,15 @@
     const pos = g.pendingBuy;
     const sq = g.square(pos);
     const p = g.players[idx];
+    const prof = profile(g);
     const missing = missingForGroup(g, idx, pos);
-    // משלים קבוצה או חוסם יריב — קונים כמעט בכל מחיר
+    // משלים קבוצה או חוסם יריב — קונים כמעט בכל מחיר (גם בקל לא מפספסים השלמה)
     const opponentClose = sq.type === 'street' &&
       g.groupPositions(sq.group).some((gp2) => g.owner[gp2] !== null && g.owner[gp2] !== idx);
     if (p.money >= sq.price && (missing === 1 || opponentClose)) return true;
-    return p.money - sq.price >= RESERVE;
+    // ברמה קלה — לפעמים "טועה" ומוותר על קנייה טובה
+    if (prof.buysMistake && g.rand() < prof.buysMistake) return false;
+    return p.money - sq.price >= prof.reserve;
   }
 
   // תקרת הצעה במכירה פומבית
@@ -33,16 +78,20 @@
     const pos = g.auction.pos;
     const sq = g.square(pos);
     const p = g.players[idx];
-    let cap = Math.floor(sq.price * 0.75);
-    if (missingForGroup(g, idx, pos) === 1) cap = Math.floor(sq.price * 1.2);
+    const prof = profile(g);
+    let cap = Math.floor(sq.price * prof.auctionMul);
+    if (missingForGroup(g, idx, pos) === 1) cap = Math.floor(sq.price * prof.auctionMonoMul);
     return Math.min(cap, p.money - 50);
   }
 
   function decideAuction(g, idx) {
     const a = g.auction;
+    const prof = profile(g);
     const cap = auctionCap(g, idx);
     const minBid = a.currentBid === 0 ? 10 : a.currentBid + 10;
     if (a.highBidder === idx) return null; // מובילים — מחכים
+    // ברמה קלה — לפעמים פורש מוקדם גם כשעוד משתלם
+    if (prof.bidMistake && minBid > 20 && g.rand() < prof.bidMistake) return 'pass';
     if (minBid <= cap) return minBid;
     return 'pass';
   }
@@ -81,15 +130,17 @@
   // האם לשלם כדי לצאת מהכלא? בשלב מוקדם כן, בשלב מתקדם עדיף לשבת
   function jailStrategy(g, idx) {
     const p = g.players[idx];
+    const prof = profile(g);
     if (p.jailCards.length) return 'card';
     const boughtRatio = g.owner.filter((o) => o !== null).length / 28;
-    if (boughtRatio < 0.6 && p.money > 200) return 'pay';
+    if (boughtRatio < prof.jailPayRatio && p.money > 200) return 'pay';
     return 'roll';
   }
 
   // ניהול נכסים בסוף תור: פדיון משכנתאות ובניית בתים
   function manageAssets(g, idx) {
     const p = g.players[idx];
+    const prof = profile(g);
     let guard = 50;
     // פדיון משכנתא כשיש עודף גדול (עדיפות לרחובות ממונופול)
     while (guard-- > 0) {
@@ -97,7 +148,7 @@
         .filter((pos) => g.mortgaged[pos])
         .filter((pos) => {
           const cost = Math.round((g.square(pos).price / 2) * 1.1);
-          return p.money - cost > RESERVE + 200;
+          return p.money - cost > prof.reserve + prof.unmortgageSlack;
         })
         .sort((x, y) => {
           const sx = g.square(x), sy = g.square(y);
@@ -113,7 +164,7 @@
     while (guard-- > 0) {
       const buildable = g.playerProps(idx)
         .filter((pos) => g.canBuildOn(idx, pos))
-        .filter((pos) => p.money - GROUPS[g.square(pos).group].houseCost > RESERVE + 80)
+        .filter((pos) => p.money - GROUPS[g.square(pos).group].houseCost > prof.reserve + prof.buildReserve)
         .sort((x, y) => GROUPS[g.square(x).group].houseCost - GROUPS[g.square(y).group].houseCost);
       if (!buildable.length) break;
       g.buildHouse(buildable[0]);
@@ -124,6 +175,8 @@
   // מחזיר {pos, offer} או null.
   function proposeTrade(g, idx, humanIdx) {
     const p = g.players[idx];
+    const prof = profile(g);
+    if (!prof.trades) return null; // ברמה קלה הבוט לא יוזם עסקאות
     for (const groupKey of Object.keys(GROUPS)) {
       const gp = g.groupPositions(groupKey);
       const mine = gp.filter((pos) => g.owner[pos] === idx);
@@ -132,7 +185,7 @@
         const pos = theirs[0];
         if (!g.canTradeProp(humanIdx, pos)) continue;
         const offer = Math.round(g.square(pos).price * 1.5);
-        if (p.money - offer > RESERVE) return { pos, offer };
+        if (p.money - offer > prof.reserve) return { pos, offer };
       }
     }
     return null;
@@ -159,8 +212,11 @@
         if (wouldComplete) gain -= sq.price;
       }
     }
-    if (g.players[aiIdx].money - moneyGive < RESERVE && moneyGive > 0) return false;
-    return gain >= 0;
+    const prof = profile(g);
+    if (g.players[aiIdx].money - moneyGive < prof.reserve && moneyGive > 0) return false;
+    // ברמה קלה הבוט "נדיב" ומקבל עסקאות גם כשהן מעט לרעתו
+    const threshold = prof.tradeLenient ? -Math.abs(gain === 0 ? 0 : 60) : 0;
+    return gain >= threshold;
   }
 
   globalThis.MonopolyAI = {

@@ -33,6 +33,7 @@
       this.cardQueue = (opts.cardQueue || []).slice(); // מזהי קלפים כפויים לבדיקות
       this.auctionsEnabled = opts.auctions !== false; // מכירה פומבית בוויתור על קנייה
       this.potEnabled = opts.pot !== false; // קופה בחניה חופשית (חוק בית)
+      this.difficulty = opts.difficulty || 'medium'; // easy | medium | hard — רמת הבוט
 
       this.players = playersSpec.map((p, idx) => ({
         idx,
@@ -802,6 +803,7 @@
         v: 1,
         auctionsEnabled: this.auctionsEnabled,
         potEnabled: this.potEnabled,
+        difficulty: this.difficulty,
         playersSpec: this.players.map((p) => ({ name: p.name, token: p.token, isAI: p.isAI, gender: p.gender })),
         players: this.players.map((p) => ({
           ...p,
@@ -836,7 +838,7 @@
     static restore(data) {
       const cardById = (deck, id) =>
         (deck === 'chance' ? D.CHANCE_CARDS : D.CHEST_CARDS).find((c) => c.id === id);
-      const g = new Game(data.playersSpec, { auctions: data.auctionsEnabled !== false, pot: data.potEnabled !== false });
+      const g = new Game(data.playersSpec, { auctions: data.auctionsEnabled !== false, pot: data.potEnabled !== false, difficulty: data.difficulty || 'medium' });
       g.players = data.players.map((p) => ({
         ...p,
         jailCards: (p.jailCards || []).map((h) => ({ deck: h.deck, card: cardById(h.deck, h.id) })),

@@ -17,6 +17,7 @@
 
   const money = (n) => `${n.toLocaleString('he-IL')} ₪`;
   const PLAYER_COLORS = ['#E0393E', '#3D8FD1', '#2FA671', '#8E44AD', '#E67E22', '#16A085'];
+  let uiGame = null; // הפניה למשחק הנוכחי — לשליפת שטר קניין בלחיצה על משבצת
 
   // ---------- קצב המשחק ----------
   // mult גדול = איטי יותר. משפיע על אנימציות, כרזות, הקראה והשהיות המחשב.
@@ -210,7 +211,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=b1`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=b2`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -313,6 +314,9 @@
       div.appendChild(el('div', 'sq-tokens'));
       if (sq.type === 'parking') div.appendChild(el('div', 'pot-badge'));
       div.title = sq.name;
+      div.classList.add('tappable');
+      // לחיצה על משבצת פותחת את שטר הקניין / הסבר קצר
+      div.addEventListener('click', () => { if (uiGame) showDeed(uiGame, sq.pos); });
       board.appendChild(div);
     }
     buildDice();
@@ -655,6 +659,7 @@
   }
 
   async function render(g) {
+    uiGame = g; // שמירת הפניה למשחק לצורך לחיצה על משבצות
     const prev = prevMoney.slice();
 
     // 1. אנימציות תנועה (לפני עדכון המשבצות)
@@ -846,6 +851,58 @@
         <div class="deed-band deed-art" style="background:#546E7A">${artFor(sq)}<span>${sq.name}</span></div>
         <div class="deed-body">${desc}<br>משכנתא: ${money(sq.price / 2)}</div>
       </div>`;
+  }
+
+  // הסבר ידידותי למשבצת שאינה נכס (לילדים)
+  const TILE_INFO = {
+    go: ['דרך צלחה 🎉', 'בכל פעם שעוברים כאן מקבלים 200 ₪ מהבנק!'],
+    jail: ['בית הכלא 🔒', 'אפשר רק "לבקר" כאן — זה בסדר גמור, לא נכנסים לכלא.'],
+    parking: ['חניה חופשית 🅿️', 'משבצת מנוחה — פשוט חונים ונחים עד התור הבא.'],
+    gotojail: ['לך לכלא 🚔', 'מי שנוחת כאן הולך ישר לכלא (בלי לקבל 200 ₪).'],
+    tax: ['מס 💰', 'משלמים לבנק את הסכום הרשום על המשבצת.'],
+    chance: ['הפתעה ❓', 'שולפים קלף הפתעה — אולי כסף, אולי הפתעה אחרת!'],
+    chest: ['תיבת המזל 🎁', 'שולפים קלף מתיבת המזל — בהצלחה!'],
+  };
+
+  // תצוגת שטר קניין מלאה בלחיצה על משבצת — כולל מצב נוכחי (בעלים/בתים/שכ"ד)
+  function showDeed(g, pos) {
+    const sq = BOARD[pos];
+    sounds.tick();
+    // משבצת שאינה נכס — הסבר קצר וידידותי
+    if (!['street', 'rail', 'utility'].includes(sq.type)) {
+      const info = TILE_INFO[sq.type] || [sq.name, ''];
+      const d = openDialog(`
+        <div class="deed-art-big">${artFor(sq) || '🎲'}</div>
+        <h2>${info[0]}</h2>
+        <p class="d-sub">${info[1]}</p>
+        <div class="d-actions"><button class="big-btn" id="deed-close">הבנתי 👍</button></div>`);
+      d.querySelector('#deed-close').onclick = () => closeDialog();
+      return;
+    }
+    // נכס — שטר קניין + שורת מצב
+    const ownerIdx = g.owner[pos];
+    let status;
+    if (ownerIdx === null) {
+      status = '<div class="deed-status free">🟢 פנוי לקנייה</div>';
+    } else {
+      const owner = g.players[ownerIdx];
+      const color = PLAYER_COLORS[ownerIdx];
+      let extra = '';
+      if (sq.type === 'street') {
+        const h = g.houses[pos];
+        extra = h === 5 ? ' · 🏨 מלון' : h > 0 ? ` · ${h} 🏠` : '';
+      }
+      const mort = g.mortgaged[pos] ? ' · 🚫 ממושכן' : '';
+      status = `<div class="deed-status owned" style="border-color:${color}">
+        <span class="deed-owner-dot" style="background:${color}"></span>
+        בבעלות <b>${owner.name}</b>${extra}${mort}</div>`;
+    }
+    const d = openDialog(`
+      <h2>שטר קניין 📜</h2>
+      ${deedHTML(g, pos)}
+      ${status}
+      <div class="d-actions"><button class="big-btn" id="deed-close">סגירה</button></div>`);
+    d.querySelector('#deed-close').onclick = () => closeDialog();
   }
 
   function showBuyDialog(g, onBuy, onDecline) {
@@ -1131,6 +1188,6 @@
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
     primeFromRestore, announce, SVG, narrator, showTurnSummary,
-    setSpeed, getSpeed, aiDelay, closeAuctionDialog,
+    setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed,
   };
 })();
