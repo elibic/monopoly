@@ -210,7 +210,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=11`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=12`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -296,7 +296,8 @@
       div.classList.add(`t-${sq.type}`);
 
       if (sq.type === 'street') {
-        const band = el('div', 'band');
+        // הפס הצבעוני נושא את שם העיר (הקבוצה), כמו בלוח המקורי
+        const band = el('div', 'band', `<span class="band-city">${GROUPS[sq.group].name}</span>`);
         band.style.background = GROUPS[sq.group].color;
         div.appendChild(band);
         div.appendChild(el('div', 'sq-name', sq.name));
