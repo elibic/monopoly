@@ -277,7 +277,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=b4`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=b5`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -1320,6 +1320,92 @@
     setTimeout(() => t.remove(), 3600);
   }
 
+  /* ==================== מדריך למתחילים ==================== */
+
+  const TUTORIAL_KEY = 'monopoly-beta-tutorial-seen';
+  function tutorialSeen() { try { return localStorage.getItem(TUTORIAL_KEY) === '1'; } catch (e) { return false; } }
+  function markTutorialSeen() { try { localStorage.setItem(TUTORIAL_KEY, '1'); } catch (e) { /* */ } }
+
+  const TUTORIAL_STEPS = [
+    { sel: null, emoji: '👋', text: 'שָׁלוֹם! אֲנִי אֶלַמֵּד אוֹתְךָ אֵיךְ מְשַׂחֲקִים מוֹנוֹפּוֹל. זֶה קַל וְכֵיף!' },
+    { sel: '#board', emoji: '🎲', text: 'זֶה לוּחַ הַמִּשְׂחָק. עוֹבְרִים סָבִיב הַלּוּחַ וְאוֹסְפִים רְחוֹבוֹת וְעָרִים.' },
+    { sel: '#cards-panel', emoji: '💳', text: 'כָּאן רוֹאִים כַּמָּה כֶּסֶף יֵשׁ לְכָל שַׂחְקָן. מַתְחִילִים עִם אֶלֶף וַחֲמֵשׁ מֵאוֹת שֶׁקֶל.' },
+    { sel: '#roll-btn', emoji: '🎲', text: 'בַּתּוֹר שֶׁלְּךָ לוֹחֲצִים כָּאן כְּדֵי לְהָטִיל אֶת הַקּוּבִּיּוֹת וּלְהִתְקַדֵּם.' },
+    { sel: null, emoji: '🏠', text: 'כְּשֶׁנּוֹחֲתִים עַל עִיר פְּנוּיָה אֶפְשָׁר לִקְנוֹת אוֹתָהּ. אַחַר כָּךְ מִי שֶׁנּוֹחֵת עָלֶיהָ מְשַׁלֵּם לְךָ שְׂכַר דִּירָה!' },
+    { sel: '#board', emoji: '👆', text: 'אֶפְשָׁר לִלְחֹץ עַל כָּל מִשְׁבֶּצֶת בַּלּוּחַ כְּדֵי לִרְאוֹת אֶת הַמְּחִיר וְאֶת שְׂכַר הַדִּירָה שֶׁלָּהּ.' },
+    { sel: '#end-turn-btn', emoji: '✅', text: 'בְּסוֹף הַתּוֹר לוֹחֲצִים כָּאן. הַמַּטָּרָה: לִהְיוֹת הָאַחֲרוֹן שֶׁנִּשְׁאָר עִם כֶּסֶף. בְּהַצְלָחָה!' },
+  ];
+
+  function startTutorial(onDone) {
+    let i = 0;
+    const overlay = el('div', 'tut-overlay');
+    overlay.innerHTML = `
+      <div class="tut-spot"></div>
+      <div class="tut-bubble">
+        <div class="tut-emoji"></div>
+        <div class="tut-text"></div>
+        <div class="tut-actions">
+          <button class="big-btn" id="tut-skip">דילוג</button>
+          <button class="big-btn green" id="tut-next"></button>
+        </div>
+        <div class="tut-progress"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const spot = overlay.querySelector('.tut-spot');
+    const bubble = overlay.querySelector('.tut-bubble');
+    const emojiEl = overlay.querySelector('.tut-emoji');
+    const textEl = overlay.querySelector('.tut-text');
+    const nextBtn = overlay.querySelector('#tut-next');
+    const progEl = overlay.querySelector('.tut-progress');
+
+    function finish() {
+      speechSynthesis && speechSynthesis.cancel && speechSynthesis.cancel();
+      overlay.remove();
+      markTutorialSeen();
+      if (onDone) onDone();
+    }
+
+    function show() {
+      const step = TUTORIAL_STEPS[i];
+      emojiEl.textContent = step.emoji || '💡';
+      textEl.textContent = step.text;
+      nextBtn.textContent = i === TUTORIAL_STEPS.length - 1 ? '🎉 מתחילים!' : 'הבא ▶';
+      progEl.textContent = `${i + 1} / ${TUTORIAL_STEPS.length}`;
+      // זרקור על היעד
+      const target = step.sel && $(step.sel);
+      const r = target && target.getBoundingClientRect();
+      if (r && r.width > 4 && r.height > 4) {
+        const pad = 8;
+        spot.style.display = 'block';
+        spot.style.top = `${r.top - pad}px`;
+        spot.style.left = `${r.left - pad}px`;
+        spot.style.width = `${r.width + pad * 2}px`;
+        spot.style.height = `${r.height + pad * 2}px`;
+        // מיקום הבועה: מתחת ליעד אם יש מקום, אחרת מעליו
+        bubble.classList.remove('tut-center');
+        const below = r.bottom + 20;
+        if (below + 180 < window.innerHeight) { bubble.style.top = `${below}px`; }
+        else { bubble.style.top = `${Math.max(16, r.top - 200)}px`; }
+        bubble.style.left = '50%';
+        bubble.style.transform = 'translateX(-50%)';
+      } else {
+        spot.style.display = 'none';
+        bubble.classList.add('tut-center');
+        bubble.style.top = ''; bubble.style.left = ''; bubble.style.transform = '';
+      }
+      speak(step.text, { raw: true });
+    }
+
+    nextBtn.onclick = () => {
+      i++;
+      if (i >= TUTORIAL_STEPS.length) finish();
+      else show();
+    };
+    overlay.querySelector('#tut-skip').onclick = finish;
+    window.addEventListener('resize', show);
+    show();
+  }
+
   // חלונית סיכום תור הרובוט/ים — מה עשו מאז התור הקודם של השחקן
   const TS_ICON = {
     dice: '🎲', move: '📍', buy: '🛍️', rent: '💸', tax: '🧾', money: '💰',
@@ -1374,6 +1460,6 @@
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
     primeFromRestore, announce, SVG, narrator, showTurnSummary,
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
-    showStickerAlbum,
+    showStickerAlbum, startTutorial, tutorialSeen,
   };
 })();

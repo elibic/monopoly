@@ -148,6 +148,8 @@
     $('#download-btn').onclick = showDownloadDialog;
     const albumBtn = $('#album-btn');
     if (albumBtn) albumBtn.onclick = () => UI.showStickerAlbum();
+    const tutBtn = $('#tutorial-btn');
+    if (tutBtn) tutBtn.onclick = () => UI.startTutorial();
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
   }
 
@@ -194,8 +196,13 @@
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
     UI.music.resumeIfOn(); // הפעלת מוזיקת רקע (אחרי לחיצת המשתמש)
-    UI.narrator.say(['ev_welcome'], `שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`);
     tick();
+    // מדריך אוטומטי בפעם הראשונה; אחרת ברכת פתיחה רגילה
+    if (!UI.tutorialSeen()) {
+      UI.startTutorial(() => UI.narrator.say(['ev_welcome'], `שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`));
+    } else {
+      UI.narrator.say(['ev_welcome'], `שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`);
+    }
   }
 
   // שחזור משחק שמור מהביקור הקודם
