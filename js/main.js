@@ -17,6 +17,29 @@
   let aiTimer = null;
   let tradeOfferedThisRound = false;
 
+  /* ---------- שמירה אוטומטית (עד איפוס ידני) ---------- */
+
+  const SAVE_KEY = 'monopoly-hebrew-save';
+
+  function saveGame() {
+    if (!game || game.phase === 'gameover') return;
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(game.toJSON())); } catch (e) { /* אחסון מלא/חסום */ }
+  }
+
+  function clearSave() {
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* התעלמות */ }
+  }
+
+  function loadSave() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || data.v !== 1) return null;
+      return data;
+    } catch (e) { return null; }
+  }
+
   /* ---------- מסך פתיחה ---------- */
 
   let chosenToken = D.TOKENS[0];
@@ -64,6 +87,30 @@
     tick();
   }
 
+  // שחזור משחק שמור מהביקור הקודם
+  function resumeGame(data) {
+    game = Game.restore(data);
+    $('#setup-screen').classList.add('hidden');
+    $('#game-screen').classList.remove('hidden');
+    UI.primeFromRestore(game);
+    UI.toast('👋 ממשיכים מאיפה שהפסקנו!');
+    tick();
+  }
+
+  function offerResume(data) {
+    const who = data.playersSpec.map((p) => `${p.token} ${p.name}`).join(' · ');
+    const d = UI.openDialog(`
+      <h2>יש משחק שמור! 💾</h2>
+      <p class="d-sub">${who}</p>
+      <p class="d-sub">רוצים להמשיך מאיפה שהפסקתם, או להתחיל מחדש?</p>
+      <div class="d-actions">
+        <button class="big-btn green" id="d-resume">▶️ ממשיכים לשחק</button>
+        <button class="big-btn" id="d-new">🆕 משחק חדש</button>
+      </div>`);
+    d.querySelector('#d-resume').onclick = () => { UI.closeDialog(); resumeGame(data); };
+    d.querySelector('#d-new').onclick = () => { UI.closeDialog(); clearSave(); };
+  }
+
   /* ---------- לולאת המשחק ---------- */
 
   function currentActor() {
@@ -86,8 +133,10 @@
       tickQueued = false;
       await UI.render(game);
       updateButtons();
+      saveGame(); // שמירה אוטומטית אחרי כל שינוי מצב
 
       if (game.phase === 'gameover') {
+        clearSave();
         UI.showWin(game, () => location.reload());
         break;
       }
@@ -291,13 +340,20 @@
     $('#trade-btn').onclick = () => { if (!$('#trade-btn').disabled) chooseTradePartner(); };
     $('#sound-btn').onclick = () => UI.setSound(!UI.isSoundOn());
     $('#restart-btn').onclick = () => {
-      if (confirm('להתחיל משחק חדש? המשחק הנוכחי יימחק.')) location.reload();
+      if (confirm('לאפס את המשחק? המשחק השמור יימחק ונתחיל מחדש.')) {
+        game = null; // מונע מ-beforeunload לשמור שוב אחרי המחיקה
+        clearSave();
+        location.reload();
+      }
     };
+    window.addEventListener('beforeunload', saveGame);
   }
 
   document.addEventListener('DOMContentLoaded', () => {
     initSetup();
     UI.buildBoard();
     initGameButtons();
+    const saved = loadSave();
+    if (saved) offerResume(saved);
   });
 })();

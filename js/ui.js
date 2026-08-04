@@ -658,6 +658,16 @@
     setTimeout(() => t.remove(), 3600);
   }
 
+  // אתחול התצוגה אחרי שחזור משחק שמור: היומן נטען בלי צלילים והקראות
+  function primeFromRestore(g) {
+    const logEl = $('#log');
+    logEl.innerHTML = '';
+    for (const entry of g.log) logEl.prepend(el('div', `entry kind-${entry.kind}`, entry.text));
+    lastLogId = g._logSeq;
+    lastPositions = g.players.map((p) => p.pos);
+    prevMoney = g.players.map((p) => p.money);
+  }
+
   function setSound(on) {
     soundOn = on;
     if (!on && 'speechSynthesis' in window) speechSynthesis.cancel();
@@ -670,6 +680,6 @@
     buildBoard, render, animateDice, openDialog, closeDialog,
     showBuyDialog, renderAuction, showJailDialog, showDebtDialog,
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
-    toast, speak, setSound, isSoundOn, sounds, confettiBurst,
+    toast, speak, setSound, isSoundOn, sounds, confettiBurst, primeFromRestore,
   };
 })();

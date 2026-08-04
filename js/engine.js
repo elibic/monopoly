@@ -191,7 +191,7 @@
           p.jailRolls = 0;
           this._charge(p.idx, C.JAIL_FINE, null, 'קנס יציאה מהכלא', () => {
             this._move(p, total, { noExtraRoll: true });
-          });
+          }, { kind: 'jailMove', total });
         } else {
           this._log(`${p.name} נשאר/ת בכלא (ניסיון ${p.jailRolls} מתוך 3).`, 'jail');
           this.phase = 'end';
@@ -637,7 +637,8 @@
     /* ---------- תשלומים, חוב ופשיטת רגל ---------- */
 
     // מחייב שחקן; אם אין כסף — נכנסים לשלב 'debt' עד גיוס הכסף או פשיטת רגל.
-    _charge(idx, amount, creditorIdx, reason, onPaid) {
+    // cont: תיאור ההמשך בצורה שניתנת לשמירה (לשחזור משחק מהדפדפן).
+    _charge(idx, amount, creditorIdx, reason, onPaid, cont) {
       const p = this.players[idx];
       if (p.money >= amount) {
         p.money -= amount;
@@ -645,7 +646,7 @@
         if (onPaid) onPaid();
         return;
       }
-      this.debt = { debtor: idx, creditor: creditorIdx, amount, reason, onPaid };
+      this.debt = { debtor: idx, creditor: creditorIdx, amount, reason, onPaid, cont: cont || { kind: 'afterAction' } };
       this.phase = 'debt';
       this._log(`ל${p.name} אין מספיק כסף לשלם ${money(amount)} (${reason}). צריך לגייס כסף!`, 'debt');
     }
@@ -661,6 +662,8 @@
       this._log(`${p.name} שילם/ה את החוב (${money(d.amount)}).`, 'money');
       this.phase = 'end';
       if (d.onPaid) d.onPaid();
+      else if (d.cont && d.cont.kind === 'jailMove') this._move(p, d.cont.total, { noExtraRoll: true });
+      else this._afterAction();
     }
 
     canAffordDebt() {
@@ -726,6 +729,72 @@
       } while (this.current().bankrupt);
       this.phase = 'roll';
       this._log(`התור של ${this.current().name}.`, 'turn');
+    }
+
+    /* ---------- שמירה ושחזור ---------- */
+
+    toJSON() {
+      return {
+        v: 1,
+        playersSpec: this.players.map((p) => ({ name: p.name, token: p.token, isAI: p.isAI })),
+        players: this.players.map((p) => ({
+          ...p,
+          jailCards: p.jailCards.map((h) => ({ deck: h.deck, id: h.card.id })),
+        })),
+        owner: this.owner,
+        houses: this.houses,
+        mortgaged: this.mortgaged,
+        housesLeft: this.housesLeft,
+        hotelsLeft: this.hotelsLeft,
+        decks: {
+          chance: this.decks.chance.map((c) => c.id),
+          chest: this.decks.chest.map((c) => c.id),
+        },
+        turn: this.turn,
+        phase: this.phase,
+        dice: this.dice,
+        doubles: this.doubles,
+        pendingBuy: this.pendingBuy,
+        auction: this.auction,
+        auctionQueue: this.auctionQueue,
+        winner: this.winner,
+        debt: this.debt
+          ? { debtor: this.debt.debtor, creditor: this.debt.creditor, amount: this.debt.amount, reason: this.debt.reason, cont: this.debt.cont }
+          : null,
+        log: this.log.slice(-120),
+        logSeq: this._logSeq,
+      };
+    }
+
+    static restore(data) {
+      const cardById = (deck, id) =>
+        (deck === 'chance' ? D.CHANCE_CARDS : D.CHEST_CARDS).find((c) => c.id === id);
+      const g = new Game(data.playersSpec);
+      g.players = data.players.map((p) => ({
+        ...p,
+        jailCards: (p.jailCards || []).map((h) => ({ deck: h.deck, card: cardById(h.deck, h.id) })),
+      }));
+      g.owner = data.owner;
+      g.houses = data.houses;
+      g.mortgaged = data.mortgaged;
+      g.housesLeft = data.housesLeft;
+      g.hotelsLeft = data.hotelsLeft;
+      g.decks = {
+        chance: data.decks.chance.map((id) => cardById('chance', id)),
+        chest: data.decks.chest.map((id) => cardById('chest', id)),
+      };
+      g.turn = data.turn;
+      g.phase = data.phase;
+      g.dice = data.dice;
+      g.doubles = data.doubles;
+      g.pendingBuy = data.pendingBuy;
+      g.auction = data.auction;
+      g.auctionQueue = data.auctionQueue || [];
+      g.winner = data.winner;
+      g.debt = data.debt ? { ...data.debt, onPaid: null } : null;
+      g.log = data.log || [];
+      g._logSeq = data.logSeq || 0;
+      return g;
     }
   }
 

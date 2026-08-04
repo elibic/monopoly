@@ -318,6 +318,57 @@ test('אסור לסחור ברחוב מעיר שיש בה בתים', () => {
   assert.equal(g.canTradeProp(0, 3), false);
 });
 
+test('שמירה ושחזור: סבב מלא משמר את כל מצב המשחק', () => {
+  const g = twoPlayers({ diceQueue: [[1, 2]] });
+  g.rollDice();
+  g.buy(); // חוף אלמוג
+  g.owner[26] = 0;
+  g.mortgage(26);
+  const data = JSON.parse(JSON.stringify(g.toJSON()));
+  const r = Game.restore(data);
+  assert.equal(r.players[0].money, g.players[0].money);
+  assert.equal(r.players[0].pos, 3);
+  assert.equal(r.owner[3], 0);
+  assert.equal(r.mortgaged[26], true);
+  assert.equal(r.phase, 'end');
+  assert.equal(r.decks.chance.length, g.decks.chance.length);
+  // ממשיכים לשחק אחרי שחזור
+  r.endTurn();
+  assert.equal(r.turn, 1);
+  assert.equal(r.phase, 'roll');
+});
+
+test('שחזור באמצע חוב: settleDebt ממשיך תקין בלי onPaid', () => {
+  const g = twoPlayers({ diceQueue: [[1, 2]] });
+  g.owner[3] = 1; g.owner[1] = 1;
+  g.houses[3] = 5;
+  g.players[0].money = 200;
+  g.owner[26] = 0; g.owner[31] = 0;
+  g.rollDice();
+  assert.equal(g.phase, 'debt');
+  const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.phase, 'debt');
+  assert.equal(r.debt.amount, 450);
+  r.mortgage(26);
+  r.mortgage(31);
+  r.settleDebt();
+  assert.equal(r.debt, null);
+  assert.equal(r.players[1].money, 1500 + 450);
+  assert.equal(r.phase, 'end');
+});
+
+test('שחזור עם כרטיס "צא מהכלא" ביד', () => {
+  const g = twoPlayers({ diceQueue: [[1, 1]], cardQueue: ['ch8'] });
+  g.players[0].pos = 5; // 5+2=7 הפתעה
+  g.rollDice();
+  assert.equal(g.players[0].jailCards.length, 1);
+  const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.players[0].jailCards.length, 1);
+  assert.equal(r.players[0].jailCards[0].card.id, 'ch8');
+  // הקלף לא נמצא בחפיסה
+  assert.ok(!r.decks.chance.some((c) => c.id === 'ch8'));
+});
+
 test('מכירת מלון כשאין בתים במלאי — נמכר בשלמותו', () => {
   const g = twoPlayers();
   g.owner[1] = 0; g.owner[3] = 0;
