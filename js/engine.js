@@ -51,6 +51,7 @@
       this.mortgaged = new Array(40).fill(false);
       this.housesLeft = C.TOTAL_HOUSES;
       this.hotelsLeft = C.TOTAL_HOTELS;
+      this.pot = 0; // הקופה: כל תשלום לבנק נכנס אליה, מי שנוחת בחניה חופשית זוכה
 
       this.decks = {
         chance: shuffle(D.CHANCE_CARDS, this.rand),
@@ -174,6 +175,8 @@
           this._goToJail(p);
           return;
         }
+      } else {
+        this.doubles = 0; // הטלה רגילה מאפסת — תור נוסף רק אחרי דאבל בהטלה הנוכחית
       }
       this._move(p, a + b);
     }
@@ -261,7 +264,16 @@
           this._goToJail(p);
           return;
         default:
-          if (sq.type === 'parking') this._log('חניה חופשית — נחים תור אחד.', 'info');
+          if (sq.type === 'parking') {
+            if (this.pot > 0) {
+              const won = this.pot;
+              this.pot = 0;
+              p.money += won;
+              this._log(`🎁 ${p.name} ${v(p, 'נחת', 'נחתה')} בחניה חופשית ${v(p, 'וזכה', 'וזכתה')} בקופה: ${money(won)}!`, 'pot');
+            } else {
+              this._log('חניה חופשית — נחים תור אחד.', 'info');
+            }
+          }
           break;
       }
       this._afterAction(opts);
@@ -289,6 +301,7 @@
       const p = this.current();
       if (p.money < sq.price) throw new Error('אין מספיק כסף בחשבון');
       p.money -= sq.price;
+      this.pot += sq.price;
       this.owner[pos] = p.idx;
       this.pendingBuy = null;
       this._log(`${p.name} ${v(p, 'קנה', 'קנתה')} את "${sq.name}" ב-${money(sq.price)}! 🎉`, 'buy');
@@ -358,6 +371,7 @@
       if (a.active.length === 1 && a.highBidder === a.active[0]) {
         const winner = this.players[a.highBidder];
         winner.money -= a.currentBid;
+        this.pot += a.currentBid;
         this.owner[a.pos] = winner.idx;
         this._log(`${winner.name} ${v(winner, 'זכה', 'זכתה')} במכירה! "${this.square(a.pos).name}" ב-${money(a.currentBid)}.`, 'buy');
         this.auction = null;
@@ -413,6 +427,17 @@
           this._afterAction(opts);
           return;
         }
+        case 'payToAll': {
+          returnCard();
+          for (const other of this.alive()) {
+            if (other.idx === p.idx) continue;
+            const paid = Math.min(act.amount, p.money);
+            p.money -= paid;
+            other.money += paid;
+          }
+          this._afterAction(opts);
+          return;
+        }
         case 'repairs': {
           returnCard();
           let cost = 0;
@@ -450,10 +475,34 @@
           this._resolveLanding(opts);
           return;
         case 'moveToNearest': {
+          // התקדמות לתחנה/חברה הקרובה; אם הנכס בבעלות — שכ"ד מיוחד לפי הקלף:
+          // רכבת פי 2 מהשכ"ד הרגיל, חברה פי 10 מסכום הקוביות.
           returnCard();
           let pos = p.pos;
           do { pos = (pos + 1) % 40; } while (this.square(pos).type !== act.kind);
-          this._moveTo(p, pos, { collectSalary: true });
+          const from = p.pos;
+          p.pos = pos;
+          if (pos < from) this._salary(p);
+          const sq2 = this.square(pos);
+          const ownerIdx = this.owner[pos];
+          this._log(`${p.name} ${v(p, 'הגיע', 'הגיעה')} אל "${sq2.name}".`, 'move');
+          if (ownerIdx === null) {
+            this.pendingBuy = pos;
+            this.phase = 'buy';
+            this._log(`"${sq2.name}" פנוי לקנייה במחיר ${money(sq2.price)}.`, 'offer');
+            return;
+          }
+          if (ownerIdx !== p.idx && !this.mortgaged[pos]) {
+            const diceTotal = this.dice[0] + this.dice[1];
+            const rent = act.kind === 'utility'
+              ? diceTotal * (act.rentMult || 10)
+              : this.rentOf(pos, diceTotal) * (act.rentMult || 1);
+            const ownerP = this.players[ownerIdx];
+            this._log(`שכר דירה מיוחד: ${p.name} ${v(p, 'משלם', 'משלמת')} ${money(rent)} ל${ownerP.name}.`, 'rent');
+            this._charge(p.idx, rent, ownerIdx, `שכר דירה על ${sq2.name}`, () => this._afterAction(opts));
+            return;
+          }
+          this._afterAction(opts);
           return;
         }
         default:
@@ -477,6 +526,7 @@
       if (this.phase !== 'roll' || !p.inJail) throw new Error('לא ניתן לשלם קנס עכשיו');
       if (p.money < C.JAIL_FINE) throw new Error('אין מספיק כסף לקנס');
       p.money -= C.JAIL_FINE;
+      this.pot += C.JAIL_FINE;
       p.inJail = false;
       p.jailRolls = 0;
       this._log(`${p.name} ${v(p, 'שילם קנס', 'שילמה קנס')} ${money(C.JAIL_FINE)} ${v(p, 'ויצא', 'ויצאה')} מהכלא.`, 'jail');
@@ -518,6 +568,7 @@
       const sq = this.square(pos);
       const cost = GROUPS[sq.group].houseCost;
       p.money -= cost;
+      this.pot += cost;
       if (this.houses[pos] === 4) {
         this.houses[pos] = 5;
         this.hotelsLeft--;
@@ -596,6 +647,7 @@
       const p = this.players[idx];
       if (p.money < cost) throw new Error('אין מספיק כסף לפדיון');
       p.money -= cost;
+      this.pot += cost;
       this.mortgaged[pos] = false;
       this._log(`${p.name} ${v(p, 'פדה', 'פדתה')} את "${sq.name}" מהמשכנתא תמורת ${money(cost)} (כולל 10% ריבית).`, 'mortgage');
     }
@@ -646,6 +698,7 @@
       if (p.money >= amount) {
         p.money -= amount;
         if (creditorIdx !== null) this.players[creditorIdx].money += amount;
+        else this.pot += amount;
         if (onPaid) onPaid();
         return;
       }
@@ -661,6 +714,7 @@
       if (p.money < d.amount) throw new Error('עדיין אין מספיק כסף');
       p.money -= d.amount;
       if (d.creditor !== null) this.players[d.creditor].money += d.amount;
+      else this.pot += d.amount;
       this.debt = null;
       this._log(`${p.name} ${v(p, 'שילם', 'שילמה')} את החוב (${money(d.amount)}).`, 'money');
       this.phase = 'end';
@@ -749,6 +803,7 @@
         mortgaged: this.mortgaged,
         housesLeft: this.housesLeft,
         hotelsLeft: this.hotelsLeft,
+        pot: this.pot,
         decks: {
           chance: this.decks.chance.map((c) => c.id),
           chest: this.decks.chest.map((c) => c.id),
@@ -782,6 +837,7 @@
       g.mortgaged = data.mortgaged;
       g.housesLeft = data.housesLeft;
       g.hotelsLeft = data.hotelsLeft;
+      g.pot = data.pot || 0;
       g.decks = {
         chance: data.decks.chance.map((id) => cardById('chance', id)),
         chest: data.decks.chest.map((id) => cardById('chest', id)),

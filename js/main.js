@@ -10,7 +10,7 @@
   const $ = (sel) => document.querySelector(sel);
 
   const AI_NAMES = ['רובי הרובוט', 'ביפ-בופ', 'צ\'יפי'];
-  const AI_DELAY = 1250; // השהיה "אנושית" בין פעולות מחשב — קצב נינוח לילדים
+  const AI_DELAY = 950; // השהיה "אנושית" בין פעולות מחשב
 
   let game = null;
   const humanIdx = 0;
