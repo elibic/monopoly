@@ -258,6 +258,31 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 }
 .dl-steps li { margin-bottom: 4px; }
 
+.dl-section {
+  text-align: right;
+  border: 2px solid #E4DCC4;
+  border-radius: 16px;
+  padding: 12px 16px 16px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, .5);
+}
+.dl-section > b { font-size: 18px; display: block; margin-bottom: 8px; }
+.dl-section.dl-dev { background: rgba(61, 143, 209, .08); border-color: #BcD4EA; }
+.dl-repo {
+  display: block;
+  direction: ltr;
+  text-align: center;
+  font-family: monospace;
+  font-size: 14px;
+  background: white;
+  border: 1.5px dashed #9AB4D0;
+  border-radius: 10px;
+  padding: 8px;
+  margin: 6px 0 10px;
+  color: var(--blue-btn-deep);
+  word-break: break-all;
+}
+
 .mid-btn {
   font-family: var(--font-body);
   font-size: 15px;
