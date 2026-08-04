@@ -183,6 +183,7 @@
     summaryPending = false;
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
+    UI.music.resumeIfOn(); // הפעלת מוזיקת רקע (אחרי לחיצת המשתמש)
     UI.narrator.say(['ev_welcome'], `שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`);
     tick();
   }
@@ -195,6 +196,7 @@
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
     UI.primeFromRestore(game);
+    UI.music.resumeIfOn(); // הפעלת מוזיקת רקע (אחרי לחיצת המשתמש)
     UI.toast('👋 ממשיכים מאיפה שהפסקנו!');
     tick();
   }
@@ -468,6 +470,19 @@
     $('#manage-btn').onclick = () => { if (!$('#manage-btn').disabled) showManage(); };
     $('#trade-btn').onclick = () => { if (!$('#trade-btn').disabled) chooseTradePartner(); };
     $('#sound-btn').onclick = () => UI.setSound(!UI.isSoundOn());
+    const musicBtn = $('#music-btn');
+    if (musicBtn) {
+      musicBtn.classList.toggle('active', UI.music.isOn());
+      musicBtn.textContent = UI.music.isOn() ? '🎵' : '🔇';
+      musicBtn.title = UI.music.isOn() ? 'מוזיקת רקע: פועלת' : 'מוזיקת רקע: כבויה';
+      musicBtn.onclick = () => {
+        const on = UI.music.toggle();
+        musicBtn.classList.toggle('active', on);
+        musicBtn.textContent = on ? '🎵' : '🔇';
+        musicBtn.title = on ? 'מוזיקת רקע: פועלת' : 'מוזיקת רקע: כבויה';
+        UI.toast(on ? '🎵 מוזיקה פועלת' : '🔇 מוזיקה כבויה');
+      };
+    }
     $('#speed-btn').onclick = () => {
       const order = ['slow', 'normal', 'fast'];
       const next = order[(order.indexOf(UI.getSpeed()) + 1) % order.length];

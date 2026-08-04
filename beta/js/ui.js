@@ -111,7 +111,73 @@
     jail() { tone(220, .25, 0, 'sawtooth', .09); tone(180, .35, .2, 'sawtooth', .09); },
     card() { tone(700, .08); tone(940, .1, .08); },
     win() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, .22, i * .15, 'triangle', .15)); },
+    // צלילים עשירים נוספים
+    build() { tone(330, .07, 0, 'square', .09); tone(392, .07, .07, 'square', .09); tone(523, .12, .14, 'triangle', .11); },
+    hotel() { [523, 659, 784, 1047].forEach((f, i) => tone(f, .16, i * .08, 'triangle', .13)); },
+    passGo() { [659, 784, 988, 1319].forEach((f, i) => tone(f, .16, i * .1, 'triangle', .13)); },
+    cash() { tone(1047, .06, 0, 'triangle', .1); tone(1319, .08, .05, 'triangle', .1); tone(1568, .12, .11, 'triangle', .1); },
+    sticker() { [784, 988, 1319, 1047, 1568].forEach((f, i) => tone(f, .18, i * .09, 'triangle', .14)); },
+    tap() { tone(880, .04, 0, 'sine', .06); },
   };
+
+  /* ==================== מוזיקת רקע (WebAudio, בלי קבצים — עובד אופליין) ==================== */
+  // לולאה עדינה ורגועה: פרוגרסיה I-vi-IV-V עם ארפג'ו + בס רך.
+  const music = (() => {
+    let on = false, timer = null, master = null, step = 0;
+    const KEY = 'monopoly-beta-music';
+    try { on = localStorage.getItem(KEY) === 'on'; } catch (e) { /* */ }
+    // תווים (הרץ) — דו מז'ור. כל אקורד: תו בס + שלושה תווי ארפג'ו.
+    const CHORDS = [
+      { bass: 130.81, notes: [261.63, 329.63, 392.00] }, // C
+      { bass: 110.00, notes: [261.63, 329.63, 440.00] }, // Am
+      { bass: 174.61, notes: [349.23, 440.00, 523.25] }, // F
+      { bass: 196.00, notes: [392.00, 493.88, 587.33] }, // G
+    ];
+    const STEP_MS = 480; // קצב נעים ואיטי
+
+    function voice(freq, dur, when, vol, type) {
+      const c = ctx(); if (!c || !master) return;
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(0, when);
+      g.gain.linearRampToValueAtTime(vol, when + 0.06);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+      o.connect(g).connect(master);
+      o.start(when); o.stop(when + dur + 0.05);
+    }
+
+    function pulse() {
+      const c = ctx(); if (!c || !master) return;
+      const chord = CHORDS[Math.floor(step / 4) % CHORDS.length];
+      const beat = step % 4;
+      const t = c.currentTime + 0.02;
+      if (beat === 0) voice(chord.bass, 1.6, t, 0.10, 'triangle'); // בס בתחילת אקורד
+      voice(chord.notes[beat % chord.notes.length], 0.7, t, 0.045, 'sine'); // ארפג'ו רך
+      step++;
+    }
+
+    function start() {
+      const c = ctx(); if (!c) return;
+      if (c.state === 'suspended') c.resume();
+      if (!master) { master = c.createGain(); master.gain.value = 0.5; master.connect(c.destination); }
+      if (timer) return;
+      pulse();
+      timer = setInterval(pulse, STEP_MS);
+    }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+
+    return {
+      isOn: () => on,
+      toggle() {
+        on = !on;
+        try { localStorage.setItem(KEY, on ? 'on' : 'off'); } catch (e) { /* */ }
+        if (on) start(); else stop();
+        return on;
+      },
+      // מופעל אחרי אינטראקציית משתמש (כדי לעקוף חסימת autoplay)
+      resumeIfOn() { if (on) start(); },
+    };
+  })();
 
   // מילון ניקוד: מילים נפוצות בהודעות המשחק → צורה מנוקדת שה-TTS קורא נכון
   const LEXICON = {
@@ -211,7 +277,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=b2`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=b3`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -640,6 +706,7 @@
   let prevMoney = [];
   let lastLogId = 0;
   let lastPositions = [];
+  let lastHouses = new Array(40).fill(0); // מעקב אחר בתים לאנימציית בנייה
 
   function animateBalance(elBalance, from, to) {
     if (from === to || reducedMotion()) { elBalance.textContent = money(to); return; }
@@ -683,7 +750,20 @@
         ? `${PLAYER_COLORS[ownerIdx]} transparent transparent transparent`
         : '';
 
-      div.querySelector('.sq-houses').innerHTML = housesHTML(g.houses[sq.pos]);
+      const housesBox = div.querySelector('.sq-houses');
+      const nowH = g.houses[sq.pos];
+      housesBox.innerHTML = housesHTML(nowH);
+      // אנימציית בנייה — הבניין החדש "צומח"
+      if (nowH > (lastHouses[sq.pos] || 0)) {
+        const built = housesBox.lastElementChild || housesBox.firstElementChild;
+        if (built) {
+          built.classList.add(nowH === 5 ? 'hotel-pop' : 'house-grow');
+          div.classList.add('build-flash');
+          setTimeout(() => div.classList.remove('build-flash'), 700);
+        }
+        sounds[nowH === 5 ? 'hotel' : 'build']();
+      }
+      lastHouses[sq.pos] = nowH;
 
       const toks = div.querySelector('.sq-tokens');
       toks.innerHTML = '';
@@ -1169,6 +1249,7 @@
     lastLogId = g._logSeq;
     lastPositions = g.players.map((p) => p.pos);
     prevMoney = g.players.map((p) => p.money);
+    lastHouses = g.houses.slice(); // כדי לא לאנן בתים קיימים בשחזור
   }
 
   function setSound(on) {
@@ -1188,6 +1269,6 @@
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
     primeFromRestore, announce, SVG, narrator, showTurnSummary,
-    setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed,
+    setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
   };
 })();
