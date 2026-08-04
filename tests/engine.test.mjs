@@ -447,3 +447,26 @@ test('קלף חברה קרובה: פי 10 מהקוביות', () => {
   assert.equal(g.players[0].money, 1500 - 20);
   assert.equal(g.players[1].money, 1500 + 20);
 });
+
+test('מכירות מכובות: ויתור משאיר את הנכס פנוי בלי מכירה', () => {
+  const g = new Game(
+    [{ name: 'דנה' }, { name: 'מחשב', isAI: true }],
+    { diceQueue: [[1, 2]], auctions: false },
+  );
+  g.rollDice();
+  assert.equal(g.phase, 'buy');
+  g.declineBuy();
+  assert.equal(g.owner[3], null);
+  assert.equal(g.phase, 'end'); // בלי מכירה פומבית
+});
+
+test('מכירות מכובות: שמירה ושחזור משמרים את ההגדרה', () => {
+  const g = new Game([{ name: 'א' }, { name: 'ב', isAI: true }], { auctions: false });
+  const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.auctionsEnabled, false);
+});
+
+test('מכירות מופעלות כברירת מחדל', () => {
+  const g = new Game([{ name: 'א' }, { name: 'ב', isAI: true }]);
+  assert.equal(g.auctionsEnabled, true);
+});

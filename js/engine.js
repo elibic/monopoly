@@ -31,6 +31,7 @@
       this.rand = opts.rand || Math.random;
       this.diceQueue = (opts.diceQueue || []).slice();
       this.cardQueue = (opts.cardQueue || []).slice(); // מזהי קלפים כפויים לבדיקות
+      this.auctionsEnabled = opts.auctions !== false; // מכירה פומבית בוויתור על קנייה
 
       this.players = playersSpec.map((p, idx) => ({
         idx,
@@ -312,6 +313,11 @@
       if (this.phase !== 'buy') throw new Error('אין נכס ממתין לקנייה');
       const pos = this.pendingBuy;
       this.pendingBuy = null;
+      if (!this.auctionsEnabled) {
+        // מצב מפושט לילדים: מוותרים → הנכס נשאר פנוי, בלי מכירה פומבית
+        this._log(`ויתרת על "${this.square(pos).name}" — הוא נשאר פנוי.`, 'info');
+        return this._afterAction();
+      }
       this._log(`"${this.square(pos).name}" יוצא למכירה פומבית!`, 'auction');
       this._startAuction(pos);
     }
@@ -746,14 +752,14 @@
         for (const pos of this.playerProps(p.idx)) this._transferProp(pos, d.creditor);
         this._log(`כל הרכוש והכסף של ${p.name} עוברים ל${creditor.name}.`, 'bankrupt');
       } else {
-        // חוב לבנק: הנכסים חוזרים לבנק ויוצאים למכירה פומבית
+        // חוב לבנק: הנכסים חוזרים לבנק (ויוצאים למכירה פומבית אם היא מופעלת)
         for (const held of p.jailCards) this.decks[held.deck].push(held.card);
         for (const pos of this.playerProps(p.idx)) {
           this.owner[pos] = null;
           this.mortgaged[pos] = false;
-          this.auctionQueue.push(pos);
+          if (this.auctionsEnabled) this.auctionQueue.push(pos);
         }
-        this._log(`נכסי ${p.name} חוזרים לבנק ויוצאים למכירה פומבית.`, 'bankrupt');
+        this._log(`נכסי ${p.name} חוזרים לבנק${this.auctionsEnabled ? ' ויוצאים למכירה פומבית' : ''}.`, 'bankrupt');
       }
       p.money = 0;
       p.jailCards = [];
@@ -793,6 +799,7 @@
     toJSON() {
       return {
         v: 1,
+        auctionsEnabled: this.auctionsEnabled,
         playersSpec: this.players.map((p) => ({ name: p.name, token: p.token, isAI: p.isAI, gender: p.gender })),
         players: this.players.map((p) => ({
           ...p,
@@ -827,7 +834,7 @@
     static restore(data) {
       const cardById = (deck, id) =>
         (deck === 'chance' ? D.CHANCE_CARDS : D.CHEST_CARDS).find((c) => c.id === id);
-      const g = new Game(data.playersSpec);
+      const g = new Game(data.playersSpec, { auctions: data.auctionsEnabled !== false });
       g.players = data.players.map((p) => ({
         ...p,
         jailCards: (p.jailCards || []).map((h) => ({ deck: h.deck, card: cardById(h.deck, h.id) })),
