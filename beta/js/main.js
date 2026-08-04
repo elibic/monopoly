@@ -150,6 +150,8 @@
     if (albumBtn) albumBtn.onclick = () => UI.showStickerAlbum();
     const tutBtn = $('#tutorial-btn');
     if (tutBtn) tutBtn.onclick = () => UI.startTutorial();
+    const remoteBtn = $('#remote-btn');
+    if (remoteBtn && globalThis.MonopolyRemote) remoteBtn.onclick = () => globalThis.MonopolyRemote.open();
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
   }
 
