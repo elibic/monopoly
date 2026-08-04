@@ -45,6 +45,9 @@
 
   let chosenToken = D.TOKENS[0];
   let chosenGender = 'm';
+  const AUC_KEY = 'monopoly-hebrew-auctions';
+  let chosenAuctions = true;
+  try { chosenAuctions = localStorage.getItem(AUC_KEY) !== 'off'; } catch (e) { /* */ }
 
   function initSetup() {
     // הקמע בפתיחה ובמרכז הלוח
@@ -92,6 +95,18 @@
       };
     });
 
+    // בורר מכירות פומביות — משקף את הבחירה השמורה
+    const aucPicker = $('#auction-picker');
+    aucPicker.querySelectorAll('.opt-btn').forEach((b) => {
+      b.classList.toggle('selected', (b.dataset.auc === 'on') === chosenAuctions);
+      b.onclick = () => {
+        aucPicker.querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
+        b.classList.add('selected');
+        chosenAuctions = b.dataset.auc === 'on';
+        try { localStorage.setItem(AUC_KEY, chosenAuctions ? 'on' : 'off'); } catch (e) { /* */ }
+      };
+    });
+
     $('#start-btn').onclick = startGame;
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
   }
@@ -106,7 +121,7 @@
       spec.push({ name: AI_NAMES[i], token: aiTokens[i].emoji, isAI: true, gender: 'm' });
     }
 
-    game = new Game(spec);
+    game = new Game(spec, { auctions: chosenAuctions });
     aiRoundStartSeq = null;
     summaryPending = false;
     $('#setup-screen').classList.add('hidden');
