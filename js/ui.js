@@ -150,6 +150,97 @@
 
   const SPOKEN_KINDS = new Set(['turn', 'buy', 'rent', 'jail', 'win', 'debt', 'offer', 'bankrupt', 'money', 'tax']);
 
+  /* ---------- קריין AI: קליפים מוקלטים מראש (audio/), עם נסיגה לקול הדפדפן ---------- */
+
+  const narrator = {
+    ids: null,          // Set של קליפים זמינים (מתוך audio/manifest.json)
+    cache: {},
+    queue: Promise.resolve(),
+    async init() {
+      try {
+        const r = await fetch('audio/manifest.json', { cache: 'no-cache' });
+        if (r.ok) this.ids = new Set(await r.json());
+      } catch (e) { this.ids = null; }
+    },
+    available() { return !!(this.ids && this.ids.size); },
+    say(ids, fallbackText) {
+      if (!soundOn) return;
+      const usable = this.ids && ids.every((id) => this.ids.has(id));
+      if (usable) {
+        this.queue = this.queue.then(async () => {
+          for (const id of ids) await this._play(id);
+        }).catch(() => {});
+      } else if (fallbackText) {
+        speak(fallbackText, { raw: fallbackText.includes('ְ') || fallbackText.includes('ָ') });
+      }
+    },
+    _play(id) {
+      return new Promise((resolve) => {
+        if (!soundOn) return resolve();
+        let a = this.cache[id];
+        if (!a) { a = new Audio(`audio/${id}.mp3`); a.preload = 'auto'; this.cache[id] = a; }
+        a.currentTime = 0;
+        a.onended = resolve;
+        a.onerror = resolve;
+        a.play().catch(resolve);
+      });
+    },
+    stop() {
+      for (const a of Object.values(this.cache)) { try { a.pause(); } catch (e) { /* */ } }
+      this.queue = Promise.resolve();
+    },
+  };
+
+  // מיפוי רשומת יומן → קליפי קריינות
+  function narrationFor(g, entry) {
+    const t = entry.text;
+    const actor = g.players
+      .filter((p) => t.includes(p.name))
+      .sort((a, b) => t.indexOf(a.name) - t.indexOf(b.name))[0];
+    const vk = actor ? (actor.isAI ? 'ai' : actor.gender) : null;
+    const sqm = t.match(/"([^"]+)"/);
+    const sqEntry = sqm ? BOARD.find((s) => s.name === sqm[1]) : null;
+    const sqId = sqEntry ? [`sq${sqEntry.pos}`] : [];
+
+    switch (entry.kind) {
+      case 'turn':
+        if (t.includes('דאבל')) return ['ev_double'];
+        if (!vk) return null;
+        return [`ev_turn_${vk}`];
+      case 'buy':
+        if (!vk) return null;
+        return [`ev_bought_${vk}`, ...sqId];
+      case 'rent':
+        if (!vk) return null;
+        return [`ev_rent_${vk}`];
+      case 'money':
+        if (vk && t.includes('משכורת')) return [`ev_salary_${vk}`];
+        return null;
+      case 'tax':
+        if (!vk) return null;
+        return [`ev_tax_${vk}`];
+      case 'jail':
+        if (!vk) return null;
+        if (/ויצא|יצא|יוצא/.test(t)) return [`ev_jailout_${vk}`];
+        if (/נשאר/.test(t)) return null;
+        return [`ev_jailin_${vk}`];
+      case 'auction':
+        if (t.includes('מכירה פומבית')) return ['ev_auction'];
+        return null;
+      case 'debt':
+        return ['ev_debt'];
+      case 'bankrupt':
+        if (!vk) return null;
+        return [`ev_bankrupt_${vk}`];
+      case 'win':
+        return [actor && !actor.isAI ? `ev_win_${vk}` : 'ev_lose'];
+      case 'trade':
+        return ['ev_trade'];
+      default:
+        return null;
+    }
+  }
+
   /* ==================== בניית הלוח ==================== */
 
   function gridArea(pos) {
@@ -541,16 +632,22 @@
       if (entry.kind === 'money') sounds.money();
       if (entry.kind === 'jail' || entry.kind === 'bankrupt') sounds.jail();
       if (entry.kind === 'card' && entry.deck) {
-        // קריינות מנוקדת של הקלף מתוך data.js
         const deckCards = entry.deck === 'chance' ? D.CHANCE_CARDS : D.CHEST_CARDS;
         const cardData = deckCards.find((cd) => cd.id === entry.cardId) ||
           deckCards.find((cd) => cd.text === entry.cardText);
-        speak('קְלַף ' + (entry.deck === 'chance' ? 'הַפְתָּעָה' : 'תֵּיבַת הַמַּזָּל') + '. ' +
-          (cardData && cardData.speech ? cardData.speech : vocalize(entry.cardText)), { raw: true });
+        const intro = entry.deck === 'chance' ? 'ev_chance' : 'ev_chest';
+        const cardClip = cardData ? [cardData.id] : [];
+        narrator.say([intro, ...cardClip],
+          'קְלַף ' + (entry.deck === 'chance' ? 'הַפְתָּעָה' : 'תֵּיבַת הַמַּזָּל') + '. ' +
+          (cardData && cardData.speech ? cardData.speech : vocalize(entry.cardText)));
         await showCardFlip(entry.deck, entry.cardText);
         continue;
       }
-      if (SPOKEN_KINDS.has(entry.kind)) speak(entry.text);
+      if (SPOKEN_KINDS.has(entry.kind)) {
+        const clips = narrationFor(g, entry);
+        if (clips) narrator.say(clips, entry.text);
+        else speak(entry.text);
+      }
       if (BANNER_KINDS.has(entry.kind)) {
         await announce(entry.text, BANNER_ICONS[entry.kind] || '⭐');
       }
@@ -622,7 +719,7 @@
         <button class="big-btn green" id="d-buy" ${canAfford ? '' : 'disabled'}>💳 קונים!</button>
         <button class="big-btn" id="d-skip">🙅 לא הפעם</button>
       </div>`);
-    speak(`${vocalize(sq.name)} פָּנוּי לִקְנִיָּה. רוֹצֶה לִקְנוֹת?`, { raw: true });
+    narrator.say([`sq${pos}`, 'ev_offer'], `${vocalize(sq.name)} פָּנוּי לִקְנִיָּה. רוֹצֶה לִקְנוֹת?`);
     d.querySelector('#d-buy').onclick = () => { closeDialog(); onBuy(); };
     d.querySelector('#d-skip').onclick = () => { closeDialog(); onDecline(); };
   }
@@ -806,7 +903,7 @@
         <button class="big-btn green" id="d-acc">✅ מסכימים!</button>
         <button class="big-btn" id="d-dec">❌ לא מוכרים</button>
       </div>`);
-    speak(`הַצָּעַת עִסְקָה! ${ai.name} רוֹצֶה לִקְנוֹת מִמְּךָ אֶת ${vocalize(sq.name)}`, { raw: true });
+    narrator.say(['ev_trade_offer', `sq${pos}`], `הַצָּעַת עִסְקָה! ${ai.name} רוֹצֶה לִקְנוֹת מִמְּךָ אֶת ${vocalize(sq.name)}`);
     d.querySelector('#d-acc').onclick = () => { closeDialog(); onAccept(); };
     d.querySelector('#d-dec').onclick = () => { closeDialog(); onDecline(); };
   }
@@ -842,7 +939,10 @@
 
   function setSound(on) {
     soundOn = on;
-    if (!on && 'speechSynthesis' in window) speechSynthesis.cancel();
+    if (!on) {
+      if ('speechSynthesis' in window) speechSynthesis.cancel();
+      narrator.stop();
+    }
     $('#sound-btn').textContent = on ? '🔊' : '🔇';
   }
 
@@ -853,6 +953,6 @@
     showBuyDialog, renderAuction, showJailDialog, showDebtDialog,
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
-    primeFromRestore, announce, SVG,
+    primeFromRestore, announce, SVG, narrator,
   };
 })();
