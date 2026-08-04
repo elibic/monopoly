@@ -17,20 +17,21 @@ import sys
 import edge_tts
 
 VOICE = "he-IL-HilaNeural"   # קול נשי חם וברור; חלופה: he-IL-AvriNeural
-RATE = "-8%"                 # מעט לאט — מותאם לילדים
+RATE = "+8%"                 # קצב זריז שמתאים לקצב המשחק
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "audio")
 LINES = os.path.join(os.path.dirname(__file__), "voice_lines.json")
 FFMPEG = shutil.which("ffmpeg")
 
 
 def pad_silence(path):
-    """ריפוד 0.35 שניות שקט בסוף הקליפ נגד חיתוך המילה האחרונה."""
+    """חיתוך שקט מיותר בתחילת הקליפ + ריפוד שקט קצר בסופו נגד חיתוך מילים."""
     if not FFMPEG:
         return
     tmp = path + ".pad.mp3"
     r = subprocess.run(
         [FFMPEG, "-y", "-v", "error", "-i", path,
-         "-af", "apad=pad_dur=0.35", "-codec:a", "libmp3lame", "-b:a", "48k", tmp],
+         "-af", "silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.08,apad=pad_dur=0.3",
+         "-codec:a", "libmp3lame", "-b:a", "48k", tmp],
         capture_output=True,
     )
     if r.returncode == 0 and os.path.getsize(tmp) > 0:

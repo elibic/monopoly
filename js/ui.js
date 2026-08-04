@@ -36,6 +36,9 @@
     chest: `<svg viewBox="0 0 44 34"><path d="M4 14 Q4 5 22 5 Q40 5 40 14 V16 H4 Z" fill="#C98A2D" stroke="#7C5314" stroke-width="1.6"/><rect x="4" y="16" width="36" height="14" rx="2.5" fill="#E0A93E" stroke="#7C5314" stroke-width="1.6"/><rect x="18.5" y="13" width="7" height="9" rx="1.5" fill="#F5D77C" stroke="#7C5314" stroke-width="1.4"/><circle cx="22" cy="18" r="1.6" fill="#7C5314"/><circle cx="10" cy="9" r="1.4" fill="#F5D77C"/><circle cx="34" cy="9" r="1.4" fill="#F5D77C"/></svg>`,
     chance: `<svg viewBox="0 0 30 40"><text x="15" y="32" text-anchor="middle" font-size="34" font-weight="900" fill="#E0393E" stroke="#8E1F23" stroke-width="1">?</text></svg>`,
     coin: `<svg viewBox="0 0 24 24" class="svg-coin"><circle cx="12" cy="12" r="11" fill="#F5C542" stroke="#B07E14" stroke-width="2"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="#D9A82B" stroke-width="1.2"/><text x="12" y="16.5" text-anchor="middle" font-size="12" font-weight="900" fill="#8A6210">₪</text></svg>`,
+    boy: `<svg viewBox="0 0 64 64"><circle cx="32" cy="38" r="19" fill="#FBD9B0" stroke="#D9A878" stroke-width="1.5"/><path d="M13 36 Q11 16 32 15 Q53 16 51 36 L51 30 Q50 25 44 26 L22 28 Q14 28 13 36 Z" fill="#4A3018"/><path d="M12 27 Q16 12 34 13 L52 16 Q53 22 46 22 L18 24 Q12 24 12 27 Z" fill="#3D8FD1" stroke="#2A6AA0" stroke-width="1.4"/><path d="M45 14 L60 17 L59 22 L45 20 Z" fill="#3D8FD1" stroke="#2A6AA0" stroke-width="1.2"/><circle cx="25" cy="39" r="2.4" fill="#33261A"/><circle cx="39" cy="39" r="2.4" fill="#33261A"/><path d="M26 48 Q32 53 38 48" stroke="#B0663A" stroke-width="2.2" fill="none" stroke-linecap="round"/><circle cx="19" cy="44" r="3" fill="#F5A98F" opacity=".55"/><circle cx="45" cy="44" r="3" fill="#F5A98F" opacity=".55"/></svg>`,
+    girl: `<svg viewBox="0 0 64 64"><circle cx="11" cy="40" r="7" fill="#7C4A21"/><circle cx="53" cy="40" r="7" fill="#7C4A21"/><circle cx="32" cy="38" r="19" fill="#FBD9B0" stroke="#D9A878" stroke-width="1.5"/><path d="M13 38 Q10 14 32 14 Q54 14 51 38 L50 28 Q46 20 32 20 Q18 20 14 28 Z" fill="#7C4A21"/><path d="M24 14 L32 8 L40 14 L32 19 Z" fill="#E0398F" stroke="#A8246A" stroke-width="1.2"/><circle cx="25" cy="39" r="2.4" fill="#33261A"/><circle cx="39" cy="39" r="2.4" fill="#33261A"/><path d="M26 48 Q32 53 38 48" stroke="#B0663A" stroke-width="2.2" fill="none" stroke-linecap="round"/><circle cx="19" cy="44" r="3" fill="#F5A98F" opacity=".55"/><circle cx="45" cy="44" r="3" fill="#F5A98F" opacity=".55"/></svg>`,
+    robot: `<svg viewBox="0 0 64 64"><line x1="32" y1="4" x2="32" y2="12" stroke="#8A8F9C" stroke-width="2.4"/><circle cx="32" cy="4" r="3" fill="#E0393E"/><rect x="12" y="12" width="40" height="36" rx="9" fill="#B9C2D0" stroke="#7A8494" stroke-width="2"/><rect x="17" y="18" width="30" height="16" rx="6" fill="#2A2F3A"/><circle cx="26" cy="26" r="4" fill="#57E38F"><animate attributeName="opacity" values="1;.35;1" dur="2.2s" repeatCount="indefinite"/></circle><circle cx="38" cy="26" r="4" fill="#57E38F"><animate attributeName="opacity" values="1;.35;1" dur="2.2s" repeatCount="indefinite"/></circle><rect x="22" y="38" width="20" height="4.5" rx="2.2" fill="#5B6472"/><rect x="8" y="24" width="4" height="12" rx="2" fill="#8A8F9C"/><rect x="52" y="24" width="4" height="12" rx="2" fill="#8A8F9C"/></svg>`,
     mascot: `<svg viewBox="0 0 80 92"><ellipse cx="40" cy="86" rx="26" ry="5" fill="rgba(0,0,0,.12)"/><path d="M18 30 Q18 12 40 12 Q62 12 62 30 L62 34 H18 Z" fill="#2A2A32"/><rect x="12" y="32" width="56" height="7" rx="3.5" fill="#2A2A32"/><rect x="20" y="27" width="40" height="6" fill="#E0393E"/><circle cx="40" cy="52" r="19" fill="#FBEED3" stroke="#D9BE93" stroke-width="1.4"/><circle cx="33" cy="48" r="2.4" fill="#332611"/><circle cx="47" cy="48" r="2.4" fill="#332611"/><circle cx="49" cy="48" r="6.5" fill="none" stroke="#B07E14" stroke-width="1.6"/><line x1="55" y1="51" x2="58" y2="60" stroke="#B07E14" stroke-width="1.4"/><path d="M28 57 Q33 54 38 57 Q36 60 32 60 Q29 60 28 57 Z M52 57 Q47 54 42 57 Q44 60 48 60 Q51 60 52 57 Z" fill="#EDEDF0"/><path d="M34 63 Q40 68 46 63" stroke="#8E5B2A" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="40" cy="45" r="1.8" fill="#E8A7A0"/></svg>`,
   };
 
@@ -148,7 +151,7 @@
     speechSynthesis.speak(u);
   }
 
-  const SPOKEN_KINDS = new Set(['turn', 'buy', 'rent', 'jail', 'win', 'debt', 'offer', 'bankrupt', 'money', 'tax']);
+  const SPOKEN_KINDS = new Set(['turn', 'buy', 'rent', 'jail', 'win', 'debt', 'offer', 'bankrupt', 'money', 'tax', 'pot']);
 
   /* ---------- קריין AI: קליפים מוקלטים מראש (audio/), עם נסיגה לקול הדפדפן ---------- */
 
@@ -228,6 +231,8 @@
         return null;
       case 'debt':
         return ['ev_debt'];
+      case 'pot':
+        return ['ev_pot'];
       case 'bankrupt':
         if (!vk) return null;
         return [`ev_bankrupt_${vk}`];
@@ -276,6 +281,7 @@
       div.appendChild(el('div', 'owner-flag'));
       div.appendChild(el('div', 'sq-houses'));
       div.appendChild(el('div', 'sq-tokens'));
+      if (sq.type === 'parking') div.appendChild(el('div', 'pot-badge'));
       div.title = sq.name;
       board.appendChild(div);
     }
@@ -395,19 +401,80 @@
 
   const BANNER_ICONS = {
     buy: '🛍️', rent: '💸', money: '💰', tax: '🧾', jail: '👮',
-    bankrupt: '💥', auction: '🔨', build: '🏠', mortgage: '🏦', trade: '🤝',
+    bankrupt: '💥', auction: '🔨', build: '🏠', mortgage: '🏦', trade: '🤝', pot: '🎁',
   };
-  const BANNER_KINDS = new Set(['buy', 'rent', 'money', 'tax', 'jail', 'bankrupt']);
+  const BANNER_KINDS = new Set(['buy', 'rent', 'money', 'tax', 'jail', 'bankrupt', 'pot']);
 
-  async function announce(text, icon = '⭐') {
+  // הדמות שמכריזה: ילד/ילדה לשחקן, רובוט למחשב, הקמע לאירועים כלליים
+  function avatarFor(g, entry) {
+    const actor = entry
+      ? g.players.filter((p) => entry.text.includes(p.name))
+          .sort((a, b) => entry.text.indexOf(a.name) - entry.text.indexOf(b.name))[0]
+      : null;
+    return avatarOf(actor);
+  }
+
+  function avatarOf(p) {
+    if (!p) return SVG.mascot;
+    if (p.isAI) return SVG.robot;
+    return p.gender === 'f' ? SVG.girl : SVG.boy;
+  }
+
+  async function announce(text, icon = '⭐', avatarSvg = null) {
     const root = $('#banner-root');
     if (!root) return;
-    const b = el('div', 'event-banner', `<span class="eb-icon">${icon}</span><span>${text}</span>`);
+    const b = el('div', 'event-banner',
+      `<span class="eb-avatar">${avatarSvg || SVG.mascot}</span>
+       <span class="eb-bubble"><span class="eb-icon">${icon}</span><span>${text}</span></span>`);
     root.appendChild(b);
-    await wait(reducedMotion() ? 400 : 1900);
+    await wait(reducedMotion() ? 350 : 1400);
     b.classList.add('out');
-    await wait(reducedMotion() ? 10 : 250);
+    await wait(reducedMotion() ? 10 : 220);
     b.remove();
+  }
+
+  // דיאלוג אינטראקטיבי: השחקן חייב ללחוץ "שלם" או "קבל"
+  function showAckDialog({ title, amount, mode }) {
+    return new Promise((resolve) => {
+      const isPay = mode === 'pay';
+      const d = openDialog(`
+        <h2>${title}</h2>
+        <div class="ack-amount ${isPay ? 'pay' : 'receive'}">${amount ? `${amount} ₪` : ''}</div>
+        <div class="d-actions">
+          <button class="big-btn ${isPay ? '' : 'green'}" id="d-ack">
+            ${isPay ? '💳 שלם' : '🤑 קבל'}
+          </button>
+        </div>`);
+      d.querySelector('#d-ack').onclick = () => { closeDialog(); resolve(); };
+    });
+  }
+
+  // האם רשומת היומן דורשת אישור מהשחקן האנושי (שחקן 0)?
+  function ackFor(g, entry) {
+    const human = g.players[0];
+    if (!human || human.bankrupt || human.isAI) return null;
+    const t = entry.text;
+    const amount = (t.match(/([\d,]+) ש"ח/) || [])[1] || null;
+    const actor = g.players.filter((p) => t.includes(p.name))
+      .sort((a, b) => t.indexOf(a.name) - t.indexOf(b.name))[0];
+
+    switch (entry.kind) {
+      case 'rent':
+        if (actor && !actor.isAI) return { title: 'שכר דירה! 💸', amount, mode: 'pay' };
+        if (t.includes(`ל${human.name}`)) return { title: 'קיבלת שכר דירה! 🤑', amount, mode: 'receive' };
+        return null;
+      case 'tax':
+        if (actor && !actor.isAI) return { title: 'מס לבנק 🧾', amount, mode: 'pay' };
+        return null;
+      case 'money':
+        if (actor && !actor.isAI && t.includes('משכורת')) return { title: 'משכורת! 💰', amount, mode: 'receive' };
+        return null;
+      case 'pot':
+        if (actor && !actor.isAI) return { title: 'זכית בקופה! 🎁', amount, mode: 'receive' };
+        return null;
+      default:
+        return null;
+    }
   }
 
   /* ==================== מטבעות עפים (העברות כסף) ==================== */
@@ -469,7 +536,7 @@
 
   /* ==================== קלף מתהפך ==================== */
 
-  async function showCardFlip(deck, text) {
+  async function showCardFlip(deck, text, { interactive = false } = {}) {
     const root = $('#card-root');
     root.classList.remove('hidden');
     const isChance = deck === 'chance';
@@ -479,10 +546,19 @@
         <div class="flip-face flip-front">
           <div class="gc-title">${isChance ? '✨ הפתעה ✨' : '🎁 תיבת המזל 🎁'}</div>
           <div class="gc-text">${text}</div>
+          ${interactive ? '<button class="big-btn blue gc-ok" id="gc-ok">👍 הבנתי!</button>' : ''}
         </div>
       </div>`;
     sounds.card();
-    await wait(reducedMotion() ? 700 : 3300);
+    if (interactive) {
+      await new Promise((resolve) => {
+        const btn = root.querySelector('#gc-ok');
+        if (btn) btn.onclick = resolve;
+        else resolve();
+      });
+    } else {
+      await wait(reducedMotion() ? 700 : 2600);
+    }
     root.classList.add('hidden');
     root.innerHTML = '';
   }
@@ -583,6 +659,13 @@
     // 3. קוביות
     if (g.dice[0]) { setDieFace('die1', g.dice[0]); setDieFace('die2', g.dice[1]); }
 
+    // 3.5 הקופה על משבצת החניה החופשית
+    const potBadge = document.querySelector('.pot-badge');
+    if (potBadge) {
+      potBadge.textContent = g.pot > 0 ? `🎁 ${money(g.pot)}` : '';
+      potBadge.classList.toggle('has-pot', g.pot > 0);
+    }
+
     // 4. באנר תור
     const cur = g.current();
     $('#turn-banner').innerHTML =
@@ -600,7 +683,10 @@
       if (p.bankrupt) card.classList.add('bankrupt');
       const props = g.playerProps(i).length;
       card.innerHTML = `
-        <div class="cc-top"><span>${p.token} ${p.name}</span><span class="cc-chip">💳</span></div>
+        <div class="cc-top">
+          <span class="cc-who"><span class="cc-ava">${avatarOf(p)}</span> ${p.name} ${p.token}</span>
+          <span class="cc-chip">💳</span>
+        </div>
         <div class="cc-balance"></div>
         <div class="cc-sub"><span>חשבון בנק מונופול</span><span>🏠 ${props} נכסים</span></div>`;
       const balEl = card.querySelector('.cc-balance');
@@ -637,9 +723,17 @@
         const intro = entry.deck === 'chance' ? 'ev_chance' : 'ev_chest';
         const cardClip = cardData ? [cardData.id] : [];
         narrator.say([intro, ...cardClip],
-          'קְלַף ' + (entry.deck === 'chance' ? 'הַפְתָּעָה' : 'תֵּיבַת הַמַּזָּל') + '. ' +
-          (cardData && cardData.speech ? cardData.speech : vocalize(entry.cardText)));
-        await showCardFlip(entry.deck, entry.cardText);
+          'קלף ' + (entry.deck === 'chance' ? 'הפתעה' : 'תיבת המזל') + '. ' + entry.cardText);
+        const humanCard = !g.current().isAI;
+        await showCardFlip(entry.deck, entry.cardText, { interactive: humanCard });
+        // קלף כסף לשחקן האנושי — לוחצים "שלם"/"קבל"
+        if (humanCard && cardData) {
+          const act = cardData.action;
+          if (act.type === 'pay') await showAckDialog({ title: 'הקלף אומר לשלם 💳', amount: act.amount, mode: 'pay' });
+          if (act.type === 'receive') await showAckDialog({ title: 'הקלף נותן לך כסף! 🤑', amount: act.amount, mode: 'receive' });
+          if (act.type === 'collectFromAll') await showAckDialog({ title: 'כולם משלמים לך! 🥳', amount: act.amount * (g.alive().length - 1), mode: 'receive' });
+          if (act.type === 'payToAll') await showAckDialog({ title: 'משלמים לכל המשתתפים 💳', amount: act.amount * (g.alive().length - 1), mode: 'pay' });
+        }
         continue;
       }
       if (SPOKEN_KINDS.has(entry.kind)) {
@@ -647,8 +741,11 @@
         if (clips) narrator.say(clips, entry.text);
         else speak(entry.text);
       }
-      if (BANNER_KINDS.has(entry.kind)) {
-        await announce(entry.text, BANNER_ICONS[entry.kind] || '⭐');
+      const ack = ackFor(g, entry);
+      if (ack) {
+        await showAckDialog(ack);
+      } else if (BANNER_KINDS.has(entry.kind)) {
+        await announce(entry.text, BANNER_ICONS[entry.kind] || '⭐', avatarFor(g, entry));
       }
     }
 

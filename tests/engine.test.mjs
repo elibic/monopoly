@@ -258,17 +258,17 @@ test('פשיטת רגל לבנק: הנכסים יוצאים למכירה פומ�
   assert.equal(g.turn, 1); // התור עבר הלאה
 });
 
-test('קלף "חזור לאילת" לא מזכה במשכורת', () => {
-  const g = twoPlayers({ diceQueue: [[3, 4]], cardQueue: ['ch5'] });
-  g.players[0].pos = 29; // 29+7=36 הפתעה
+test('קלף "חזור 3 משבצות" זז אחורה בלי משכורת', () => {
+  const g = twoPlayers({ diceQueue: [[1, 2]], cardQueue: ['cc13'] });
+  g.players[0].pos = 14; // 14+3=17 תיבת המזל
+  g.owner[14] = 0; // הנכס שלו — בלי דיאלוג קנייה
   g.rollDice();
-  assert.equal(g.players[0].pos, 1);
-  assert.equal(g.phase, 'buy'); // רחוב אילות פנוי
+  assert.equal(g.players[0].pos, 14);
   assert.equal(g.players[0].money, 1500); // בלי 200
 });
 
 test('קלף "התקדם לדרך צלחה" מזכה ב-200', () => {
-  const g = twoPlayers({ diceQueue: [[3, 4]], cardQueue: ['ch1'] });
+  const g = twoPlayers({ diceQueue: [[3, 4]], cardQueue: ['ch15'] });
   g.players[0].pos = 29;
   g.rollDice();
   assert.equal(g.players[0].pos, 0);
@@ -278,16 +278,16 @@ test('קלף "התקדם לדרך צלחה" מזכה ב-200', () => {
 test('קלף יום הולדת גובה מכל שחקן', () => {
   const g = new Game(
     [{ name: 'א' }, { name: 'ב' }, { name: 'ג' }],
-    { diceQueue: [[1, 1]], cardQueue: ['cc5'] },
+    { diceQueue: [[3, 4]], cardQueue: ['ch10'] },
   );
-  g.rollDice(); // אל 2 — תיבת המזל
+  g.rollDice(); // אל 7 — הפתעה
   assert.equal(g.players[0].money, 1520);
   assert.equal(g.players[1].money, 1490);
   assert.equal(g.players[2].money, 1490);
 });
 
 test('כרטיס "צא מהכלא" נשמר ומשומש', () => {
-  const g = twoPlayers({ diceQueue: [[1, 1], [2, 3]], cardQueue: ['ch8'] });
+  const g = twoPlayers({ diceQueue: [[1, 1], [2, 3]], cardQueue: ['ch1'] });
   g.players[0].pos = 5; // 5+2=7 הפתעה
   g.rollDice();
   assert.equal(g.players[0].jailCards.length, 1);
@@ -358,15 +358,15 @@ test('שחזור באמצע חוב: settleDebt ממשיך תקין בלי onPaid
 });
 
 test('שחזור עם כרטיס "צא מהכלא" ביד', () => {
-  const g = twoPlayers({ diceQueue: [[1, 1]], cardQueue: ['ch8'] });
+  const g = twoPlayers({ diceQueue: [[1, 1]], cardQueue: ['ch1'] });
   g.players[0].pos = 5; // 5+2=7 הפתעה
   g.rollDice();
   assert.equal(g.players[0].jailCards.length, 1);
   const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
   assert.equal(r.players[0].jailCards.length, 1);
-  assert.equal(r.players[0].jailCards[0].card.id, 'ch8');
+  assert.equal(r.players[0].jailCards[0].card.id, 'ch1');
   // הקלף לא נמצא בחפיסה
-  assert.ok(!r.decks.chance.some((c) => c.id === 'ch8'));
+  assert.ok(!r.decks.chance.some((c) => c.id === 'ch1'));
 });
 
 test('מכירת מלון כשאין בתים במלאי — נמכר בשלמותו', () => {
@@ -378,4 +378,72 @@ test('מכירת מלון כשאין בתים במלאי — נמכר בשלמו
   g.sellHouse(1);
   assert.equal(g.houses[1], 0);
   assert.equal(g.players[0].money, before + 125); // 5×50/2
+});
+
+test('באג הדאבל: הטלה רגילה אחרי דאבל לא נותנת עוד תור', () => {
+  const g = twoPlayers({ diceQueue: [[2, 2], [1, 2]] });
+  g.rollDice(); // דאבל אל 4 (מס) — תור נוסף
+  assert.equal(g.phase, 'roll');
+  g.rollDice(); // רגילה אל 7 — הפתעה... נשתמש במיקום נקי
+  // אחרי הטלה רגילה אין עוד תור נוסף
+  assert.notEqual(g.phase, 'roll');
+});
+
+test('דאבל בודד נותן בדיוק תור אחד נוסף', () => {
+  const g = twoPlayers({ diceQueue: [[3, 3], [1, 2]] });
+  g.players[0].pos = 10; // 10+6=16 נכס פנוי
+  g.rollDice();
+  g.buy(); // קונים את שד בנימין
+  assert.equal(g.phase, 'roll'); // תור נוסף אחרי דאבל
+  g.rollDice(); // 16+3=19 נכס פנוי, הטלה רגילה
+  g.buy();
+  assert.equal(g.phase, 'end'); // אין תור שלישי
+});
+
+test('קופה: תשלומים לבנק נאספים ומי שנוחת בחניה חופשית זוכה', () => {
+  const g = twoPlayers({ diceQueue: [[1, 3], [2, 2]] });
+  g.rollDice(); // אל 4 — מס הכנסה 200 לקופה
+  assert.equal(g.pot, 200);
+  assert.equal(g.players[0].money, 1300);
+  g.endTurn();
+  g.players[1].pos = 16;
+  g.rollDice(); // המחשב: 16+4=20 חניה חופשית — זוכה בקופה (דאבל, אבל זכייה קודם)
+  assert.equal(g.pot, 0);
+  assert.equal(g.players[1].money, 1700);
+});
+
+test('קופה: קניית נכס נכנסת לקופה', () => {
+  const g = twoPlayers({ diceQueue: [[1, 2]] });
+  g.rollDice();
+  g.buy(); // 60 ש"ח
+  assert.equal(g.pot, 60);
+});
+
+test('קלף "שלם 50 לכל משתתף" (יושב ראש)', () => {
+  const g = new Game(
+    [{ name: 'א' }, { name: 'ב' }, { name: 'ג' }],
+    { diceQueue: [[1, 1]], cardQueue: ['cc12'] },
+  );
+  g.rollDice(); // אל 2 — תיבת המזל
+  assert.equal(g.players[0].money, 1400);
+  assert.equal(g.players[1].money, 1550);
+  assert.equal(g.players[2].money, 1550);
+});
+
+test('קלף רכבת קרובה: שכ"ד כפול לבעלים', () => {
+  const g = twoPlayers({ diceQueue: [[1, 1]], cardQueue: ['cc15'] });
+  g.owner[5] = 1; // רכבת הפרברים של המחשב (רכבת אחת = 25)
+  g.rollDice(); // אל 2 — תיבת המזל → מתקדם לרכבת 5
+  assert.equal(g.players[0].pos, 5);
+  assert.equal(g.players[0].money, 1500 - 50); // פי 2
+  assert.equal(g.players[1].money, 1500 + 50);
+});
+
+test('קלף חברה קרובה: פי 10 מהקוביות', () => {
+  const g = twoPlayers({ diceQueue: [[1, 1]], cardQueue: ['cc5'] });
+  g.owner[12] = 1; // חברת החשמל של המחשב
+  g.rollDice(); // קוביות 1+1=2 → אל 2 תיבת המזל → חברת החשמל, שכ"ד 2×10=20
+  assert.equal(g.players[0].pos, 12);
+  assert.equal(g.players[0].money, 1500 - 20);
+  assert.equal(g.players[1].money, 1500 + 20);
 });
