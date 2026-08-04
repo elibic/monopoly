@@ -35,6 +35,13 @@
         <button class="opt-btn" data-n="3">🤖🤖🤖</button>
       </div>
 
+      <label class="setup-label">קצב המשחק:</label>
+      <div id="speed-picker" class="opponent-picker">
+        <button class="opt-btn" data-speed="slow">🐢 רגוע</button>
+        <button class="opt-btn selected" data-speed="normal">🚶 רגיל</button>
+        <button class="opt-btn" data-speed="fast">🐇 מהיר</button>
+      </div>
+
       <button id="start-btn" class="big-btn">🎲 מתחילים לשחק!</button>
     </div>
   </div>
@@ -67,6 +74,7 @@
     <aside id="side-panel">
       <div class="side-top">
         <button id="sound-btn" class="icon-btn" title="הקראה קולית">🔊</button>
+        <button id="speed-btn" class="icon-btn" title="קצב המשחק">🚶</button>
         <button id="restart-btn" class="icon-btn" title="איפוס משחק">🔄</button>
       </div>
       <div id="cards-panel"></div>
