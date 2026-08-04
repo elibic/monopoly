@@ -15,6 +15,8 @@
   const humanIdx = 0;
   let aiTimer = null;
   let tradeOfferedThisRound = false;
+  let aiRoundStartSeq = null; // מיקום היומן כשתור המחשב/ים התחיל — לסיכום
+  let summaryPending = false;  // ממתינים לאישור השחקן על סיכום תור המחשב
 
   /* ---------- שמירה אוטומטית (עד איפוס ידני) ---------- */
 
@@ -105,6 +107,8 @@
     }
 
     game = new Game(spec);
+    aiRoundStartSeq = null;
+    summaryPending = false;
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
     UI.narrator.say(['ev_welcome'], `שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`);
@@ -114,6 +118,8 @@
   // שחזור משחק שמור מהביקור הקודם
   function resumeGame(data) {
     game = Game.restore(data);
+    aiRoundStartSeq = null;
+    summaryPending = false;
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
     UI.primeFromRestore(game);
@@ -181,13 +187,26 @@
       }
 
       const actor = currentActor();
-      if (isAI(actor)) scheduleAi();
+      if (isAI(actor)) {
+        // תחילת סבב מחשב — מסמנים את מיקום היומן כדי לסכם אותו בהמשך
+        if (aiRoundStartSeq === null) aiRoundStartSeq = game._logSeq;
+        scheduleAi();
+      } else if (actor === humanIdx && aiRoundStartSeq !== null && !summaryPending
+                 && game.phase === 'roll' && !game.current().inJail) {
+        // חזרנו לתור השחקן — מציגים סיכום מה שהמחשב עשה, ואז השחקן מטיל
+        const entries = game.log.filter((e) => e.id > aiRoundStartSeq);
+        aiRoundStartSeq = null;
+        summaryPending = true;
+        updateButtons(); // חוסם את כפתור ההטלה כל עוד הסיכום פתוח
+        const shown = UI.showTurnSummary(entries, () => { summaryPending = false; updateButtons(); });
+        if (!shown) { summaryPending = false; updateButtons(); }
+      }
     } while (tickQueued);
     ticking = false;
   }
 
   function updateButtons() {
-    const humanTurn = game.turn === humanIdx && !game.players[humanIdx].bankrupt;
+    const humanTurn = game.turn === humanIdx && !game.players[humanIdx].bankrupt && !summaryPending;
     const free = !['auction', 'debt', 'gameover'].includes(game.phase);
     $('#roll-btn').disabled = !(humanTurn && game.phase === 'roll' && !game.current().inJail);
     $('#end-turn-btn').disabled = !(humanTurn && game.phase === 'end');
