@@ -17,6 +17,7 @@
 
   const money = (n) => `${n.toLocaleString('he-IL')} ₪`;
   const PLAYER_COLORS = ['#E0393E', '#3D8FD1', '#2FA671', '#8E44AD', '#E67E22', '#16A085'];
+  let uiGame = null; // הפניה למשחק הנוכחי — לשליפת שטר קניין בלחיצה על משבצת
 
   // ---------- קצב המשחק ----------
   // mult גדול = איטי יותר. משפיע על אנימציות, כרזות, הקראה והשהיות המחשב.
@@ -110,7 +111,73 @@
     jail() { tone(220, .25, 0, 'sawtooth', .09); tone(180, .35, .2, 'sawtooth', .09); },
     card() { tone(700, .08); tone(940, .1, .08); },
     win() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, .22, i * .15, 'triangle', .15)); },
+    // צלילים עשירים נוספים
+    build() { tone(330, .07, 0, 'square', .09); tone(392, .07, .07, 'square', .09); tone(523, .12, .14, 'triangle', .11); },
+    hotel() { [523, 659, 784, 1047].forEach((f, i) => tone(f, .16, i * .08, 'triangle', .13)); },
+    passGo() { [659, 784, 988, 1319].forEach((f, i) => tone(f, .16, i * .1, 'triangle', .13)); },
+    cash() { tone(1047, .06, 0, 'triangle', .1); tone(1319, .08, .05, 'triangle', .1); tone(1568, .12, .11, 'triangle', .1); },
+    sticker() { [784, 988, 1319, 1047, 1568].forEach((f, i) => tone(f, .18, i * .09, 'triangle', .14)); },
+    tap() { tone(880, .04, 0, 'sine', .06); },
   };
+
+  /* ==================== מוזיקת רקע (WebAudio, בלי קבצים — עובד אופליין) ==================== */
+  // לולאה עדינה ורגועה: פרוגרסיה I-vi-IV-V עם ארפג'ו + בס רך.
+  const music = (() => {
+    let on = false, timer = null, master = null, step = 0;
+    const KEY = 'monopoly-hebrew-music';
+    try { on = localStorage.getItem(KEY) === 'on'; } catch (e) { /* */ }
+    // תווים (הרץ) — דו מז'ור. כל אקורד: תו בס + שלושה תווי ארפג'ו.
+    const CHORDS = [
+      { bass: 130.81, notes: [261.63, 329.63, 392.00] }, // C
+      { bass: 110.00, notes: [261.63, 329.63, 440.00] }, // Am
+      { bass: 174.61, notes: [349.23, 440.00, 523.25] }, // F
+      { bass: 196.00, notes: [392.00, 493.88, 587.33] }, // G
+    ];
+    const STEP_MS = 480; // קצב נעים ואיטי
+
+    function voice(freq, dur, when, vol, type) {
+      const c = ctx(); if (!c || !master) return;
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(0, when);
+      g.gain.linearRampToValueAtTime(vol, when + 0.06);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+      o.connect(g).connect(master);
+      o.start(when); o.stop(when + dur + 0.05);
+    }
+
+    function pulse() {
+      const c = ctx(); if (!c || !master) return;
+      const chord = CHORDS[Math.floor(step / 4) % CHORDS.length];
+      const beat = step % 4;
+      const t = c.currentTime + 0.02;
+      if (beat === 0) voice(chord.bass, 1.6, t, 0.10, 'triangle'); // בס בתחילת אקורד
+      voice(chord.notes[beat % chord.notes.length], 0.7, t, 0.045, 'sine'); // ארפג'ו רך
+      step++;
+    }
+
+    function start() {
+      const c = ctx(); if (!c) return;
+      if (c.state === 'suspended') c.resume();
+      if (!master) { master = c.createGain(); master.gain.value = 0.5; master.connect(c.destination); }
+      if (timer) return;
+      pulse();
+      timer = setInterval(pulse, STEP_MS);
+    }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+
+    return {
+      isOn: () => on,
+      toggle() {
+        on = !on;
+        try { localStorage.setItem(KEY, on ? 'on' : 'off'); } catch (e) { /* */ }
+        if (on) start(); else stop();
+        return on;
+      },
+      // מופעל אחרי אינטראקציית משתמש (כדי לעקוף חסימת autoplay)
+      resumeIfOn() { if (on) start(); },
+    };
+  })();
 
   // מילון ניקוד: מילים נפוצות בהודעות המשחק → צורה מנוקדת שה-TTS קורא נכון
   const LEXICON = {
@@ -210,7 +277,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=12`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=13`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -313,6 +380,9 @@
       div.appendChild(el('div', 'sq-tokens'));
       if (sq.type === 'parking') div.appendChild(el('div', 'pot-badge'));
       div.title = sq.name;
+      div.classList.add('tappable');
+      // לחיצה על משבצת פותחת את שטר הקניין / הסבר קצר
+      div.addEventListener('click', () => { if (uiGame) showDeed(uiGame, sq.pos); });
       board.appendChild(div);
     }
     buildDice();
@@ -636,6 +706,7 @@
   let prevMoney = [];
   let lastLogId = 0;
   let lastPositions = [];
+  let lastHouses = new Array(40).fill(0); // מעקב אחר בתים לאנימציית בנייה
 
   function animateBalance(elBalance, from, to) {
     if (from === to || reducedMotion()) { elBalance.textContent = money(to); return; }
@@ -655,6 +726,7 @@
   }
 
   async function render(g) {
+    uiGame = g; // שמירת הפניה למשחק לצורך לחיצה על משבצות
     const prev = prevMoney.slice();
 
     // 1. אנימציות תנועה (לפני עדכון המשבצות)
@@ -678,7 +750,20 @@
         ? `${PLAYER_COLORS[ownerIdx]} transparent transparent transparent`
         : '';
 
-      div.querySelector('.sq-houses').innerHTML = housesHTML(g.houses[sq.pos]);
+      const housesBox = div.querySelector('.sq-houses');
+      const nowH = g.houses[sq.pos];
+      housesBox.innerHTML = housesHTML(nowH);
+      // אנימציית בנייה — הבניין החדש "צומח"
+      if (nowH > (lastHouses[sq.pos] || 0)) {
+        const built = housesBox.lastElementChild || housesBox.firstElementChild;
+        if (built) {
+          built.classList.add(nowH === 5 ? 'hotel-pop' : 'house-grow');
+          div.classList.add('build-flash');
+          setTimeout(() => div.classList.remove('build-flash'), 700);
+        }
+        sounds[nowH === 5 ? 'hotel' : 'build']();
+      }
+      lastHouses[sq.pos] = nowH;
 
       const toks = div.querySelector('.sq-tokens');
       toks.innerHTML = '';
@@ -846,6 +931,58 @@
         <div class="deed-band deed-art" style="background:#546E7A">${artFor(sq)}<span>${sq.name}</span></div>
         <div class="deed-body">${desc}<br>משכנתא: ${money(sq.price / 2)}</div>
       </div>`;
+  }
+
+  // הסבר ידידותי למשבצת שאינה נכס (לילדים)
+  const TILE_INFO = {
+    go: ['דרך צלחה 🎉', 'בכל פעם שעוברים כאן מקבלים 200 ₪ מהבנק!'],
+    jail: ['בית הכלא 🔒', 'אפשר רק "לבקר" כאן — זה בסדר גמור, לא נכנסים לכלא.'],
+    parking: ['חניה חופשית 🅿️', 'משבצת מנוחה — פשוט חונים ונחים עד התור הבא.'],
+    gotojail: ['לך לכלא 🚔', 'מי שנוחת כאן הולך ישר לכלא (בלי לקבל 200 ₪).'],
+    tax: ['מס 💰', 'משלמים לבנק את הסכום הרשום על המשבצת.'],
+    chance: ['הפתעה ❓', 'שולפים קלף הפתעה — אולי כסף, אולי הפתעה אחרת!'],
+    chest: ['תיבת המזל 🎁', 'שולפים קלף מתיבת המזל — בהצלחה!'],
+  };
+
+  // תצוגת שטר קניין מלאה בלחיצה על משבצת — כולל מצב נוכחי (בעלים/בתים/שכ"ד)
+  function showDeed(g, pos) {
+    const sq = BOARD[pos];
+    sounds.tick();
+    // משבצת שאינה נכס — הסבר קצר וידידותי
+    if (!['street', 'rail', 'utility'].includes(sq.type)) {
+      const info = TILE_INFO[sq.type] || [sq.name, ''];
+      const d = openDialog(`
+        <div class="deed-art-big">${artFor(sq) || '🎲'}</div>
+        <h2>${info[0]}</h2>
+        <p class="d-sub">${info[1]}</p>
+        <div class="d-actions"><button class="big-btn" id="deed-close">הבנתי 👍</button></div>`);
+      d.querySelector('#deed-close').onclick = () => closeDialog();
+      return;
+    }
+    // נכס — שטר קניין + שורת מצב
+    const ownerIdx = g.owner[pos];
+    let status;
+    if (ownerIdx === null) {
+      status = '<div class="deed-status free">🟢 פנוי לקנייה</div>';
+    } else {
+      const owner = g.players[ownerIdx];
+      const color = PLAYER_COLORS[ownerIdx];
+      let extra = '';
+      if (sq.type === 'street') {
+        const h = g.houses[pos];
+        extra = h === 5 ? ' · 🏨 מלון' : h > 0 ? ` · ${h} 🏠` : '';
+      }
+      const mort = g.mortgaged[pos] ? ' · 🚫 ממושכן' : '';
+      status = `<div class="deed-status owned" style="border-color:${color}">
+        <span class="deed-owner-dot" style="background:${color}"></span>
+        בבעלות <b>${owner.name}</b>${extra}${mort}</div>`;
+    }
+    const d = openDialog(`
+      <h2>שטר קניין 📜</h2>
+      ${deedHTML(g, pos)}
+      ${status}
+      <div class="d-actions"><button class="big-btn" id="deed-close">סגירה</button></div>`);
+    d.querySelector('#deed-close').onclick = () => closeDialog();
   }
 
   function showBuyDialog(g, onBuy, onDecline) {
@@ -1060,23 +1197,213 @@
     d.querySelector('#d-dec').onclick = () => { closeDialog(); onDecline(); };
   }
 
-  function showWin(g, onRestart) {
+  /* ==================== מדבקות והישגים ==================== */
+
+  // כל מדבקה: תנאי שמחושב ממצב סוף המשחק עבור השחקן האנושי.
+  const STICKERS = [
+    { id: 'winner',     emoji: '🏆', label: 'מנצח/ת!',        cond: (g, i) => g.winner === i },
+    { id: 'monopoly',   emoji: '🌈', label: 'מונופול שלם',    cond: (g, i) => Object.keys(GROUPS).some((k) => g.ownsFullGroup(i, k)) },
+    { id: 'builder',    emoji: '🏠', label: 'בנאי/ת',          cond: (g, i) => g.houses.some((h, p) => h >= 1 && h <= 4 && g.owner[p] === i) },
+    { id: 'hotelier',   emoji: '🏨', label: 'בעל/ת מלון',      cond: (g, i) => g.houses.some((h, p) => h === 5 && g.owner[p] === i) },
+    { id: 'railking',   emoji: '🚂', label: 'שליט/ת הרכבות',   cond: (g, i) => g.countOwned(i, 'rail') >= 2 },
+    { id: 'landlord',   emoji: '🏘️', label: 'אספן/ית נכסים',   cond: (g, i) => g.playerProps(i).length >= 5 },
+    { id: 'millionaire',emoji: '💰', label: 'עשיר/ה גדול/ה',   cond: (g, i) => g.netWorth(i) >= 2500 },
+    { id: 'player',     emoji: '🎮', label: 'שיחקתי מונופול!', cond: () => true },
+  ];
+  const ALBUM_KEY = 'monopoly-hebrew-stickers';
+
+  function loadAlbum() {
+    try { return new Set(JSON.parse(localStorage.getItem(ALBUM_KEY) || '[]')); } catch (e) { return new Set(); }
+  }
+  function saveAlbum(set) {
+    try { localStorage.setItem(ALBUM_KEY, JSON.stringify([...set])); } catch (e) { /* */ }
+  }
+
+  // גרף שווי-נטו לאורך המשחק — SVG פשוט, קו לכל שחקן
+  function wealthChart(g, history) {
+    if (!history || history.length < 2) return '';
+    const n = g.players.length;
+    const W = 300, H = 120, pad = 6;
+    let max = 1;
+    for (const row of history) for (const v of row) if (v > max) max = v;
+    const x = (i) => pad + (i / (history.length - 1)) * (W - 2 * pad);
+    const y = (v) => H - pad - (v / max) * (H - 2 * pad);
+    let lines = '';
+    for (let pi = 0; pi < n; pi++) {
+      const pts = history.map((row, i) => `${x(i).toFixed(1)},${y(row[pi] || 0).toFixed(1)}`).join(' ');
+      lines += `<polyline points="${pts}" fill="none" stroke="${PLAYER_COLORS[pi]}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" opacity="${g.players[pi].bankrupt ? .45 : 1}"/>`;
+    }
+    const legend = g.players.map((p) =>
+      `<span class="wc-leg"><span class="wc-dot" style="background:${PLAYER_COLORS[p.idx]}"></span>${p.token} ${p.name}</span>`).join('');
+    return `<div class="wealth-chart">
+      <div class="wc-title">📈 העושר במהלך המשחק</div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${lines}</svg>
+      <div class="wc-legend">${legend}</div>
+    </div>`;
+  }
+
+  // תצוגת אלבום המדבקות שנאספו (מכל המשחקים)
+  function showStickerAlbum() {
+    const album = loadAlbum();
+    const cells = STICKERS.map((s) => {
+      const has = album.has(s.id);
+      return `<div class="sticker ${has ? 'earned' : 'locked'}">
+        <div class="sticker-emoji">${has ? s.emoji : '❔'}</div>
+        <div class="sticker-label">${has ? s.label : '???'}</div>
+      </div>`;
+    }).join('');
+    const d = openDialog(`
+      <h2>אלבום המדבקות שלי 🏅</h2>
+      <p class="d-sub">${album.size} מתוך ${STICKERS.length} מדבקות נאספו</p>
+      <div class="sticker-grid">${cells}</div>
+      <div class="d-actions"><button class="big-btn" id="al-close">סגירה</button></div>`);
+    d.querySelector('#al-close').onclick = () => closeDialog();
+  }
+
+  function showWin(g, onRestart, extra = {}) {
     const w = g.players[g.winner];
     const isF = w.gender === 'f';
+    const humanIdx = extra.humanIdx != null ? extra.humanIdx : 0;
     sounds.win();
     confettiBurst(6000);
+
+    // דירוג סופי לפי שווי-נטו
+    const standings = g.players.slice().sort((a, b) => g.netWorth(b.idx) - g.netWorth(a.idx));
+    const rows = standings.map((p, i) => {
+      const medal = ['🥇', '🥈', '🥉'][i] || '🎖️';
+      return `<div class="stand-row ${p.idx === humanIdx ? 'me' : ''} ${p.bankrupt ? 'out' : ''}">
+        <span class="stand-medal">${medal}</span>
+        <span class="stand-name">${p.token} ${p.name}</span>
+        <span class="stand-worth">${money(g.netWorth(p.idx))}</span>
+      </div>`;
+    }).join('');
+
+    // מדבקות שהושגו בתפקיד השחקן האנושי
+    const album = loadAlbum();
+    const earned = STICKERS.filter((s) => s.cond(g, humanIdx));
+    const fresh = earned.filter((s) => !album.has(s.id));
+    earned.forEach((s) => album.add(s.id));
+    saveAlbum(album);
+    const stickerHTML = earned.map((s) => {
+      const isNew = fresh.some((f) => f.id === s.id);
+      return `<div class="sticker earned ${isNew ? 'new-sticker' : ''}">
+        ${isNew ? '<span class="new-badge">חדש!</span>' : ''}
+        <div class="sticker-emoji">${s.emoji}</div>
+        <div class="sticker-label">${s.label}</div>
+      </div>`;
+    }).join('');
+
+    const humanWon = g.winner === humanIdx;
+    const title = humanWon
+      ? `${w.token} ${w.name} ${isF ? 'ניצחת! את האלופה' : 'ניצחת! אתה האלוף'}! 🎉`
+      : `${w.token} ${w.name} ${isF ? 'ניצחה' : 'ניצח'} במשחק`;
+
     const d = openDialog(`
       <div class="win-burst">🏆</div>
-      <h2>${w.token} ${w.name} ${isF ? 'ניצחה' : 'ניצח'} במשחק!</h2>
-      <p class="d-sub">כל הכבוד! ${w.name} ${isF ? 'נשארה אחרונה' : 'נשאר אחרון'} במשחק עם ${money(w.money)} בחשבון.</p>
-      <div class="d-actions"><button class="big-btn green" id="d-again">🎲 משחק חדש</button></div>`);
+      <h2>${title}</h2>
+      <div class="win-standings">${rows}</div>
+      ${wealthChart(g, extra.history)}
+      <div class="win-stickers-title">המדבקות שהרווחת 🏅</div>
+      <div class="sticker-strip">${stickerHTML}</div>
+      <div class="d-actions">
+        <button class="big-btn green" id="d-again">🎲 משחק חדש</button>
+        <button class="big-btn" id="d-album">🏅 האוסף שלי</button>
+      </div>`);
+    if (fresh.length) setTimeout(() => sounds.sticker(), 500);
     d.querySelector('#d-again').onclick = onRestart;
+    d.querySelector('#d-album').onclick = () => showStickerAlbum();
   }
 
   function toast(text) {
     const t = el('div', 'toast', text);
     $('#toast-root').appendChild(t);
     setTimeout(() => t.remove(), 3600);
+  }
+
+  /* ==================== מדריך למתחילים ==================== */
+
+  const TUTORIAL_KEY = 'monopoly-hebrew-tutorial-seen';
+  function tutorialSeen() { try { return localStorage.getItem(TUTORIAL_KEY) === '1'; } catch (e) { return false; } }
+  function markTutorialSeen() { try { localStorage.setItem(TUTORIAL_KEY, '1'); } catch (e) { /* */ } }
+
+  const TUTORIAL_STEPS = [
+    { sel: null, emoji: '👋', text: 'שָׁלוֹם! אֲנִי אֶלַמֵּד אוֹתְךָ אֵיךְ מְשַׂחֲקִים מוֹנוֹפּוֹל. זֶה קַל וְכֵיף!' },
+    { sel: '#board', emoji: '🎲', text: 'זֶה לוּחַ הַמִּשְׂחָק. עוֹבְרִים סָבִיב הַלּוּחַ וְאוֹסְפִים רְחוֹבוֹת וְעָרִים.' },
+    { sel: '#cards-panel', emoji: '💳', text: 'כָּאן רוֹאִים כַּמָּה כֶּסֶף יֵשׁ לְכָל שַׂחְקָן. מַתְחִילִים עִם אֶלֶף וַחֲמֵשׁ מֵאוֹת שֶׁקֶל.' },
+    { sel: '#roll-btn', emoji: '🎲', text: 'בַּתּוֹר שֶׁלְּךָ לוֹחֲצִים כָּאן כְּדֵי לְהָטִיל אֶת הַקּוּבִּיּוֹת וּלְהִתְקַדֵּם.' },
+    { sel: null, emoji: '🏠', text: 'כְּשֶׁנּוֹחֲתִים עַל עִיר פְּנוּיָה אֶפְשָׁר לִקְנוֹת אוֹתָהּ. אַחַר כָּךְ מִי שֶׁנּוֹחֵת עָלֶיהָ מְשַׁלֵּם לְךָ שְׂכַר דִּירָה!' },
+    { sel: '#board', emoji: '👆', text: 'אֶפְשָׁר לִלְחֹץ עַל כָּל מִשְׁבֶּצֶת בַּלּוּחַ כְּדֵי לִרְאוֹת אֶת הַמְּחִיר וְאֶת שְׂכַר הַדִּירָה שֶׁלָּהּ.' },
+    { sel: '#end-turn-btn', emoji: '✅', text: 'בְּסוֹף הַתּוֹר לוֹחֲצִים כָּאן. הַמַּטָּרָה: לִהְיוֹת הָאַחֲרוֹן שֶׁנִּשְׁאָר עִם כֶּסֶף. בְּהַצְלָחָה!' },
+  ];
+
+  function startTutorial(onDone) {
+    let i = 0;
+    const overlay = el('div', 'tut-overlay');
+    overlay.innerHTML = `
+      <div class="tut-spot"></div>
+      <div class="tut-bubble">
+        <div class="tut-emoji"></div>
+        <div class="tut-text"></div>
+        <div class="tut-actions">
+          <button class="big-btn" id="tut-skip">דילוג</button>
+          <button class="big-btn green" id="tut-next"></button>
+        </div>
+        <div class="tut-progress"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const spot = overlay.querySelector('.tut-spot');
+    const bubble = overlay.querySelector('.tut-bubble');
+    const emojiEl = overlay.querySelector('.tut-emoji');
+    const textEl = overlay.querySelector('.tut-text');
+    const nextBtn = overlay.querySelector('#tut-next');
+    const progEl = overlay.querySelector('.tut-progress');
+
+    function finish() {
+      speechSynthesis && speechSynthesis.cancel && speechSynthesis.cancel();
+      overlay.remove();
+      markTutorialSeen();
+      if (onDone) onDone();
+    }
+
+    function show() {
+      const step = TUTORIAL_STEPS[i];
+      emojiEl.textContent = step.emoji || '💡';
+      textEl.textContent = step.text;
+      nextBtn.textContent = i === TUTORIAL_STEPS.length - 1 ? '🎉 מתחילים!' : 'הבא ▶';
+      progEl.textContent = `${i + 1} / ${TUTORIAL_STEPS.length}`;
+      // זרקור על היעד
+      const target = step.sel && $(step.sel);
+      const r = target && target.getBoundingClientRect();
+      if (r && r.width > 4 && r.height > 4) {
+        const pad = 8;
+        spot.style.display = 'block';
+        spot.style.top = `${r.top - pad}px`;
+        spot.style.left = `${r.left - pad}px`;
+        spot.style.width = `${r.width + pad * 2}px`;
+        spot.style.height = `${r.height + pad * 2}px`;
+        // מיקום הבועה: מתחת ליעד אם יש מקום, אחרת מעליו
+        bubble.classList.remove('tut-center');
+        const below = r.bottom + 20;
+        if (below + 180 < window.innerHeight) { bubble.style.top = `${below}px`; }
+        else { bubble.style.top = `${Math.max(16, r.top - 200)}px`; }
+        bubble.style.left = '50%';
+        bubble.style.transform = 'translateX(-50%)';
+      } else {
+        spot.style.display = 'none';
+        bubble.classList.add('tut-center');
+        bubble.style.top = ''; bubble.style.left = ''; bubble.style.transform = '';
+      }
+      speak(step.text, { raw: true });
+    }
+
+    nextBtn.onclick = () => {
+      i++;
+      if (i >= TUTORIAL_STEPS.length) finish();
+      else show();
+    };
+    overlay.querySelector('#tut-skip').onclick = finish;
+    window.addEventListener('resize', show);
+    show();
   }
 
   // חלונית סיכום תור הרובוט/ים — מה עשו מאז התור הקודם של השחקן
@@ -1112,6 +1439,7 @@
     lastLogId = g._logSeq;
     lastPositions = g.players.map((p) => p.pos);
     prevMoney = g.players.map((p) => p.money);
+    lastHouses = g.houses.slice(); // כדי לא לאנן בתים קיימים בשחזור
   }
 
   function setSound(on) {
@@ -1131,6 +1459,7 @@
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
     primeFromRestore, announce, SVG, narrator, showTurnSummary,
-    setSpeed, getSpeed, aiDelay, closeAuctionDialog,
+    setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
+    showStickerAlbum, startTutorial, tutorialSeen,
   };
 })();
