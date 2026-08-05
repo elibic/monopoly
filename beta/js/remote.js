@@ -413,6 +413,21 @@
     });
   }
 
+  // שיתוף/העתקה של קוד טקסט (לקוד החוזר מהאורח) — לא קישור.
+  function wireCodeShare(d) {
+    d.querySelectorAll('.rm-copycode').forEach((b) => {
+      const code = decodeURIComponent(b.dataset.code);
+      b.onclick = async () => {
+        if (navigator.share) {
+          try { await navigator.share({ title: 'קוד חזרה למונופול', text: code }); return; }
+          catch (e) { /* בוטל — ננסה העתקה */ }
+        }
+        try { await navigator.clipboard.writeText(code); UI.toast('הקוד הועתק! שלחו בחזרה לחבר/ה'); }
+        catch (e) { UI.toast('סמנו את הקוד והעתיקו'); }
+      };
+    });
+  }
+
   function openEntry() {
     const d = UI.openDialog(`
       <h2>משחק עם חבר/ה מרחוק 🎥</h2>
@@ -450,8 +465,9 @@
       <h2>שלב 1: שלחו קישור לחבר/ה 📤</h2>
       ${shareRow('שליחת קישור לחבר/ה', link, 'החבר/ה רק לוחצ/ת על הקישור ומצטרפ/ת:')}
       <hr class="rm-hr">
-      <label class="setup-label">שלב 2: כשהחבר/ה שולח/ת קישור בחזרה — הדביקו כאן:</label>
-      <textarea id="rm-answer" class="rm-code" placeholder="הדביקו כאן את הקישור שקיבלתם בחזרה..."></textarea>
+      <label class="setup-label">שלב 2: הדביקו כאן את הקוד שהחבר/ה שולח/ת בחזרה:</label>
+      <p class="d-sub" style="margin:4px 0 8px">כדי שהמחשבים יכירו זה את זה, החבר/ה שולח/ת בסוף קוד קטן אחד בחזרה — הדביקו אותו כאן וזהו!</p>
+      <textarea id="rm-answer" class="rm-code" placeholder="הדביקו כאן את הקוד שקיבלתם בחזרה..."></textarea>
       <div class="d-actions"><button class="big-btn green" id="rm-connect">🔌 מתחברים!</button></div>`);
     wireShare(d);
     d.querySelector('#rm-connect').onclick = async () => {
@@ -476,12 +492,15 @@
       let ansCode;
       try { ansCode = await guestCreateAnswer(code); }
       catch (e) { showError(e.message); return; }
-      const link = answerLink(ansCode);
       const d2 = UI.openDialog(`
-        <h2>שלב אחרון: שלחו קישור בחזרה 📤</h2>
-        ${shareRow('שליחת קישור בחזרה', link, 'שלחו את הקישור הזה בחזרה לחבר/ה שהזמין/ה — וזהו!')}
-        <p class="d-sub">⏳ ממתינים לחיבור...</p>`);
-      wireShare(d2);
+        <h2>צעד אחרון: שולחים קוד בחזרה 🔙</h2>
+        <p class="d-sub">כדי שהמחשבים "יכירו" זה את זה, צריך לשלוח קוד קטן אחד בחזרה לחבר/ה שהזמין/ה — וזהו, מתחילים!</p>
+        <textarea id="rm-anscode" class="rm-code" readonly>${ansCode}</textarea>
+        <div class="d-actions">
+          <button class="big-btn green rm-copycode" data-code="${encodeURIComponent(ansCode)}">📤 העתקה ושליחה בחזרה</button>
+        </div>
+        <p class="d-sub">⏳ אחרי ששלחתם — ממתינים לחיבור...</p>`);
+      wireCodeShare(d2);
     };
   }
 
