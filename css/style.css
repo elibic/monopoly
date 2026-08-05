@@ -312,6 +312,7 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   transition: background .15s, transform .1s;
 }
 .icon-btn:hover { background: rgba(255, 255, 255, .3); transform: scale(1.08); }
+.icon-btn.active { background: rgba(245, 197, 66, .35); box-shadow: 0 0 0 2px rgba(245,197,66,.6) inset; }
 
 /* ==========================================================================
    מסך המשחק — הלוח
@@ -469,6 +470,25 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 }
 .sq-houses svg.svg-house { height: 1.3em; width: auto; }
 .sq-houses svg.svg-hotel { height: 1.55em; width: auto; }
+
+/* אנימציית בנייה — הבניין החדש "צומח" מהקרקע */
+.sq-houses svg.house-grow { animation: house-grow .55s cubic-bezier(.34,1.56,.64,1); transform-origin: bottom center; }
+@keyframes house-grow {
+  0% { transform: scaleY(0) translateY(20%); opacity: 0; }
+  60% { transform: scaleY(1.15) translateY(0); opacity: 1; }
+  100% { transform: scaleY(1); }
+}
+.sq-houses svg.hotel-pop { animation: hotel-pop .7s cubic-bezier(.34,1.56,.64,1); transform-origin: bottom center; }
+@keyframes hotel-pop {
+  0% { transform: scale(0) rotate(-12deg); opacity: 0; }
+  55% { transform: scale(1.25) rotate(4deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+.square.build-flash { animation: build-flash .7s ease; }
+@keyframes build-flash {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
+  40% { box-shadow: inset 0 0 0 3px #2FA671, 0 0 16px rgba(47,166,113,.7); }
+}
 
 .sq-tokens {
   position: absolute;
@@ -901,6 +921,29 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 .deed-body tr:last-child td { border-bottom: none; }
 .deed-body td:last-child { text-align: left; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* שורת מצב הנכס בשטר קניין (בלחיצה על משבצת) */
+.deed-status {
+  margin: 14px auto 0;
+  max-width: 260px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  font-size: 15.5px;
+  font-weight: 700;
+  background: #F6F1E1;
+  border: 2px solid #E4DCC4;
+}
+.deed-status.free { color: #1F9D55; background: #E9F8EF; border-color: #B7E6C9; }
+.deed-status.owned { display: flex; align-items: center; justify-content: center; gap: 8px; border-width: 2.5px; }
+.deed-owner-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 2px rgba(0,0,0,.15); }
+.deed-art-big { text-align: center; margin: 4px auto 2px; }
+.deed-art-big svg { width: 74px; height: auto; }
+
+/* משבצת ניתנת ללחיצה — סימון עדין בריחוף */
+.square.tappable { cursor: pointer; }
+@media (hover: hover) {
+  .square.tappable:hover { filter: brightness(1.06); box-shadow: inset 0 0 0 2px rgba(245,197,66,.7); }
+}
+
 /* רשימות נכסים */
 .asset-list { display: flex; flex-direction: column; gap: 7px; text-align: right; }
 .asset-row {
@@ -1133,6 +1176,120 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   to { transform: scale(1.3) rotate(6deg); }
 }
 
+/* ---- דירוג סופי ---- */
+.win-standings { display: flex; flex-direction: column; gap: 6px; margin: 14px auto; max-width: 340px; }
+.stand-row {
+  display: flex; align-items: center; gap: 10px;
+  background: #F6F1E1; border: 2px solid #E4DCC4; border-radius: 12px;
+  padding: 8px 12px; font-size: 16px;
+}
+.stand-row.me { background: #FFF6D9; border-color: var(--gold); font-weight: 700; }
+.stand-row.out { opacity: .55; }
+.stand-medal { font-size: 20px; }
+.stand-name { flex: 1; font-weight: 700; text-align: right; }
+.stand-worth { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* ---- גרף עושר ---- */
+.wealth-chart { margin: 14px auto; max-width: 340px; }
+.wc-title { font-weight: 700; font-size: 14.5px; color: var(--ink-soft); margin-bottom: 5px; }
+.wealth-chart svg { width: 100%; height: 110px; background: #FBF7EA; border: 2px solid #E4DCC4; border-radius: 12px; }
+.wc-legend { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 6px; font-size: 12.5px; }
+.wc-leg { display: inline-flex; align-items: center; gap: 4px; }
+.wc-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+
+/* ---- מדבקות והישגים ---- */
+.win-stickers-title { font-weight: 700; margin: 14px 0 8px; font-size: 16px; }
+.sticker-strip { display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; }
+.sticker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px auto; max-width: 360px; }
+.sticker {
+  position: relative; width: 74px; padding: 8px 4px;
+  background: white; border: 2.5px solid #E4DCC4; border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.sticker.earned { border-color: var(--gold); box-shadow: 0 3px 9px rgba(245,197,66,.35); }
+.sticker.locked { opacity: .5; filter: grayscale(.6); }
+.sticker-emoji { font-size: 30px; line-height: 1; }
+.sticker-label { font-size: 11px; font-weight: 700; text-align: center; color: var(--ink); }
+.new-sticker { animation: sticker-pop .6s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes sticker-pop {
+  0% { transform: scale(0) rotate(-20deg); }
+  60% { transform: scale(1.2) rotate(8deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.new-badge {
+  position: absolute; top: -8px; right: -6px;
+  background: var(--red); color: white; font-size: 10px; font-weight: 700;
+  padding: 2px 6px; border-radius: 9px; box-shadow: 0 2px 5px rgba(0,0,0,.25);
+}
+
+/* ==========================================================================
+   משחק מרחוק — קודי חיבור ומשבצות וידאו
+   ========================================================================== */
+.rm-code {
+  width: 100%; min-height: 62px; resize: vertical;
+  font-family: monospace; font-size: 11px; direction: ltr;
+  border: 2px solid #E4DCC4; border-radius: 10px; padding: 8px;
+  margin: 6px 0; background: #FBF7EA; word-break: break-all;
+}
+.rm-share { margin: 10px 0; }
+.rm-share-tip { font-size: 15px; color: var(--ink-soft); margin-bottom: 8px; }
+.rm-share-btn { width: 100%; }
+.rm-linkview {
+  display: block; direction: ltr; font-family: monospace; font-size: 10px;
+  color: #9A8; word-break: break-all; margin-top: 6px; text-decoration: none;
+  max-height: 34px; overflow: hidden;
+}
+.rm-hr { border: none; border-top: 2px dashed #E4DCC4; margin: 16px 0; }
+#video-tiles {
+  position: fixed; bottom: 12px; left: 12px; z-index: 90;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: transform .3s;
+}
+#video-tiles.collapsed { transform: translateX(calc(-100% + 46px)); }
+.vtile {
+  position: relative; width: 150px; aspect-ratio: 4 / 3;
+  background: #1B1B21; border: 3px solid white; border-radius: 14px;
+  overflow: hidden; box-shadow: 0 6px 16px rgba(0, 0, 0, .35);
+}
+.vtile video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.vlabel {
+  position: absolute; bottom: 4px; right: 6px;
+  background: rgba(0, 0, 0, .55); color: white; font-size: 12px; font-weight: 700;
+  padding: 2px 7px; border-radius: 8px;
+}
+#vt-toggle {
+  align-self: flex-end; font-size: 18px; border: none; cursor: pointer;
+  background: rgba(0, 0, 0, .55); color: white; border-radius: 10px; padding: 4px 9px;
+}
+@media (max-width: 700px) {
+  .vtile { width: 104px; }
+}
+
+/* ==========================================================================
+   מדריך למתחילים
+   ========================================================================== */
+.tut-overlay { position: fixed; inset: 0; z-index: 200; }
+.tut-spot {
+  position: absolute; border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(20, 20, 30, .68);
+  border: 3px solid var(--gold);
+  transition: top .3s, left .3s, width .3s, height .3s;
+  pointer-events: none;
+}
+.tut-bubble {
+  position: absolute; z-index: 201;
+  background: white; border: 3px solid var(--gold); border-radius: 18px;
+  padding: 16px 18px 12px; width: min(340px, 88vw);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .35);
+  text-align: center;
+}
+.tut-bubble.tut-center { top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; }
+.tut-emoji { font-size: 42px; line-height: 1; margin-bottom: 6px; }
+.tut-text { font-size: 18px; font-weight: 700; line-height: 1.5; color: var(--ink); }
+.tut-actions { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
+.tut-actions .big-btn { font-size: 16px; padding: 9px 16px; }
+.tut-progress { margin-top: 9px; font-size: 13px; color: var(--ink-soft); font-weight: 700; }
+
 /* ==========================================================================
    נגישות ומסכים צרים
    ========================================================================== */
@@ -1161,4 +1318,21 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   #action-buttons .mid-btn { font-size: 12px; padding: 7px 9px; }
   .die3d-scene { width: 40px; height: 40px; }
   #turn-banner { font-size: 13px; padding: 5px 14px 7px; }
+}
+
+/* ===== סימון גרסת נסיון (בטא) ===== */
+#beta-badge {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 100;
+  background: linear-gradient(180deg, #F5B940, var(--gold-deep));
+  color: #3A2A08;
+  font-family: var(--font-display);
+  font-size: 14px;
+  padding: 5px 14px 6px;
+  border-radius: 999px;
+  border: 2px solid #7A5A12;
+  box-shadow: 0 4px 12px rgba(0,0,0,.35);
+  pointer-events: none;
 }

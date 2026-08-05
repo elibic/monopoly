@@ -17,6 +17,13 @@
   let tradeOfferedThisRound = false;
   let aiRoundStartSeq = null; // מיקום היומן כשתור המחשב/ים התחיל — לסיכום
   let summaryPending = false;  // ממתינים לאישור השחקן על סיכום תור המחשב
+  let wealthHistory = [];      // מדגם שווי-נטו של כל השחקנים לאורך המשחק (לגרף הסיכום)
+
+  function sampleWealth() {
+    if (!game) return;
+    wealthHistory.push(game.players.map((p) => game.netWorth(p.idx)));
+    if (wealthHistory.length > 200) wealthHistory.shift(); // תקרה בטיחותית
+  }
 
   /* ---------- שמירה אוטומטית (עד איפוס ידני) ---------- */
 
@@ -51,6 +58,9 @@
   const POT_KEY = 'monopoly-hebrew-pot';
   let chosenPot = true;
   try { chosenPot = localStorage.getItem(POT_KEY) !== 'off'; } catch (e) { /* */ }
+  const DIFF_KEY = 'monopoly-hebrew-difficulty';
+  let chosenDifficulty = 'easy'; // ברירת מחדל ידידותית לילדים
+  try { chosenDifficulty = localStorage.getItem(DIFF_KEY) || 'easy'; } catch (e) { /* */ }
 
   function initSetup() {
     // הקמע בפתיחה ובמרכז הלוח
@@ -84,6 +94,18 @@
       b.onclick = () => {
         $('#opponent-picker').querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
         b.classList.add('selected');
+      };
+    });
+
+    // בורר רמת קושי — משקף את הבחירה השמורה
+    const diffPicker = $('#difficulty-picker');
+    if (diffPicker) diffPicker.querySelectorAll('.opt-btn').forEach((b) => {
+      b.classList.toggle('selected', b.dataset.diff === chosenDifficulty);
+      b.onclick = () => {
+        diffPicker.querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
+        b.classList.add('selected');
+        chosenDifficulty = b.dataset.diff;
+        try { localStorage.setItem(DIFF_KEY, chosenDifficulty); } catch (e) { /* */ }
       };
     });
 
@@ -124,6 +146,12 @@
 
     $('#start-btn').onclick = startGame;
     $('#download-btn').onclick = showDownloadDialog;
+    const albumBtn = $('#album-btn');
+    if (albumBtn) albumBtn.onclick = () => UI.showStickerAlbum();
+    const tutBtn = $('#tutorial-btn');
+    if (tutBtn) tutBtn.onclick = () => UI.startTutorial();
+    const remoteBtn = $('#remote-btn');
+    if (remoteBtn && globalThis.MonopolyRemote) remoteBtn.onclick = () => globalThis.MonopolyRemote.open();
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
   }
 
@@ -163,13 +191,20 @@
       spec.push({ name: AI_NAMES[i], token: aiTokens[i].emoji, isAI: true, gender: 'm' });
     }
 
-    game = new Game(spec, { auctions: chosenAuctions, pot: chosenPot });
+    game = new Game(spec, { auctions: chosenAuctions, pot: chosenPot, difficulty: chosenDifficulty });
     aiRoundStartSeq = null;
     summaryPending = false;
+    wealthHistory = [];
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
-    UI.narrator.say(['ev_welcome'], `שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`);
+    UI.music.resumeIfOn(); // הפעלת מוזיקת רקע (אחרי לחיצת המשתמש)
     tick();
+    // מדריך אוטומטי בפעם הראשונה; אחרת ברכת פתיחה רגילה
+    if (!UI.tutorialSeen()) {
+      UI.startTutorial(() => UI.narrator.say(['ev_welcome'], `שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`));
+    } else {
+      UI.narrator.say(['ev_welcome'], `שָׁלוֹם ${name}! בְּהַצְלָחָה בַּמִּשְׂחָק!`);
+    }
   }
 
   // שחזור משחק שמור מהביקור הקודם
@@ -180,6 +215,7 @@
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
     UI.primeFromRestore(game);
+    UI.music.resumeIfOn(); // הפעלת מוזיקת רקע (אחרי לחיצת המשתמש)
     UI.toast('👋 ממשיכים מאיפה שהפסקנו!');
     tick();
   }
@@ -225,7 +261,8 @@
 
       if (game.phase === 'gameover') {
         clearSave();
-        UI.showWin(game, () => location.reload());
+        sampleWealth(); // מדגם אחרון — מצב הסיום
+        UI.showWin(game, () => location.reload(), { humanIdx, history: wealthHistory });
         break;
       }
 
@@ -279,6 +316,7 @@
   // הטלת קוביות עם אנימציית תלת-ממד — לאדם ולמחשב
   async function doRoll() {
     $('#roll-btn').disabled = true;
+    sampleWealth(); // מדגם שווי-נטו לפני ההטלה — לגרף בסיכום המשחק
     game.rollDice();
     await UI.animateDice(game.dice[0], game.dice[1]);
     tick();
@@ -453,6 +491,19 @@
     $('#manage-btn').onclick = () => { if (!$('#manage-btn').disabled) showManage(); };
     $('#trade-btn').onclick = () => { if (!$('#trade-btn').disabled) chooseTradePartner(); };
     $('#sound-btn').onclick = () => UI.setSound(!UI.isSoundOn());
+    const musicBtn = $('#music-btn');
+    if (musicBtn) {
+      musicBtn.classList.toggle('active', UI.music.isOn());
+      musicBtn.textContent = UI.music.isOn() ? '🎵' : '🔇';
+      musicBtn.title = UI.music.isOn() ? 'מוזיקת רקע: פועלת' : 'מוזיקת רקע: כבויה';
+      musicBtn.onclick = () => {
+        const on = UI.music.toggle();
+        musicBtn.classList.toggle('active', on);
+        musicBtn.textContent = on ? '🎵' : '🔇';
+        musicBtn.title = on ? 'מוזיקת רקע: פועלת' : 'מוזיקת רקע: כבויה';
+        UI.toast(on ? '🎵 מוזיקה פועלת' : '🔇 מוזיקה כבויה');
+      };
+    }
     $('#speed-btn').onclick = () => {
       const order = ['slow', 'normal', 'fast'];
       const next = order[(order.indexOf(UI.getSpeed()) + 1) % order.length];
