@@ -1,13 +1,14 @@
 /* משחק מרחוק (שלב ב') — שני ילדים אמיתיים, עם וידאו ומיקרופון.
  *
- * ארכיטקטורה:
- *  - WebRTC עמית-לעמית (P2P) עם איתות ידני בהעתק-הדבק (בלי שרת, מתאים ל-GitHub Pages).
- *  - ערוץ נתונים (DataChannel) לסנכרון מצב המשחק; המארח הוא המקור הסמכותי:
- *      המארח מריץ את המנוע ומשדר את המצב; האורח שולח פעולות והמארח מחיל אותן.
- *  - שידור וידאו/אודיו דו-כיווני דרך אותה חיבוריות.
+ * ארכיטקטורה (בלי שרת — מתאים ל-GitHub Pages):
+ *  - חיבור P2P דו-שלבי: קודם ערוץ נתונים בלבד (קוד קטן), ואז הווידאו/מיקרופון
+ *    מתווספים אוטומטית דרך הערוץ (מו"מ מושלם) — בלי העתקה נוספת.
+ *  - האיתות הראשוני נעשה בקישור-ללחיצה: כל צד שולח קישור קצר (דחוס) שהחבר/ה
+ *    רק *לוחצ/ת* עליו. אין העתקת בלוק ענק.
+ *  - סנכרון מצב: המארח סמכותי — מריץ את המנוע ומשדר toJSON; האורח משקף ב-restore
+ *    ושולח פעולות דרך גשר גנרי.
  *
- * מבודד לחלוטין מהמשחק נגד המחשב — נכנס אליו רק מכפתור ייעודי במסך הפתיחה,
- * ואינו נוגע ב-main.js של משחק היחיד.
+ * מבודד לחלוטין ממשחק היחיד — נכנס אליו רק מכפתור ייעודי / מקישור הזמנה.
  */
 (function () {
   'use strict';
@@ -17,8 +18,6 @@
   const { Game } = globalThis.MonopolyEngine;
   const $ = (s) => document.querySelector(s);
 
-  // ICE ציבורי בלבד (STUN). ללא TURN — עובד ברוב הרשתות הביתיות;
-  // ברשתות סימטריות נוקשות ייתכן שיידרש TURN (הרחבה עתידית).
   const RTC_CONFIG = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -26,21 +25,65 @@
     ],
   };
 
-  let pc = null;          // RTCPeerConnection
-  let channel = null;     // RTCDataChannel
+  let pc = null;
+  let channel = null;
   let role = null;        // 'host' | 'guest'
-  let active = false;     // האם מצב מרחוק פעיל
+  let active = false;
   let myIdx = 0;          // מארח=0, אורח=1
-  let game = null;        // מופע המנוע (במארח: אמיתי; באורח: מראה)
+  let game = null;
   let myName = 'אני';
   let peerName = 'חבר/ה';
   let localStream = null;
-  let lastUiSig = '';     // מונע פתיחת דיאלוגים חוזרת
+  let lastUiSig = '';
   let lastDice = [0, 0];
 
-  /* ==================== איתות (העתק-הדבק) ==================== */
+  // מו"מ מושלם (perfect negotiation) — לתוספת מדיה אחרי החיבור
+  let autoNego = false;   // מפעילים רק אחרי לחיצת היד הראשונית
+  let makingOffer = false;
+  let ignoreOffer = false;
+  let polite = false;     // האורח מנומס
 
-  // ממתין לסיום איסוף מועמדי ICE כדי לארוז הכול בקוד יחיד (בלי trickle).
+  /* ==================== קידוד/דחיסה של קוד האיתות ==================== */
+
+  function bytesToB64url(bytes) {
+    let bin = '';
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64urlToBytes(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    const bin = atob(s);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  }
+
+  // 'C' = דחוס (deflate-raw), 'P' = רגיל. הדחיסה מקטינה את ה-SDP פי ~4.
+  async function encodeSignal(obj) {
+    const json = JSON.stringify(obj);
+    if (typeof CompressionStream !== 'undefined') {
+      const cs = new CompressionStream('deflate-raw');
+      const buf = await new Response(
+        new Blob([new TextEncoder().encode(json)]).stream().pipeThrough(cs),
+      ).arrayBuffer();
+      return 'C' + bytesToB64url(new Uint8Array(buf));
+    }
+    return 'P' + bytesToB64url(new TextEncoder().encode(json));
+  }
+  async function decodeSignal(code) {
+    code = String(code).trim();
+    const tag = code[0];
+    const bytes = b64urlToBytes(code.slice(1));
+    if (tag === 'C' && typeof DecompressionStream !== 'undefined') {
+      const ds = new DecompressionStream('deflate-raw');
+      const buf = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+      return JSON.parse(new TextDecoder().decode(buf));
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  // ממתין לסיום איסוף ICE כדי לארוז הכול בקוד יחיד (בלי trickle) בשלב הראשוני.
   function waitIceComplete(conn) {
     return new Promise((resolve) => {
       if (conn.iceGatheringState === 'complete') return resolve();
@@ -51,27 +94,21 @@
         }
       };
       conn.addEventListener('icegatheringstatechange', check);
-      // גיבוי: אם לוקח יותר מדי זמן, ממשיכים בכל זאת
       setTimeout(resolve, 4000);
     });
   }
 
-  const encodeSignal = (obj) => btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
-  const decodeSignal = (str) => JSON.parse(decodeURIComponent(escape(atob(str.trim()))));
-
-  async function getMedia() {
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    } catch (e) {
-      localStream = null; // ממשיכים בלי מצלמה/מיקרופון
-    }
-    return localStream;
+  const baseUrl = () => location.href.split('#')[0];
+  const joinLink = (code) => `${baseUrl()}#j=${code}`;
+  const answerLink = (code) => `${baseUrl()}#a=${code}`;
+  // חילוץ קוד מקישור או מקוד גולמי
+  function extractCode(text) {
+    text = String(text).trim();
+    const m = text.match(/#[ja]=([^#\s]+)/);
+    return m ? m[1] : text;
   }
 
-  function attachTracks() {
-    if (!localStream || !pc) return;
-    for (const track of localStream.getTracks()) pc.addTrack(track, localStream);
-  }
+  /* ==================== חיבוריות P2P ==================== */
 
   function setupPeerCommon() {
     pc.addEventListener('track', (ev) => {
@@ -83,6 +120,18 @@
         UI.toast('📴 החיבור עם החבר/ה נותק');
       }
     });
+    // מו"מ מושלם — מפעיל את שידור המדיה אחרי החיבור, דרך ערוץ הנתונים
+    pc.addEventListener('negotiationneeded', async () => {
+      if (!autoNego) return;
+      try {
+        makingOffer = true;
+        await pc.setLocalDescription();
+        send({ t: 'sdp', sdp: pc.localDescription });
+      } catch (e) { /* */ } finally { makingOffer = false; }
+    });
+    pc.addEventListener('icecandidate', ({ candidate }) => {
+      if (candidate && autoNego) send({ t: 'ice', candidate });
+    });
   }
 
   function bindChannel() {
@@ -90,14 +139,12 @@
     channel.addEventListener('message', (ev) => handleMessage(JSON.parse(ev.data)));
   }
 
-  /* ---------- זרימת מארח ---------- */
   async function hostCreateOffer() {
     pc = new RTCPeerConnection(RTC_CONFIG);
+    polite = false;
     setupPeerCommon();
     channel = pc.createDataChannel('game');
     bindChannel();
-    await getMedia();
-    attachTracks();
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     await waitIceComplete(pc);
@@ -105,27 +152,38 @@
   }
 
   async function hostAcceptAnswer(code) {
-    const sig = decodeSignal(code);
-    if (sig.t !== 'answer') throw new Error('קוד לא תקין');
+    const sig = await decodeSignal(extractCode(code));
+    if (sig.t !== 'answer') throw new Error('הקוד לא מתאים — נסו שוב');
     peerName = sig.name || peerName;
     await pc.setRemoteDescription(sig.sdp);
   }
 
-  /* ---------- זרימת אורח ---------- */
   async function guestCreateAnswer(code) {
-    const sig = decodeSignal(code);
-    if (sig.t !== 'offer') throw new Error('קוד לא תקין');
+    const sig = await decodeSignal(extractCode(code));
+    if (sig.t !== 'offer') throw new Error('הקוד לא מתאים — נסו שוב');
     peerName = sig.name || peerName;
     pc = new RTCPeerConnection(RTC_CONFIG);
+    polite = true;
     setupPeerCommon();
     pc.addEventListener('datachannel', (ev) => { channel = ev.channel; bindChannel(); });
-    await getMedia();
-    attachTracks();
     await pc.setRemoteDescription(sig.sdp);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await waitIceComplete(pc);
     return encodeSignal({ t: 'answer', sdp: pc.localDescription, name: myName });
+  }
+
+  // תוספת וידאו/מיקרופון אחרי שהחיבור נוצר — מפעיל מו"מ אוטומטי דרך הערוץ.
+  async function enableMedia() {
+    autoNego = true;
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const lv = $('#local-video');
+      if (lv) lv.srcObject = localStream;
+      for (const track of localStream.getTracks()) pc.addTrack(track, localStream);
+    } catch (e) {
+      UI.toast('אין גישה למצלמה — ממשיכים בלי וידאו');
+    }
   }
 
   /* ==================== פרוטוקול המשחק ==================== */
@@ -139,15 +197,12 @@
     UI.closeDialog();
     showVideoTiles();
     bindRemoteButtons();
+    // מנקים את ה-hash כדי שרענון לא ינסה להתחבר שוב
+    try { history.replaceState(null, '', baseUrl()); } catch (e) { /* */ }
     UI.toast(`🎉 מחוברים! משחקים עם ${peerName}`);
-    if (role === 'host') {
-      myIdx = 0;
-      startHostGame();
-    } else {
-      myIdx = 1;
-      // האורח מחכה למצב הראשוני מהמארח
-      send({ t: 'hello', name: myName });
-    }
+    enableMedia(); // וידאו/מיקרופון מתווספים אוטומטית דרך הערוץ
+    if (role === 'host') { myIdx = 0; startHostGame(); }
+    else { myIdx = 1; send({ t: 'hello', name: myName }); }
   }
 
   function startHostGame() {
@@ -156,63 +211,66 @@
       { name: myName, token: tokens[0].emoji, isAI: false, gender: 'm' },
       { name: peerName, token: tokens[1].emoji, isAI: false, gender: 'm' },
     ];
-    game = new Game(spec, {}); // בלי מכירות/קופה מיוחדות — ברירת מחדל
+    game = new Game(spec, {});
     $('#setup-screen').classList.add('hidden');
     $('#game-screen').classList.remove('hidden');
     broadcastState();
     remoteTick();
   }
 
-  function broadcastState() {
-    send({ t: 'state', data: game.toJSON() });
-  }
+  function broadcastState() { send({ t: 'state', data: game.toJSON() }); }
 
-  // המארח מחיל פעולה מ-fromIdx (0=מארח, 1=אורח)
   function applyAction(fromIdx, act) {
     if (role !== 'host' || !game) return;
+    const allowed = [
+      'rollDice', 'buy', 'declineBuy', 'placeBid', 'passAuction', 'endTurn',
+      'payJailFine', 'useJailCard', 'buildHouse', 'sellHouse', 'mortgage',
+      'unmortgage', 'settleDebt', 'declareBankruptcy',
+    ];
+    if (!allowed.includes(act.fn)) return;
     try {
-      const fn = act.fn;
-      const allowed = [
-        'rollDice', 'buy', 'declineBuy', 'placeBid', 'passAuction', 'endTurn',
-        'payJailFine', 'useJailCard', 'buildHouse', 'sellHouse', 'mortgage',
-        'unmortgage', 'settleDebt', 'declareBankruptcy',
-      ];
-      if (!allowed.includes(fn)) return;
-      game[fn](...(act.args || []));
+      game[act.fn](...(act.args || []));
     } catch (e) {
-      // פעולה לא חוקית — מודיעים לשולח בלבד
       if (fromIdx === myIdx) UI.toast(e.message);
-      else send({ t: 'error', to: fromIdx, msg: e.message });
+      else send({ t: 'error', msg: e.message });
       return;
     }
     broadcastState();
     remoteTick();
   }
 
-  // פעולה מקומית — מארח מחיל ישירות, אורח שולח למארח
   function doAction(act) {
     if (role === 'host') applyAction(myIdx, act);
     else send({ t: 'action', act });
   }
 
+  // מו"מ מדיה (perfect negotiation) — הודעות sdp/ice דרך הערוץ
+  async function handleSignal(msg) {
+    try {
+      if (msg.t === 'sdp') {
+        const desc = msg.sdp;
+        const collision = desc.type === 'offer' && (makingOffer || pc.signalingState !== 'stable');
+        ignoreOffer = !polite && collision;
+        if (ignoreOffer) return;
+        await pc.setRemoteDescription(desc);
+        if (desc.type === 'offer') {
+          await pc.setLocalDescription();
+          send({ t: 'sdp', sdp: pc.localDescription });
+        }
+      } else if (msg.t === 'ice') {
+        try { await pc.addIceCandidate(msg.candidate); } catch (e) { if (!ignoreOffer) throw e; }
+      }
+    } catch (e) { /* מתעלמים מכשלי מו"מ בודדים */ }
+  }
+
   function handleMessage(msg) {
     switch (msg.t) {
-      case 'hello':
-        peerName = msg.name || peerName;
-        updateTileNames();
-        break;
-      case 'state':
-        game = Game.restore(msg.data);
-        remoteTick();
-        break;
-      case 'action':
-        if (role === 'host') applyAction(1, msg.act); // רק פעולות של האורח
-        break;
-      case 'error':
-        UI.toast(msg.msg);
-        break;
-      default:
-        break;
+      case 'hello': peerName = msg.name || peerName; updateTileNames(); break;
+      case 'state': game = Game.restore(msg.data); remoteTick(); break;
+      case 'action': if (role === 'host') applyAction(1, msg.act); break;
+      case 'error': UI.toast(msg.msg); break;
+      case 'sdp': case 'ice': handleSignal(msg); break;
+      default: break;
     }
   }
 
@@ -221,52 +279,41 @@
   async function remoteTick() {
     if (!game) return;
     await UI.render(game);
-
-    // אנימציית קוביות כשמשתנות
     if (game.dice[0] && (game.dice[0] !== lastDice[0] || game.dice[1] !== lastDice[1])) {
       UI.animateDice(game.dice[0], game.dice[1]);
     }
     lastDice = game.dice.slice();
-
     updateButtons();
 
     if (game.phase === 'gameover') {
       UI.showWin(game, () => location.reload(), { humanIdx: myIdx });
       return;
     }
-
     if (game.phase !== 'auction') UI.closeAuctionDialog();
 
-    // חתימת מצב — כדי לפתוח דיאלוגים רק כשמשהו רלוונטי אליי משתנה
     const sig = [game.phase, game.turn, game.debt ? game.debt.debtor : '-',
       game.phase === 'auction' ? game.auctionTurn() : '-'].join(':');
     const sigChanged = sig !== lastUiSig;
     lastUiSig = sig;
-
-    const banner = $('#turn-banner');
     const myTurn = game.turn === myIdx;
 
     if (game.phase === 'auction') {
-      const bidderIsMe = game.auctionTurn() === myIdx;
-      if (bidderIsMe) {
+      if (game.auctionTurn() === myIdx) {
         UI.renderAuction(game, myIdx,
           (amt) => { UI.closeDialog(); doAction({ fn: 'placeBid', args: [myIdx, amt] }); },
           () => { UI.closeDialog(); doAction({ fn: 'passAuction', args: [myIdx] }); });
       } else {
         UI.closeAuctionDialog();
-        if (sigChanged) waitToast('🔨 החבר/ה מציע/ה במכירה הפומבית...');
+        if (sigChanged) UI.toast('🔨 החבר/ה מציע/ה במכירה הפומבית...');
       }
       return;
     }
 
-    if (!sigChanged) return; // נמנע מפתיחת דיאלוגים חוזרת
+    if (!sigChanged) return;
 
     if (game.phase === 'buy') {
-      if (myTurn) {
-        UI.showBuyDialog(game,
-          () => doAction({ fn: 'buy' }),
-          () => doAction({ fn: 'declineBuy' }));
-      } else waitToast(`🛍️ ${peerName} מחליט/ה אם לקנות...`);
+      if (myTurn) UI.showBuyDialog(game, () => doAction({ fn: 'buy' }), () => doAction({ fn: 'declineBuy' }));
+      else UI.toast(`🛍️ ${peerName} מחליט/ה אם לקנות...`);
     } else if (game.phase === 'debt') {
       if (game.debt.debtor === myIdx) {
         UI.showDebtDialog(game, myIdx, {
@@ -274,33 +321,24 @@
           onSettle: () => doAction({ fn: 'settleDebt' }),
           onBankrupt: () => doAction({ fn: 'declareBankruptcy' }),
         });
-      } else waitToast(`💸 ${peerName} מסדר/ת תשלום...`);
+      } else UI.toast(`💸 ${peerName} מסדר/ת תשלום...`);
     } else if (game.phase === 'roll' && myTurn && game.current().inJail) {
       UI.showJailDialog(game, {
         onPay: () => doAction({ fn: 'payJailFine' }),
         onCard: () => doAction({ fn: 'useJailCard' }),
         onRoll: () => doAction({ fn: 'rollDice' }),
       });
-    }
-
-    if (banner && !myTurn && game.phase !== 'auction') {
-      // כרזת "תור החבר/ה" מנוהלת ע"י render; כאן רק טוסט עדין בעת שינוי
-      if (sigChanged) waitToast(`⏳ תורו/ה של ${peerName}`);
+    } else if (!myTurn && game.phase !== 'auction') {
+      UI.toast(`⏳ תורו/ה של ${peerName}`);
     }
   }
 
   const mapManageFn = (a) => ({ build: 'buildHouse', sellHouse: 'sellHouse', mortgage: 'mortgage', unmortgage: 'unmortgage' }[a] || a);
 
-  // טוסט המתנה — מוצג רק כשחתימת המצב משתנה, כך שאינו חוזר על עצמו.
-  function waitToast(text) { UI.toast(text); }
-
   /* ==================== כפתורים ==================== */
 
   function bindRemoteButtons() {
-    const roll = $('#roll-btn');
-    const endT = $('#end-turn-btn');
-    const manage = $('#manage-btn');
-    const trade = $('#trade-btn');
+    const roll = $('#roll-btn'), endT = $('#end-turn-btn'), manage = $('#manage-btn'), trade = $('#trade-btn');
     if (roll) roll.onclick = () => { if (!roll.disabled) doAction({ fn: 'rollDice' }); };
     if (endT) endT.onclick = () => { if (!endT.disabled) doAction({ fn: 'endTurn' }); };
     if (manage) manage.onclick = () => {
@@ -310,7 +348,7 @@
         onClose: () => {},
       });
     };
-    if (trade) { trade.style.display = 'none'; } // מסחר בין ילדים — הרחבה עתידית
+    if (trade) trade.style.display = 'none';
     const restart = $('#restart-btn');
     if (restart) restart.onclick = () => { if (confirm('לצאת מהמשחק המשותף?')) location.reload(); };
   }
@@ -318,14 +356,11 @@
   function updateButtons() {
     if (!game) return;
     const myTurn = game.turn === myIdx && !game.players[myIdx].bankrupt;
-    const roll = $('#roll-btn');
-    const endT = $('#end-turn-btn');
-    const manage = $('#manage-btn');
+    const roll = $('#roll-btn'), endT = $('#end-turn-btn'), manage = $('#manage-btn');
     const inputPhase = game.phase === 'roll' || game.phase === 'end';
     if (roll) {
-      const canRoll = myTurn && game.phase === 'roll' && !game.current().inJail;
       roll.style.display = game.phase === 'roll' ? '' : 'none';
-      roll.disabled = !canRoll;
+      roll.disabled = !(myTurn && game.phase === 'roll' && !game.current().inJail);
     }
     if (endT) {
       endT.style.display = game.phase === 'end' ? '' : 'none';
@@ -349,91 +384,129 @@
     if (lv && localStream) lv.srcObject = localStream;
     $('#vt-toggle').onclick = () => wrap.classList.toggle('collapsed');
   }
-
   function updateTileNames() {
     const rl = $('#remote-label'); if (rl) rl.textContent = peerName;
     const ll = $('#local-label'); if (ll) ll.textContent = myName;
   }
 
-  /* ==================== מסכי חיבור ==================== */
+  /* ==================== מסכי חיבור (קישור ללחיצה) ==================== */
 
-  function copyBtnHTML(id) { return `<button class="big-btn" id="${id}">📋 העתקה</button>`; }
-
-  function wireCopy(d, btnId, text) {
-    const b = d.querySelector('#' + btnId);
-    if (b) b.onclick = async () => {
-      try { await navigator.clipboard.writeText(text); UI.toast('הועתק! שלחו לחבר/ה'); }
-      catch (e) { UI.toast('סמנו והעתיקו ידנית'); }
-    };
+  // כפתור שיתוף — פותח את גיליון השיתוף בנייד (וואטסאפ וכו'), אחרת מעתיק.
+  function shareRow(label, url, tip) {
+    return `<div class="rm-share">
+      <div class="rm-share-tip">${tip}</div>
+      <button class="big-btn green rm-share-btn" data-url="${encodeURIComponent(url)}">📤 ${label}</button>
+      <a class="rm-linkview" href="${url}">${url}</a>
+    </div>`;
+  }
+  function wireShare(d) {
+    d.querySelectorAll('.rm-share-btn').forEach((b) => {
+      const url = decodeURIComponent(b.dataset.url);
+      b.onclick = async () => {
+        if (navigator.share) {
+          try { await navigator.share({ title: 'מונופול — בואו נשחק!', text: 'לחצו כדי לשחק איתי מונופול 🎩', url }); return; }
+          catch (e) { /* בוטל — ננסה העתקה */ }
+        }
+        try { await navigator.clipboard.writeText(url); UI.toast('הקישור הועתק! שלחו לחבר/ה'); }
+        catch (e) { UI.toast('סמנו את הקישור והעתיקו'); }
+      };
+    });
   }
 
   function openEntry() {
     const d = UI.openDialog(`
       <h2>משחק עם חבר/ה מרחוק 🎥</h2>
-      <p class="d-sub">שחקו יחד עם וידאו ומיקרופון! צריך עזרה של מבוגר להעביר קוד קצר בין השחקנים (למשל בוואטסאפ).</p>
+      <p class="d-sub">שחקו יחד עם וידאו ומיקרופון! שולחים קישור אחד לחבר/ה (למשל בוואטסאפ) — הוא/היא לוחצ/ת עליו, ומתחילים.</p>
       <label class="setup-label" for="rm-name">איך קוראים לך?</label>
       <input id="rm-name" type="text" maxlength="12" placeholder="השם שלי..." style="text-align:center">
       <div class="d-actions">
         <button class="big-btn green" id="rm-host">🎈 אני פותח/ת משחק</button>
-        <button class="big-btn blue" id="rm-join">🔗 אני מצטרף/ת</button>
+        <button class="big-btn blue" id="rm-join">🔗 קיבלתי קישור</button>
       </div>
       <div class="d-actions"><button class="link-btn" id="rm-cancel">חזרה</button></div>`);
     d.querySelector('#rm-host').onclick = () => { myName = ($('#rm-name').value.trim() || 'אני'); role = 'host'; hostFlow(); };
-    d.querySelector('#rm-join').onclick = () => { myName = ($('#rm-name').value.trim() || 'אני'); role = 'guest'; guestFlow(); };
+    d.querySelector('#rm-join').onclick = () => {
+      const jd = UI.openDialog(`
+        <h2>הצטרפות למשחק 🔗</h2>
+        <p class="d-sub">הדביקו כאן את הקישור שקיבלתם מהחבר/ה:</p>
+        <textarea id="rm-joincode" class="rm-code" placeholder="הדביקו כאן את הקישור..."></textarea>
+        <div class="d-actions"><button class="big-btn green" id="rm-joingo">➡️ ממשיכים</button></div>`);
+      jd.querySelector('#rm-joingo').onclick = () => {
+        const raw = jd.querySelector('#rm-joincode').value.trim();
+        if (!raw) { UI.toast('הדביקו קודם את הקישור'); return; }
+        guestFromLink(extractCode(raw));
+      };
+    };
     d.querySelector('#rm-cancel').onclick = () => UI.closeDialog();
   }
 
   async function hostFlow() {
-    UI.openDialog(`<h2>מכינים משחק... ⏳</h2><p class="d-sub">מבקשים גישה למצלמה ולמיקרופון ומכינים קוד הזמנה.</p>`);
+    UI.openDialog(`<h2>מכינים קישור... ⏳</h2><p class="d-sub">עוד רגע יהיה מוכן קישור לשלוח לחבר/ה.</p>`);
     let code;
     try { code = await hostCreateOffer(); }
-    catch (e) { UI.openDialog(`<h2>אופס 😕</h2><p class="d-sub">${e.message}</p><div class="d-actions"><button class="big-btn" id="e-ok">סגירה</button></div>`).querySelector('#e-ok').onclick = () => UI.closeDialog(); return; }
+    catch (e) { showError(e.message); return; }
+    const link = joinLink(code);
     const d = UI.openDialog(`
-      <h2>שלב 1: שלחו את הקוד 📤</h2>
-      <p class="d-sub">שלחו את קוד ההזמנה לחבר/ה. כשהוא/היא ישלח/תשלח לכם קוד בחזרה — הדביקו אותו למטה.</p>
-      <textarea id="rm-code" class="rm-code" readonly>${code}</textarea>
-      ${copyBtnHTML('rm-copy')}
-      <label class="setup-label">הדביקו כאן את הקוד שקיבלתם בחזרה:</label>
-      <textarea id="rm-answer" class="rm-code" placeholder="הדביקו כאן..."></textarea>
+      <h2>שלב 1: שלחו קישור לחבר/ה 📤</h2>
+      ${shareRow('שליחת קישור לחבר/ה', link, 'החבר/ה רק לוחצ/ת על הקישור ומצטרפ/ת:')}
+      <hr class="rm-hr">
+      <label class="setup-label">שלב 2: כשהחבר/ה שולח/ת קישור בחזרה — הדביקו כאן:</label>
+      <textarea id="rm-answer" class="rm-code" placeholder="הדביקו כאן את הקישור שקיבלתם בחזרה..."></textarea>
       <div class="d-actions"><button class="big-btn green" id="rm-connect">🔌 מתחברים!</button></div>`);
-    wireCopy(d, 'rm-copy', code);
+    wireShare(d);
     d.querySelector('#rm-connect').onclick = async () => {
       const ans = d.querySelector('#rm-answer').value.trim();
-      if (!ans) { UI.toast('הדביקו קודם את הקוד שקיבלתם'); return; }
+      if (!ans) { UI.toast('הדביקו קודם את הקישור שקיבלתם'); return; }
       try { await hostAcceptAnswer(ans); UI.openDialog(`<h2>מתחברים... ⏳</h2><p class="d-sub">עוד רגע מתחילים לשחק!</p>`); }
       catch (e) { UI.toast(e.message); }
     };
   }
 
-  async function guestFlow() {
+  // אורח שהגיע דרך קישור הזמנה (#j=...)
+  async function guestFromLink(code) {
+    role = 'guest';
     const d = UI.openDialog(`
-      <h2>שלב 1: הדביקו את קוד ההזמנה 📥</h2>
-      <p class="d-sub">הדביקו את הקוד שקיבלתם מהחבר/ה שפתח/ה את המשחק:</p>
-      <textarea id="rm-offer" class="rm-code" placeholder="הדביקו כאן..."></textarea>
-      <div class="d-actions"><button class="big-btn green" id="rm-make">➡️ ממשיכים</button></div>`);
-    d.querySelector('#rm-make').onclick = async () => {
-      const offer = d.querySelector('#rm-offer').value.trim();
-      if (!offer) { UI.toast('הדביקו קודם את הקוד'); return; }
-      UI.openDialog(`<h2>מכינים... ⏳</h2><p class="d-sub">מבקשים גישה למצלמה ולמיקרופון.</p>`);
-      let code;
-      try { code = await guestCreateAnswer(offer); }
-      catch (e) { UI.toast(e.message); return; }
+      <h2>הזמנה למשחק! 🎉</h2>
+      <p class="d-sub">מישהו הזמין אותך לשחק מונופול. איך קוראים לך?</p>
+      <input id="rm-gname" type="text" maxlength="12" placeholder="השם שלי..." style="text-align:center">
+      <div class="d-actions"><button class="big-btn green" id="rm-go">➡️ ממשיכים</button></div>`);
+    d.querySelector('#rm-go').onclick = async () => {
+      myName = (d.querySelector('#rm-gname').value.trim() || 'אני');
+      UI.openDialog(`<h2>מתחברים... ⏳</h2><p class="d-sub">מכינים קישור קצר לשלוח בחזרה.</p>`);
+      let ansCode;
+      try { ansCode = await guestCreateAnswer(code); }
+      catch (e) { showError(e.message); return; }
+      const link = answerLink(ansCode);
       const d2 = UI.openDialog(`
-        <h2>שלב 2: שלחו את הקוד בחזרה 📤</h2>
-        <p class="d-sub">שלחו את הקוד הזה בחזרה לחבר/ה שפתח/ה את המשחק — וזהו, מתחילים!</p>
-        <textarea id="rm-code2" class="rm-code" readonly>${code}</textarea>
-        ${copyBtnHTML('rm-copy2')}
+        <h2>שלב אחרון: שלחו קישור בחזרה 📤</h2>
+        ${shareRow('שליחת קישור בחזרה', link, 'שלחו את הקישור הזה בחזרה לחבר/ה שהזמין/ה — וזהו!')}
         <p class="d-sub">⏳ ממתינים לחיבור...</p>`);
-      wireCopy(d2, 'rm-copy2', code);
+      wireShare(d2);
     };
   }
+
+  function showError(msg) {
+    const d = UI.openDialog(`<h2>אופס 😕</h2><p class="d-sub">${msg}</p><div class="d-actions"><button class="big-btn" id="e-ok">סגירה</button></div>`);
+    d.querySelector('#e-ok').onclick = () => UI.closeDialog();
+  }
+
+  // זיהוי קישור הזמנה בטעינת הדף
+  function checkHashOnLoad() {
+    const h = location.hash || '';
+    if (h.startsWith('#j=')) {
+      const code = h.slice(3);
+      // נותנים לדף להיטען, ואז פותחים את זרימת האורח
+      setTimeout(() => guestFromLink(code), 300);
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', checkHashOnLoad);
+  else checkHashOnLoad();
 
   /* ==================== API ==================== */
 
   globalThis.MonopolyRemote = {
     open: openEntry,
     active: () => active,
-    // חשיפה לבדיקות loopback בלבד
-    _internals: { encodeSignal, decodeSignal, RTC_CONFIG },
+    _internals: { encodeSignal, decodeSignal, extractCode, joinLink, answerLink },
   };
 })();
