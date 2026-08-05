@@ -1231,6 +1231,15 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   border: 2px solid #E4DCC4; border-radius: 10px; padding: 8px;
   margin: 6px 0; background: #FBF7EA; word-break: break-all;
 }
+.rm-share { margin: 10px 0; }
+.rm-share-tip { font-size: 15px; color: var(--ink-soft); margin-bottom: 8px; }
+.rm-share-btn { width: 100%; }
+.rm-linkview {
+  display: block; direction: ltr; font-family: monospace; font-size: 10px;
+  color: #9A8; word-break: break-all; margin-top: 6px; text-decoration: none;
+  max-height: 34px; overflow: hidden;
+}
+.rm-hr { border: none; border-top: 2px dashed #E4DCC4; margin: 16px 0; }
 #video-tiles {
   position: fixed; bottom: 12px; left: 12px; z-index: 90;
   display: flex; flex-direction: column; gap: 8px;
