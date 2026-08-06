@@ -20,6 +20,11 @@
   let summaryPending = false;  // ממתינים לאישור השחקן על סיכום תור המחשב
   let reportShown = 0;         // הסבב האחרון שדוח הבורסה שלו כבר הוצג
   let reportPending = false;   // ממתינים לאישור השחקן על דוח הבורסה
+  let offerPending = false;    // הצעת השקעה פתוחה
+  let offerCooldown = 0;       // כמה תורות להמתין עד ההצעה הבאה
+  let lastCash = null;         // מזומן בתחילת התור הקודם — לזיהוי כסף שנכנס
+  let firstOfferDone = false;  // ההצעה הראשונה ("בוא ננסה") כבר הוצגה
+  let profitRound = 0;         // הסבב האחרון שבו הילד הרוויח בבורסה (להצעת המשך)
   let wealthHistory = [];      // מדגם שווי-נטו של כל השחקנים לאורך המשחק (לגרף הסיכום)
 
   function sampleWealth() {
@@ -222,6 +227,7 @@
     summaryPending = false;
     reportShown = 0;
     reportPending = false;
+    offerPending = false; offerCooldown = 1; lastCash = null; firstOfferDone = false; profitRound = 0;
     wealthHistory = [];
     syncBankButton();
     $('#setup-screen').classList.add('hidden');
@@ -251,6 +257,8 @@
     aiRoundStartSeq = null;
     summaryPending = false;
     reportPending = false;
+    offerPending = false; offerCooldown = 1; lastCash = null; profitRound = 0;
+    firstOfferDone = game.financeEnabled && game.players[humanIdx].invest.totalIn > 0;
     reportShown = game.market ? game.market.round : 0; // לא מציגים שוב דוח ישן
     syncBankButton();
     $('#setup-screen').classList.add('hidden');
@@ -340,10 +348,18 @@
         if (rep.entries.some((e) => e.idx === humanIdx)) {
           reportPending = true;
           updateButtons();
-          UI.showMarketReport(game, humanIdx, () => { reportPending = false; updateButtons(); tick(); });
+          if ((rep.totals[humanIdx] || 0) > 0) profitRound = rep.round;
+          UI.showMarketReport(game, humanIdx, () => { reportPending = false; updateButtons(); tick(); },
+            (track, co, amount) => {
+              reportPending = false;
+              quickInvest(track, co, amount, 'ההשקעה שלך גדלה — הוספת עוד!');
+            });
           break;
         }
       }
+
+      // מאמן ההשקעות: מציע לילד להשקיע ברגעים הנכונים, בלי שיצטרך לזכור לבד
+      if (maybeOfferInvestment()) break;
 
       const actor = currentActor();
       if (isAI(actor)) {
@@ -367,7 +383,7 @@
   }
 
   function updateButtons() {
-    const humanTurn = game.turn === humanIdx && !game.players[humanIdx].bankrupt && !summaryPending && !reportPending;
+    const humanTurn = game.turn === humanIdx && !game.players[humanIdx].bankrupt && !summaryPending && !reportPending && !offerPending;
     const free = !['auction', 'debt', 'gameover'].includes(game.phase);
     $('#roll-btn').disabled = !(humanTurn && game.phase === 'roll' && !game.current().inJail);
     $('#end-turn-btn').disabled = !(humanTurn && game.phase === 'end');
@@ -467,6 +483,82 @@
       },
       onClose: () => tick(),
     });
+  }
+
+  /* ---------- מאמן ההשקעות ---------- */
+
+  // השקעה בלחיצה אחת מתוך הצעה, עם משוב מיידי
+  function quickInvest(track, co, amount, praise) {
+    try {
+      game.invest(humanIdx, track, co, amount);
+      UI.sounds.money();
+      const name = co ? D.FINANCE.COMPANIES.find((c) => c.id === co).name : D.FINANCE.TRACKS[track].name;
+      UI.toast(`${praise || 'יופי!'} ${amount} ₪ ב${name} 🌱`);
+      UI.narrator.say(['inv_dep_h'], 'יוֹפִי! הַכֶּסֶף שֶׁלְּךָ מַתְחִיל לַעֲבֹד בִּשְׁבִילְךָ');
+    } catch (e) { UI.toast(e.message); }
+    offerPending = false;
+    offerCooldown = 2;
+    tick();
+  }
+
+  // בוחר שתי-שלוש אפשרויות מתאימות לסכום שיש לילד עכשיו
+  function offerOptions(kind) {
+    const F = D.FINANCE;
+    const money = game.players[humanIdx].money;
+    const unit = money >= 400 ? 100 : 50;
+    const co = F.COMPANIES[game.market.round % F.COMPANIES.length];
+    const opts = [
+      { track: 'savings', co: null, amount: unit },
+      { track: 'deposit', co: null, amount: unit },
+      { track: 'stocks', co: co.id, amount: unit },
+    ];
+    // בהצעה הראשונה מתחילים מהבטוח, אחר כך מציעים גם את המסוכן
+    return kind === 'first' ? opts.slice(0, 2).concat(opts[2]) : opts;
+  }
+
+  function maybeOfferInvestment() {
+    if (!game.financeEnabled || offerPending || reportPending || summaryPending) return false;
+    if (game.turn !== humanIdx || game.players[humanIdx].bankrupt) return false;
+    if (!['roll', 'end'].includes(game.phase)) return false;
+    if (game.current().inJail) return false;
+
+    const p = game.players[humanIdx];
+    const prevCash = lastCash;
+    lastCash = p.money;
+    if (offerCooldown > 0) { offerCooldown -= 1; return false; }
+
+    // חייבים להשאיר לילד כסף למשחק עצמו — מציעים רק מהעודף
+    const spare = p.money - 400;
+    if (spare < 50) return false;
+
+    let kind = null;
+    let reason = '';
+    if (!firstOfferDone && game.investTotal(humanIdx) === 0) {
+      kind = 'first';
+      reason = `יש לך ${p.money.toLocaleString('he-IL')} ₪ בחשבון, והם פשוט יושבים שם.`;
+    } else if (profitRound === game.market.round && spare >= 200) {
+      kind = 'profit';
+      profitRound = 0; // פעם אחת לכל סבב מרוויח
+      const won = game.market.report.totals[humanIdx] || 0;
+      reason = `בסבב האחרון ההשקעות שלך הרוויחו ${won.toLocaleString('he-IL')} ₪ — ויש לך עוד כסף פנוי.`;
+    } else if (prevCash !== null && p.money - prevCash >= 150) {
+      kind = 'windfall';
+      reason = `נכנסו לך ${(p.money - prevCash).toLocaleString('he-IL')} ₪ מאז התור הקודם!`;
+    }
+    if (!kind) return false;
+
+    offerPending = true;
+    firstOfferDone = true;
+    updateButtons();
+    UI.showInvestOffer(game, humanIdx, {
+      kind,
+      reason,
+      options: offerOptions(kind),
+      onInvest: (track, co, amount) => { UI.closeDialog(); quickInvest(track, co, amount); },
+      onSkip: () => { offerPending = false; offerCooldown = 3; updateButtons(); tick(); },
+      onOpenBank: () => { offerPending = false; showBank(); },
+    });
+    return true;
   }
 
   // הבנק שלי — הפקדה ומשיכה, עם רענון הדיאלוג אחרי כל פעולה
