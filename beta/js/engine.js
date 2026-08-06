@@ -7,7 +7,24 @@
   'use strict';
 
   const D = globalThis.MONOPOLY_DATA;
-  const { CONSTANTS: C, BOARD, GROUPS, RAIL_RENTS } = D;
+  const { CONSTANTS: C, BOARD, GROUPS, RAIL_RENTS, FINANCE: F } = D;
+
+  // מצב חינוך פיננסי: כל הסכומים בשקלים שלמים — עיגול בכל חישוב תשואה.
+  const emptyInvest = () => ({
+    savings: 0,
+    deposit: 0,
+    stocks: Object.fromEntries(F.COMPANIES.map((c) => [c.id, 0])),
+    totalIn: 0,   // כמה הופקד בסך הכול (להצגת רווח)
+    totalOut: 0,  // כמה נמשך בסך הכול
+    crash: null,  // {co, val} — נפילה שעוד לא התאוששה (למדבקת "ידיים של יהלום")
+    crashSurvived: false,
+  });
+
+  const emptyMarket = () => ({
+    round: 0,
+    trend: Object.fromEntries(F.COMPANIES.map((c) => [c.id, [100]])), // מסלול מחירים לגרף
+    report: null, // דוח הסבב האחרון — מה קרה לכל אחזקה ולמה
+  });
 
   const money = (n) => `${n.toLocaleString('he-IL')} ש"ח`;
   // פועל מותאם מגדר: v(p, 'קנה', 'קנתה')
@@ -33,6 +50,8 @@
       this.cardQueue = (opts.cardQueue || []).slice(); // מזהי קלפים כפויים לבדיקות
       this.auctionsEnabled = opts.auctions !== false; // מכירה פומבית בוויתור על קנייה
       this.potEnabled = opts.pot !== false; // קופה בחניה חופשית (חוק בית)
+      this.financeEnabled = opts.finance === true; // מצב חינוך פיננסי — כבוי אלא אם בחרו בו
+      this.marketQueue = (opts.marketQueue || []).slice(); // עדכוני שוק כפויים לבדיקות
       this.difficulty = opts.difficulty || 'medium'; // easy | medium | hard — רמת הבוט
 
       this.players = playersSpec.map((p, idx) => ({
@@ -47,6 +66,7 @@
         jailRolls: 0,
         jailCards: [], // {deck:'chance'|'chest', card}
         bankrupt: false,
+        invest: emptyInvest(),
       }));
 
       this.owner = new Array(40).fill(null);     // idx של שחקן או null (בנק)
@@ -55,6 +75,7 @@
       this.housesLeft = C.TOTAL_HOUSES;
       this.hotelsLeft = C.TOTAL_HOTELS;
       this.pot = 0; // הקופה: כל תשלום לבנק נכנס אליה, מי שנוחת בחניה חופשית זוכה
+      this.market = emptyMarket(); // מצב חינוך פיננסי: שוק אחד משותף לכל השחקנים
 
       this.decks = {
         chance: shuffle(D.CHANCE_CARDS, this.rand),
@@ -122,9 +143,9 @@
       return 0;
     }
 
-    // כמה כסף שחקן מסוגל לגייס בסך הכול (מזומן + מכירת בניינים + משכנתאות)
+    // כמה כסף שחקן מסוגל לגייס בסך הכול (מזומן + השקעות + מכירת בניינים + משכנתאות)
     liquidationValue(idx) {
-      let total = this.players[idx].money;
+      let total = this.players[idx].money + this.investTotal(idx);
       for (const pos of this.playerProps(idx)) {
         const sq = this.square(pos);
         if (sq.type === 'street' && this.houses[pos] > 0) {
@@ -138,7 +159,7 @@
     }
 
     netWorth(idx) {
-      let total = this.players[idx].money;
+      let total = this.players[idx].money + this.investTotal(idx);
       for (const pos of this.playerProps(idx)) {
         const sq = this.square(pos);
         total += this.mortgaged[pos] ? sq.price / 2 : sq.price;
@@ -152,6 +173,215 @@
 
     _log(text, kind = 'info', extra = {}) {
       this.log.push({ id: ++this._logSeq, text, kind, ...extra });
+    }
+
+    /* ---------- מצב חינוך פיננסי: השקעות ושוק ----------
+     * הכסף המושקע נשמר לכל שחקן ב-p.invest, בשקלים שלמים.
+     * הפקדה ומשיכה מזיזות כסף ישירות ולא דרך _charge — כדי שההשקעה
+     * לא תיכנס לקופת החניה החופשית. */
+
+    _holding(p, track, co) {
+      return track === 'stocks' ? p.invest.stocks[co] : p.invest[track];
+    }
+
+    _setHolding(p, track, co, val) {
+      if (track === 'stocks') p.invest.stocks[co] = val;
+      else p.invest[track] = val;
+    }
+
+    // שם קריא לילד: "קופת חיסכון" / "מפעל הגלידה"
+    _holdingName(track, co) {
+      if (track === 'stocks') {
+        const c = F.COMPANIES.find((x) => x.id === co);
+        return c ? `${c.emoji} ${c.name}` : 'מניות';
+      }
+      const t = F.TRACKS[track];
+      return `${t.emoji} ${t.name}`;
+    }
+
+    investTotal(idx) {
+      const inv = this.players[idx].invest;
+      if (!inv) return 0;
+      let total = inv.savings + inv.deposit;
+      for (const c of F.COMPANIES) total += inv.stocks[c.id] || 0;
+      return total;
+    }
+
+    // רווח/הפסד מצטבר מהשקעות (כולל מה שכבר נמשך)
+    investProfit(idx) {
+      const inv = this.players[idx].invest;
+      if (!inv) return 0;
+      return inv.totalOut + this.investTotal(idx) - inv.totalIn;
+    }
+
+    // כל האחזקות הפעילות של שחקן: [{track, co, value, name}]
+    holdings(idx) {
+      const p = this.players[idx];
+      const res = [];
+      if (!p.invest) return res;
+      for (const track of ['savings', 'deposit']) {
+        if (p.invest[track] > 0) res.push({ track, co: null, value: p.invest[track], name: this._holdingName(track, null) });
+      }
+      for (const c of F.COMPANIES) {
+        const val = p.invest.stocks[c.id] || 0;
+        if (val > 0) res.push({ track: 'stocks', co: c.id, value: val, name: this._holdingName('stocks', c.id) });
+      }
+      return res;
+    }
+
+    invest(idx, track, co, amount) {
+      if (!this.financeEnabled) throw new Error('מצב חינוך פיננסי כבוי');
+      if (idx !== this.turn) throw new Error('אפשר להשקיע רק בתור שלך');
+      if (this.phase !== 'roll' && this.phase !== 'end') throw new Error('אי אפשר להשקיע עכשיו');
+      if (!F.TRACKS[track]) throw new Error('מסלול לא מוכר');
+      if (track === 'stocks' && !F.COMPANIES.some((c) => c.id === co)) throw new Error('חברה לא מוכרת');
+      if (!Number.isInteger(amount) || amount <= 0) throw new Error('סכום לא תקין');
+      const p = this.players[idx];
+      if (p.money < amount) throw new Error('אין מספיק כסף בחשבון');
+
+      p.money -= amount;
+      this._setHolding(p, track, co, this._holding(p, track, co) + amount);
+      p.invest.totalIn += amount;
+      this._log(`🏦 ${p.name} ${v(p, 'השקיע', 'השקיעה')} ${money(amount)} ב${this._holdingName(track, co)}.`,
+        'invest', { pIdx: idx, track, co, amount });
+    }
+
+    // משיכה מלאה של אחזקה אחת — גם בשלב חוב, כדי שאפשר יהיה לשלם
+    withdraw(idx, track, co) {
+      if (!this.financeEnabled) throw new Error('מצב חינוך פיננסי כבוי');
+      const inDebt = this.phase === 'debt' && this.debt && this.debt.debtor === idx;
+      const ownTurn = idx === this.turn && (this.phase === 'roll' || this.phase === 'end');
+      if (!inDebt && !ownTurn) throw new Error('אפשר למשוך רק בתור שלך');
+      const p = this.players[idx];
+      const val = this._holding(p, track, co);
+      if (!val) throw new Error('אין מה למשוך');
+
+      this._setHolding(p, track, co, 0);
+      p.money += val;
+      p.invest.totalOut += val;
+      if (p.invest.crash && p.invest.crash.co === co) p.invest.crash = null; // ויתר על ההמתנה להתאוששות
+      this._log(`🏦 ${p.name} ${v(p, 'משך', 'משכה')} ${money(val)} מ${this._holdingName(track, co)}.`,
+        'withdraw', { pIdx: idx, track, co, amount: val });
+      return val;
+    }
+
+    // בחירת כפולה מתוך טבלת הסתברויות (סכום ההסתברויות = 1)
+    _drawMult(table) {
+      let r = this.rand();
+      for (const row of table) {
+        r -= row.p;
+        if (r <= 0) return row.m;
+      }
+      return table[table.length - 1].m;
+    }
+
+    /* עדכון השוק — פעם בסבב מלא.
+     * סדר ההגרלות קבוע ומתועד כדי שהמשחק יהיה דטרמיניסטי עם אותו זרע:
+     *   1) האם יש חדשות  2) איזו חברה  3) איזה אירוע
+     *   4) כפולה לכל חברה לפי סדר COMPANIES (חברת החדשות לא מגרילה)
+     *   5) כפולה לפיקדון
+     * marketQueue (לבדיקות) עוקף את כל ההגרלות. */
+    _marketTick() {
+      const forced = this.marketQueue.length ? this.marketQueue.shift() : null;
+      let news = null;
+      let depositMult;
+      const mults = {};
+
+      if (forced) {
+        news = forced.news ? F.NEWS.find((n) => n.id === forced.news.id) || null : null;
+        for (const c of F.COMPANIES) mults[c.id] = forced.mults && forced.mults[c.id] !== undefined ? forced.mults[c.id] : 1;
+        if (news) mults[news.co] = news.m;
+        depositMult = forced.deposit !== undefined ? forced.deposit : 1;
+      } else {
+        if (this.rand() < F.NEWS_CHANCE) {
+          const co = F.COMPANIES[Math.floor(this.rand() * F.COMPANIES.length)].id;
+          const pool = F.NEWS.filter((n) => n.co === co);
+          news = pool[Math.floor(this.rand() * pool.length)];
+        }
+        for (const c of F.COMPANIES) {
+          mults[c.id] = news && news.co === c.id ? news.m : this._drawMult(F.TRACKS.stocks.table);
+        }
+        depositMult = this._drawMult(F.TRACKS.deposit.table);
+      }
+
+      this.market.round += 1;
+      const round = this.market.round;
+
+      // קודם הסיפור, אחר כך מה שהוא עשה לכסף
+      if (news) {
+        const co = F.COMPANIES.find((c) => c.id === news.co);
+        this._log(`📰 חדשות מהבורסה: ${news.text} (${co.emoji} ${co.name})`, 'market_news', { newsId: news.id, co: news.co });
+      }
+
+      // מסלול המחירים לגרף המגמה
+      for (const c of F.COMPANIES) {
+        const arr = this.market.trend[c.id];
+        arr.push(Math.max(F.FLOOR, Math.round(arr[arr.length - 1] * mults[c.id])));
+        if (arr.length > 13) arr.shift();
+      }
+
+      const report = { round, news: news ? { id: news.id, co: news.co, m: news.m, text: news.text } : null, entries: [], totals: {} };
+
+      for (const p of this.players) {
+        if (p.bankrupt || !p.invest) continue;
+        let sum = 0;
+
+        for (const h of this.holdings(p.idx)) {
+          const oldVal = h.value;
+          let newVal;
+          let reason;
+
+          if (h.track === 'savings') {
+            newVal = oldVal + Math.max(1, Math.round(oldVal * F.TRACKS.savings.rate));
+            reason = F.REASONS.savings;
+          } else if (h.track === 'deposit') {
+            newVal = Math.max(F.FLOOR, Math.round(oldVal * depositMult));
+            reason = depositMult > 1 ? F.REASONS.deposit.up : depositMult < 1 ? F.REASONS.deposit.down : F.REASONS.deposit.flat;
+          } else {
+            const m = mults[h.co];
+            newVal = Math.max(F.FLOOR, Math.round(oldVal * m));
+            if (news && news.co === h.co) {
+              reason = news.text;
+            } else if (m > 1) {
+              const pool = F.REASONS[h.co].up;
+              reason = pool[round % pool.length];
+            } else if (m < 1) {
+              const pool = F.REASONS[h.co].down;
+              reason = pool[round % pool.length];
+            } else {
+              reason = F.REASONS.flat;
+            }
+          }
+
+          this._setHolding(p, h.track, h.co, newVal);
+          const delta = newVal - oldVal;
+          sum += delta;
+          report.entries.push({
+            idx: p.idx, track: h.track, co: h.co, name: h.name, reason,
+            oldVal, newVal, delta,
+            pct: oldVal ? Math.round((delta / oldVal) * 100) : 0,
+          });
+
+          // מעקב "ידיים של יהלום": החזיק מניה דרך נפילה גדולה עד שהתאוששה
+          if (h.track === 'stocks') {
+            if (news && news.co === h.co && news.m < 1 && !p.invest.crash) {
+              p.invest.crash = { co: h.co, val: oldVal };
+            } else if (p.invest.crash && p.invest.crash.co === h.co && newVal >= p.invest.crash.val) {
+              p.invest.crashSurvived = true;
+              p.invest.crash = null;
+            }
+          }
+        }
+
+        report.totals[p.idx] = sum;
+        if (this.holdings(p.idx).length) {
+          const word = sum > 0 ? 'גדלו' : sum < 0 ? 'ירדו' : 'נשארו כמו שהיו';
+          const tail = sum === 0 ? '' : ` ב-${money(Math.abs(sum))}`;
+          this._log(`📊 עדכון שוק: ההשקעות של ${p.name} ${word}${tail}.`, 'market', { pIdx: p.idx, delta: sum });
+        }
+      }
+
+      this.market.report = report;
     }
 
     /* ---------- קוביות ותנועה ---------- */
@@ -748,6 +978,18 @@
         while (this.houses[pos] > 0) this.sellHouse(pos);
       }
 
+      // ההשקעות נפדות בכוח — אסור שיישאר כסף "תקוע" בבנק ההשקעות
+      const invested = this.investTotal(p.idx);
+      if (invested > 0) {
+        p.money += invested;
+        p.invest.totalOut += invested;
+        p.invest.savings = 0;
+        p.invest.deposit = 0;
+        for (const c of D.FINANCE.COMPANIES) p.invest.stocks[c.id] = 0;
+        p.invest.crash = null;
+        this._log(`💼 ההשקעות של ${p.name} נפדו: ${money(invested)}.`, 'withdraw', { pIdx: p.idx });
+      }
+
       if (d.creditor !== null) {
         const creditor = this.players[d.creditor];
         creditor.money += p.money;
@@ -790,10 +1032,13 @@
     _advanceTurn() {
       if (this.phase === 'gameover') return;
       this.doubles = 0;
+      const prevTurn = this.turn;
       do {
         this.turn = (this.turn + 1) % this.players.length;
       } while (this.current().bankrupt);
       this.phase = 'roll';
+      // סיבוב שלם הושלם (התור "עטף" חזרה להתחלה) — הבורסה מתעדכנת פעם בסבב
+      if (this.financeEnabled && this.turn < prevTurn) this._marketTick();
       this._log(`התור של ${this.current().name}.`, 'turn');
     }
 
@@ -804,6 +1049,7 @@
         v: 1,
         auctionsEnabled: this.auctionsEnabled,
         potEnabled: this.potEnabled,
+        financeEnabled: this.financeEnabled,
         difficulty: this.difficulty,
         playersSpec: this.players.map((p) => ({ name: p.name, token: p.token, isAI: p.isAI, gender: p.gender })),
         players: this.players.map((p) => ({
@@ -816,6 +1062,7 @@
         housesLeft: this.housesLeft,
         hotelsLeft: this.hotelsLeft,
         pot: this.pot,
+        market: this.market,
         decks: {
           chance: this.decks.chance.map((c) => c.id),
           chest: this.decks.chest.map((c) => c.id),
@@ -839,10 +1086,17 @@
     static restore(data) {
       const cardById = (deck, id) =>
         (deck === 'chance' ? D.CHANCE_CARDS : D.CHEST_CARDS).find((c) => c.id === id);
-      const g = new Game(data.playersSpec, { auctions: data.auctionsEnabled !== false, pot: data.potEnabled !== false, difficulty: data.difficulty || 'medium' });
+      const g = new Game(data.playersSpec, {
+        auctions: data.auctionsEnabled !== false,
+        pot: data.potEnabled !== false,
+        finance: data.financeEnabled === true,
+        difficulty: data.difficulty || 'medium',
+      });
+      // שמירות ישנות (מלפני מצב החינוך הפיננסי) נטענות עם ברירות מחדל ריקות
       g.players = data.players.map((p) => ({
         ...p,
         jailCards: (p.jailCards || []).map((h) => ({ deck: h.deck, card: cardById(h.deck, h.id) })),
+        invest: p.invest ? { ...emptyInvest(), ...p.invest, stocks: { ...emptyInvest().stocks, ...(p.invest.stocks || {}) } } : emptyInvest(),
       }));
       g.owner = data.owner;
       g.houses = data.houses;
@@ -850,6 +1104,7 @@
       g.housesLeft = data.housesLeft;
       g.hotelsLeft = data.hotelsLeft;
       g.pot = data.pot || 0;
+      g.market = data.market ? { ...emptyMarket(), ...data.market, trend: { ...emptyMarket().trend, ...(data.market.trend || {}) } } : emptyMarket();
       g.decks = {
         chance: data.decks.chance.map((id) => cardById('chance', id)),
         chest: data.decks.chest.map((id) => cardById('chest', id)),
