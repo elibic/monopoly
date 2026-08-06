@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - claude/monopoly-hebrew-dhr54d
+      - claude/monopoly-financial-education-scrm25
     paths:
       - 'tools/voice_lines.json'
       - 'tools/generate_voice.py'
