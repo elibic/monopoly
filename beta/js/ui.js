@@ -118,6 +118,9 @@
     cash() { tone(1047, .06, 0, 'triangle', .1); tone(1319, .08, .05, 'triangle', .1); tone(1568, .12, .11, 'triangle', .1); },
     sticker() { [784, 988, 1319, 1047, 1568].forEach((f, i) => tone(f, .18, i * .09, 'triangle', .14)); },
     tap() { tone(880, .04, 0, 'sine', .06); },
+    // מצב חינוך פיננסי: ההשקעות עלו / ירדו
+    gain() { [659, 880, 1175].forEach((f, i) => tone(f, .14, i * .08, 'triangle', .12)); },
+    loss() { tone(494, .16, 0, 'triangle', .1); tone(370, .22, .13, 'triangle', .1); },
   };
 
   /* ==================== מוזיקת רקע (WebAudio, בלי קבצים — עובד אופליין) ==================== */
@@ -213,6 +216,15 @@
     'שקלים': 'שְׁקָלִים', 'קלף': 'קְלַף', 'עשינו עסק': 'עָשִׂינוּ עֵסֶק', 'בהצלחה במשחק': 'בְּהַצְלָחָה בַּמִּשְׂחָק',
     'שלום': 'שָׁלוֹם', 'ממשיכים לשחק': 'מַמְשִׁיכִים לְשַׂחֵק', 'יוצאת': 'יוֹצֵאת', 'יוצא': 'יוֹצֵא',
     'ניסיון': 'נִסָּיוֹן', 'מתוך': 'מִתּוֹךְ', 'חייבת': 'חַיֶּבֶת', 'חייב': 'חַיָּב', 'ולצאת': 'וְלָצֵאת', 'ישר': 'יָשָׁר',
+    // מצב חינוך פיננסי
+    'ההשקעות': 'הַהַשְׁקָעוֹת', 'השקעות': 'הַשְׁקָעוֹת', 'השקעה': 'הַשְׁקָעָה', 'להשקיע': 'לְהַשְׁקִיעַ',
+    'השקיעה': 'הִשְׁקִיעָה', 'השקיע': 'הִשְׁקִיעַ', 'משקיעה': 'מַשְׁקִיעָה', 'משקיע': 'מַשְׁקִיעַ',
+    'קופת חיסכון': 'קֻפַּת חִסָּכוֹן', 'חיסכון': 'חִסָּכוֹן', 'פיקדון': 'פִּקָּדוֹן',
+    'מניות': 'מְנָיוֹת', 'מניה': 'מְנָיָה', 'הבורסה': 'הַבּוּרְסָה', 'בורסה': 'בּוּרְסָה',
+    'עדכון שוק': 'עִדְכּוּן שׁוּק', 'תשואה': 'תְּשׁוּאָה', 'רווח': 'רֶוַח', 'הפסד': 'הֶפְסֵד',
+    'מפעל הגלידה': 'מִפְעַל הַגְּלִידָה', 'חברת הצעצועים': 'חֶבְרַת הַצַּעֲצוּעִים',
+    'חלליות ישראל': 'חֲלָלִיּוֹת יִשְׂרָאֵל', 'רשת הפיצה': 'רֶשֶׁת הַפִּיצָה',
+    'משכה': 'מָשְׁכָה', 'משך': 'מָשַׁךְ', 'נפדו': 'נִפְדּוּ', 'גדלו': 'גָּדְלוּ', 'ירדו': 'יָרְדוּ',
   };
   // מהארוך לקצר, כדי ש"רחוב הרצל" ינוקד לפני "הרצל"
   const LEX_KEYS = Object.keys(LEXICON).sort((a, b) => b.length - a.length);
@@ -241,7 +253,8 @@
   }
 
   // הערה: 'offer' לא כאן — ההצעה מוקראת ע"י showBuyDialog בלבד, אחרת נוצרת כפילות
-  const SPOKEN_KINDS = new Set(['turn', 'buy', 'rent', 'jail', 'win', 'debt', 'bankrupt', 'money', 'tax', 'pot']);
+  const SPOKEN_KINDS = new Set(['turn', 'buy', 'rent', 'jail', 'win', 'debt', 'bankrupt', 'money', 'tax', 'pot',
+    'market', 'market_news']);
 
   /* ---------- קריין AI: קליפים מוקלטים מראש (audio/), עם נסיגה לקול הדפדפן ---------- */
 
@@ -263,6 +276,7 @@
     available() { return !!(this.ids && this.ids.size); },
     say(ids, fallbackText) {
       if (!soundOn) return;
+      if (!ids.length) return; // רשימה ריקה = שתיקה מכוונת (למשל השקעות של שחקן אחר)
       const usable = this.ids && ids.every((id) => this.ids.has(id));
       if (usable) {
         this.queue = this.queue.then(async () => {
@@ -349,6 +363,12 @@
       case 'pot':
         // הקליפ אומר "זכית!" — נכון רק לשחקן המקומי
         return actor && !actor.isAI && actor.idx === localIdx ? ['ev_pot'] : null;
+      case 'market_news':
+        return [`inv_news_${entry.newsId}`];
+      case 'market':
+        // מדברים רק על ההשקעות של הילד; לשאר השחקנים מערך ריק = שקט
+        if (entry.pIdx !== localIdx) return [];
+        return [entry.delta > 0 ? 'inv_up' : entry.delta < 0 ? 'inv_down' : 'inv_flat'];
       case 'bankrupt':
         if (!vk) return null;
         return [`ev_bankrupt_${vk}`];
@@ -524,8 +544,9 @@
   const BANNER_ICONS = {
     buy: '🛍️', rent: '💸', money: '💰', tax: '🧾', jail: '👮',
     bankrupt: '💥', auction: '🔨', build: '🏠', mortgage: '🏦', trade: '🤝', pot: '🎁',
+    market_news: '📰',
   };
-  const BANNER_KINDS = new Set(['buy', 'rent', 'money', 'tax', 'jail', 'bankrupt', 'pot']);
+  const BANNER_KINDS = new Set(['buy', 'rent', 'money', 'tax', 'jail', 'bankrupt', 'pot', 'market_news']);
 
   // הדמות שמכריזה: ילד/ילדה לשחקן, רובוט למחשב, הקמע לאירועים כלליים
   function avatarFor(g, entry) {
@@ -1121,6 +1142,16 @@
     const creditor = debt.creditor !== null ? g.players[debt.creditor].name : 'הבנק';
 
     const rows = [];
+    // כסף מושקע הוא הכי קל לגייס — מציגים אותו ראשון
+    if (g.financeEnabled) {
+      for (const h of g.holdings(humanIdx)) {
+        rows.push(`<div class="asset-row">
+          <span class="a-band" style="background:${h.track === 'stocks' ? FIN.TRACKS.stocks.color : FIN.TRACKS[h.track].color}"></span>
+          <span class="a-name">${h.name}</span>
+          <button data-act="withdraw" data-track="${h.track}" data-co="${h.co || ''}">🏦 משיכה +${money(h.value)}</button>
+        </div>`);
+      }
+    }
     for (const pos of g.playerProps(humanIdx)) {
       const sq = BOARD[pos];
       const grp = sq.group ? GROUPS[sq.group] : null;
@@ -1143,14 +1174,14 @@
       <h2>צריך לשלם! 💸</h2>
       <p class="debt-need">חוב של ${money(debt.amount)} ל${creditor}</p>
       <p class="d-sub">בחשבון שלך: <b>${money(p.money)}</b></p>
-      ${canPay ? '' : (rows.length ? '<p class="d-sub">אפשר למכור בתים או לקחת משכנתא:</p>' : '')}
+      ${canPay ? '' : (rows.length ? `<p class="d-sub">אפשר ${g.financeEnabled ? 'למשוך מההשקעות, ' : ''}למכור בתים או לקחת משכנתא:</p>` : '')}
       <div class="asset-list">${rows.join('')}</div>
       <div class="d-actions">
         <button class="big-btn green" id="d-settle" ${canPay ? '' : 'disabled'}>💳 משלמים את החוב</button>
         ${canRaise ? '' : '<button class="big-btn" id="d-bankrupt">😢 פשיטת רגל</button>'}
       </div>`);
     d.querySelectorAll('button[data-act]').forEach((b) => {
-      b.onclick = () => onAction(b.dataset.act, Number(b.dataset.pos));
+      b.onclick = () => onAction(b.dataset.act, Number(b.dataset.pos), { track: b.dataset.track, co: b.dataset.co || null });
     });
     d.querySelector('#d-settle').onclick = () => { closeDialog(); onSettle(); };
     const bk = d.querySelector('#d-bankrupt');
@@ -1189,6 +1220,130 @@
       b.onclick = () => onAction(b.dataset.act, Number(b.dataset.pos));
     });
     d.querySelector('#d-close').onclick = () => { closeDialog(); if (onClose) onClose(); };
+  }
+
+  /* ==================== מצב חינוך פיננסי: הבנק שלי ודוח הבורסה ==================== */
+
+  const FIN = D.FINANCE;
+  const pct = (n) => `${n > 0 ? '+' : ''}${n}%`;
+  const deltaHTML = (delta, p) =>
+    `<span class="fin-delta ${delta > 0 ? 'gain' : delta < 0 ? 'loss' : ''}">${delta > 0 ? '+' : delta < 0 ? '−' : ''}${money(Math.abs(delta))}${p !== undefined && delta !== 0 ? ` (${pct(p)})` : ''}</span>`;
+
+  // גרף מגמה זעיר לחברה — קו אחד, ירוק אם עלתה מאז ההתחלה ואדום אם ירדה
+  function sparklineHTML(points) {
+    const pts = points.slice(-8);
+    if (pts.length < 2) return '<span class="fin-spark-empty">חדש</span>';
+    const min = Math.min(...pts); const max = Math.max(...pts);
+    const span = max - min || 1;
+    const coords = pts.map((v, i) => `${(i / (pts.length - 1)) * 60},${18 - ((v - min) / span) * 16}`).join(' ');
+    const up = pts[pts.length - 1] >= pts[0];
+    return `<svg class="fin-spark" viewBox="0 0 60 20" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="${coords}" fill="none" stroke="${up ? '#2E7D32' : '#C62828'}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>`;
+  }
+
+  // החץ של הסבב האחרון לחברה מסוימת
+  function lastMoveHTML(g, co) {
+    const arr = g.market.trend[co] || [];
+    if (arr.length < 2) return '';
+    const a = arr[arr.length - 2]; const b = arr[arr.length - 1];
+    const p = Math.round(((b - a) / a) * 100);
+    if (p === 0) return '<span class="fin-arrow">➖ 0%</span>';
+    return `<span class="fin-arrow ${p > 0 ? 'gain' : 'loss'}">${p > 0 ? '▲' : '▼'} ${pct(p)}</span>`;
+  }
+
+  function showBankDialog(g, humanIdx, { onInvest, onWithdraw, onClose }) {
+    const p = g.players[humanIdx];
+    const chunkBtns = (track, co) => FIN.DEPOSIT_CHUNKS
+      .map((amt) => `<button class="fin-chunk" data-act="invest" data-track="${track}" data-co="${co || ''}" data-amt="${amt}" ${p.money >= amt ? '' : 'disabled'}>+${amt}</button>`)
+      .join('');
+    const wdBtn = (track, co, val) => (val > 0
+      ? `<button class="fin-wd" data-act="withdraw" data-track="${track}" data-co="${co || ''}">⬅️ משיכה ${money(val)}</button>`
+      : '');
+
+    const trackRow = (track) => {
+      const t = FIN.TRACKS[track];
+      const val = p.invest[track];
+      return `<div class="asset-row fin-row">
+        <span class="a-band" style="background:${t.color}"></span>
+        <span class="a-name">${t.emoji} ${t.name}<small class="fin-blurb">${t.blurb}</small></span>
+        <span class="fin-val">${val > 0 ? money(val) : '—'}</span>
+        <span class="fin-btns">${chunkBtns(track, null)}${wdBtn(track, null, val)}</span>
+      </div>`;
+    };
+
+    const coRow = (c) => {
+      const val = p.invest.stocks[c.id];
+      return `<div class="asset-row fin-row">
+        <span class="a-band" style="background:${FIN.TRACKS.stocks.color}"></span>
+        <span class="a-name">${c.emoji} ${c.name}<small class="fin-blurb">${sparklineHTML(g.market.trend[c.id])} ${lastMoveHTML(g, c.id)}</small></span>
+        <span class="fin-val">${val > 0 ? money(val) : '—'}</span>
+        <span class="fin-btns">${chunkBtns('stocks', c.id)}${wdBtn('stocks', c.id, val)}</span>
+      </div>`;
+    };
+
+    const total = g.investTotal(humanIdx);
+    const profit = g.investProfit(humanIdx);
+    const d = openDialog(`
+      <h2>הבנק שלי 🏦</h2>
+      <p class="d-sub">בחשבון: <b>${money(p.money)}</b> · מושקע: <b>${money(total)}</b>${total || profit ? ` · ${profit >= 0 ? 'הרווחת' : 'הפסדת'} ${deltaHTML(profit)}` : ''}</p>
+      <p class="d-sub">💡 שמים כסף בבנק — והוא עובד בשבילך! ב🐷 הוא בטוח וגדל לאט, ב🚀 הוא יכול לגדול הרבה — או לרדת.</p>
+      <div class="asset-list">
+        ${trackRow('savings')}
+        ${trackRow('deposit')}
+        <div class="fin-sep">🚀 מניות של חברות — קונים חלק קטן בחברה</div>
+        ${FIN.COMPANIES.map(coRow).join('')}
+      </div>
+      <div class="d-actions"><button class="big-btn green" id="d-close">✅ סיימתי</button></div>`);
+
+    d.querySelectorAll('button[data-act]').forEach((b) => {
+      b.onclick = () => {
+        const co = b.dataset.co || null;
+        if (b.dataset.act === 'invest') onInvest(b.dataset.track, co, Number(b.dataset.amt));
+        else onWithdraw(b.dataset.track, co);
+      };
+    });
+    d.querySelector('#d-close').onclick = () => { closeDialog(); if (onClose) onClose(); };
+  }
+
+  // דוח הבורסה בסוף כל סבב — הלב החינוכי: לכל שינוי יש סיפור והסבר
+  function showMarketReport(g, humanIdx, onClose) {
+    const rep = g.market.report;
+    if (!rep) { if (onClose) onClose(); return; }
+    const mine = rep.entries.filter((e) => e.idx === humanIdx);
+    const myTotal = rep.totals[humanIdx] || 0;
+
+    const newsBox = rep.news
+      ? `<div class="fin-news">📰 <b>חדשות!</b> ${rep.news.text}</div>` : '';
+
+    const rows = mine.map((e) => `
+      <div class="asset-row fin-report-row">
+        <span class="a-band" style="background:${e.track === 'stocks' ? FIN.TRACKS.stocks.color : FIN.TRACKS[e.track].color}"></span>
+        <span class="a-name">${e.name}<small class="fin-blurb">${e.reason}</small></span>
+        <span class="fin-val">${money(e.oldVal)} ← <b>${money(e.newVal)}</b></span>
+        <span class="fin-btns">${deltaHTML(e.delta, e.pct)}</span>
+      </div>`).join('');
+
+    const others = g.players
+      .filter((p) => p.idx !== humanIdx && !p.bankrupt && rep.totals[p.idx] !== undefined && g.holdings(p.idx).length)
+      .map((p) => `<div class="fin-other">${p.token} ${p.name}: ${deltaHTML(rep.totals[p.idx])}</div>`).join('');
+
+    const headline = mine.length
+      ? (myTotal > 0 ? `הכסף שלך עבד יפה! ${deltaHTML(myTotal)} 🎉`
+        : myTotal < 0 ? `הפעם ירדנו קצת: ${deltaHTML(myTotal)} — ככה זה בהשקעות, בדרך כלל זה חוזר לעלות 💪`
+          : 'הפעם ההשקעות שלך נשארו בדיוק אותו דבר.')
+      : 'עוד לא השקעת כסף. אפשר להתחיל דרך כפתור 🏦 הבנק שלי!';
+
+    if (soundOn) { if (myTotal > 0) sounds.gain(); else if (myTotal < 0) sounds.loss(); }
+
+    const d = openDialog(`
+      <h2>חדשות הבורסה 📊 <small class="fin-round">סבב ${rep.round}</small></h2>
+      ${newsBox}
+      <p class="d-sub">${headline}</p>
+      <div class="asset-list">${rows}</div>
+      ${others ? `<p class="d-sub fin-others">מה קרה לאחרים: ${others}</p>` : ''}
+      <div class="d-actions"><button class="big-btn green" id="d-ok">👍 הבנתי</button></div>`);
+    d.querySelector('#d-ok').onclick = () => { closeDialog(); if (onClose) onClose(); };
   }
 
   function showTradeDialog(g, humanIdx, aiIdx, { onSubmit, onClose }) {
@@ -1292,6 +1447,9 @@
     { id: 'railking',   emoji: '🚂', label: 'שליט/ת הרכבות',   cond: (g, i) => g.countOwned(i, 'rail') >= 2 },
     { id: 'landlord',   emoji: '🏘️', label: 'אספן/ית נכסים',   cond: (g, i) => g.playerProps(i).length >= 5 },
     { id: 'millionaire',emoji: '💰', label: 'עשיר/ה גדול/ה',   cond: (g, i) => g.netWorth(i) >= 2500 },
+    { id: 'investor',   emoji: '📈', label: 'משקיע/ה חכם/ה',   cond: (g, i) => g.financeEnabled && g.investProfit(i) > 0 },
+    { id: 'diamond',    emoji: '💎', label: 'ידיים של יהלום',   cond: (g, i) => !!(g.players[i].invest && g.players[i].invest.crashSurvived) },
+    { id: 'saver',      emoji: '🐷', label: 'חוסך/ת מתמיד/ה',   cond: (g, i) => !!(g.players[i].invest && g.players[i].invest.totalIn >= 300) },
     { id: 'player',     emoji: '🎮', label: 'שיחקתי מונופול!', cond: () => true },
   ];
   const ALBUM_KEY = 'monopoly-beta-stickers';
@@ -1386,6 +1544,7 @@
       <div class="win-burst">🏆</div>
       <h2>${title}</h2>
       <div class="win-standings">${rows}</div>
+      ${g.financeEnabled ? `<div class="win-finance">📈 ההשקעות שלך: הפקדת ${money(g.players[humanIdx].invest.totalIn)} · ${g.investProfit(humanIdx) >= 0 ? 'הרווחת' : 'הפסדת'} ${deltaHTML(g.investProfit(humanIdx))}</div>` : ''}
       ${wealthChart(g, extra.history)}
       <div class="win-stickers-title">המדבקות שהרווחת 🏅</div>
       <div class="sticker-strip">${stickerHTML}</div>
@@ -1404,11 +1563,119 @@
     setTimeout(() => t.remove(), 3600);
   }
 
+
+  /* ==================== מה חדש? — יומן גרסאות לשחקנים ==================== */
+
+  // חמש הגרסאות האחרונות, מהחדשה לישנה. current = הגרסה שרצה עכשיו.
+  const VERSIONS = [
+    {
+      id: 'v14', label: 'גרסה 14', date: 'אוגוסט 2026', current: true,
+      title: 'מצב חינוך פיננסי 🏦',
+      items: [
+        '🏦 חדש! מצב חינוך פיננסי — בוחרים אותו במסך הפתיחה ולומדים להשקיע כסף',
+        '🐷 שלושה מסלולים: קופת חיסכון בטוחה, פיקדון, ומניות של חברות',
+        '🍦 ארבע חברות להשקעה: מפעל הגלידה, חברת הצעצועים, חלליות ישראל ורשת הפיצה',
+        '📊 בסוף כל סבב מגיע דוח בורסה שמסביר בדיוק למה הרווחתם או הפסדתם',
+        '📰 אירועי חדשות מזיזים את המניות — "קיץ לוהט, כולם קונים גלידה!"',
+        '📈 שלוש מדבקות חדשות: משקיע/ה חכם/ה, ידיים של יהלום, וחוסך/ת מתמיד/ה',
+      ],
+    },
+    {
+      id: 'v13', label: 'גרסה 13', date: 'אוגוסט 2026',
+      title: 'תיקוני משחק וקריינות 🔧',
+      items: [
+        '🅿️ חניה חופשית: עוצרים שם ומסיימים את התור, תמיד',
+        '🚂 שכר דירה חדש לרכבות: 25, 50, 75 ו-100 ₪ לפי כמה רכבות יש לכם',
+        '🏠 כשהחייל נוחת ברחוב שלכם וכל העיר בבעלותכם — המשחק מציע לבנות מיד',
+        '👆 רמז מהבהב על הכפתור שצריך ללחוץ, כדי שאף אחד לא יתקע',
+        '🏷️ תג מחיר גדול וברור על כל משבצת',
+        '🔨 הבוט התחזק במכירות הפומביות',
+      ],
+    },
+    {
+      id: 'v12', label: 'גרסה 12', date: 'אוגוסט 2026',
+      title: 'משחק מרחוק עם חבר/ה 🎥',
+      items: [
+        '🎥 אפשר לשחק עם מישהו מרחוק, עם וידאו ומיקרופון',
+        '🔗 מזמינים בקישור אחד ללחיצה, בלי קודים ארוכים',
+        '📖 מדריך אינטראקטיבי למתחילים שמסביר את המשחק צעד-צעד',
+      ],
+    },
+    {
+      id: 'v11', label: 'גרסה 11', date: 'אוגוסט 2026',
+      title: 'סיום חגיגי ומדבקות 🏅',
+      items: [
+        '🏆 מסך סיום עם דירוג מנצחים וגרף שמראה מי היה עשיר מתי',
+        '🏅 אלבום מדבקות שנשמר בין משחקים',
+        '🎵 מוזיקת רקע וצלילים חדשים לכל פעולה',
+        '🧠 שלוש רמות קושי לבוט: קל, בינוני וקשה',
+        '📜 לחיצה על משבצת מציגה את שטר הקניין שלה',
+      ],
+    },
+    {
+      id: 'v10', label: 'גרסה 10', date: 'אוגוסט 2026',
+      title: 'קריינות אמיתית בעברית 🎙️',
+      items: [
+        '🎙️ קריין אמיתי מקריא את המשחק בעברית',
+        '🎁 קופה בחניה חופשית — אפשר להדליק ולכבות',
+        '🔨 מכירה פומבית כשמוותרים על קנייה — אפשר להדליק ולכבות',
+        '⬇️ אפשר להוריד את המשחק ולשחק גם בלי אינטרנט',
+        '🏙️ שם העיר מופיע על כל משבצת רחוב, כמו בלוח המקורי',
+      ],
+    },
+  ];
+
+  const WHATSNEW_KEY = 'monopoly-beta-seen-version';
+
+  function whatsNewHTML(limit) {
+    return VERSIONS.slice(0, limit).map((v, i) => `
+      <div class="wn-ver ${i === 0 ? 'wn-current' : ''}">
+        <div class="wn-head">
+          <span class="wn-label">${v.label}${v.current ? ' · הגרסה שלכם' : ''}</span>
+          <span class="wn-date">${v.date}</span>
+        </div>
+        <div class="wn-title">${v.title}</div>
+        <ul class="wn-items">${v.items.map((it) => `<li>${it}</li>`).join('')}</ul>
+      </div>`).join('');
+  }
+
+  function showWhatsNew(limit = VERSIONS.length) {
+    try { localStorage.setItem(WHATSNEW_KEY, VERSIONS[0].id); } catch (e) { /* */ }
+    const d = openDialog(`
+      <h2>מה חדש במשחק? ✨</h2>
+      <p class="d-sub">כל מה שהשתנה בחמש הגרסאות האחרונות</p>
+      <div class="wn-list">${whatsNewHTML(limit)}</div>
+      <div class="d-actions"><button class="big-btn green" id="d-ok">👍 יאללה, משחקים!</button></div>`);
+    d.querySelector('#d-ok').onclick = () => closeDialog();
+  }
+
+  // מוצג פעם אחת אחרי עדכון גרסה — לא בביקור הראשון של שחקן חדש
+  function showWhatsNewIfUpdated() {
+    let seen = null;
+    try { seen = localStorage.getItem(WHATSNEW_KEY); } catch (e) { return; }
+    if (seen === VERSIONS[0].id) return;
+    try { localStorage.setItem(WHATSNEW_KEY, VERSIONS[0].id); } catch (e) { /* */ }
+    if (!seen) return; // שחקן חדש — לא מציפים אותו ביומן גרסאות
+    setTimeout(() => showWhatsNew(2), 400);
+  }
+
   /* ==================== מדריך למתחילים ==================== */
 
   const TUTORIAL_KEY = 'monopoly-beta-tutorial-seen';
   function tutorialSeen() { try { return localStorage.getItem(TUTORIAL_KEY) === '1'; } catch (e) { return false; } }
   function markTutorialSeen() { try { localStorage.setItem(TUTORIAL_KEY, '1'); } catch (e) { /* */ } }
+
+  // מדריך קצר למצב החינוך הפיננסי — רץ פעם אחת, בפעם הראשונה שמפעילים אותו
+  const FIN_TUTORIAL_KEY = 'monopoly-beta-fin-tutorial-seen';
+  function finTutorialSeen() { try { return localStorage.getItem(FIN_TUTORIAL_KEY) === '1'; } catch (e) { return false; } }
+  const FIN_TUTORIAL_STEPS = [
+    { sel: null, emoji: '🏦', text: 'בַּמִּשְׂחָק הַזֶּה יֵשׁ בַּנְק הַשְׁקָעוֹת! שָׂמִים בּוֹ כֶּסֶף — וְהוּא יָכוֹל לִגְדֹּל לְבַד, בְּלִי שֶׁתַּעֲשֶׂה כְּלוּם.' },
+    { sel: null, emoji: '🐷', text: 'קֻפַּת חִסָּכוֹן: הַכֶּסֶף שָׁם בָּטוּחַ לְגַמְרֵי. בְּכָל סִבּוּב הַבַּנְק מוֹסִיף לְךָ עוֹד קְצָת. תָּמִיד!' },
+    { sel: null, emoji: '🌳', text: 'פִּקָּדוֹן: כְּמוֹ עֵץ שֶׁגָּדֵל. בְּדֶרֶךְ כְּלָל הוּא נוֹתֵן לְךָ פֵּרוֹת, וְלִפְעָמִים הוּא פָּשׁוּט נָח.' },
+    { sel: null, emoji: '🚀', text: 'מְנָיוֹת: קוֹנִים חֵלֶק קָטָן בְּחֶבְרָה, כְּמוֹ מִפְעַל הַגְּלִידָה. אִם הַחֶבְרָה מַצְלִיחָה — הַכֶּסֶף שֶׁלְּךָ גָּדֵל הַרְבֵּה. וְאִם לֹא — הוּא יוֹרֵד. מְסֻכָּן, אֲבָל מְעַנְיֵן!' },
+    { sel: null, emoji: '💡', text: 'טִיפ שֶׁל מְבֻגָּרִים: לֹא שָׂמִים אֶת כָּל הַכֶּסֶף בְּמָקוֹם אֶחָד. קְצָת פֹּה וּקְצָת שָׁם — כָּךְ בָּטוּחַ יוֹתֵר.' },
+    { sel: '#bank-btn', emoji: '👆', text: 'בַּתּוֹר שֶׁלְּךָ לוֹחֲצִים כָּאן כְּדֵי לְהַשְׁקִיעַ אוֹ לִמְשֹׁךְ כֶּסֶף. אַחֲרֵי כָּל סִבּוּב תִּרְאֶה בַּחֲדָשׁוֹת מָה קָרָה לַכֶּסֶף שֶׁלְּךָ!' },
+  ];
 
   const TUTORIAL_STEPS = [
     { sel: null, emoji: '👋', text: 'שָׁלוֹם! אֲנִי אֶלַמֵּד אוֹתְךָ אֵיךְ מְשַׂחֲקִים מוֹנוֹפּוֹל. זֶה קַל וְכֵיף!' },
@@ -1420,7 +1687,7 @@
     { sel: '#end-turn-btn', emoji: '✅', text: 'בְּסוֹף הַתּוֹר לוֹחֲצִים כָּאן. הַמַּטָּרָה: לִהְיוֹת הָאַחֲרוֹן שֶׁנִּשְׁאָר עִם כֶּסֶף. בְּהַצְלָחָה!' },
   ];
 
-  function startTutorial(onDone) {
+  function startTutorial(onDone, steps = TUTORIAL_STEPS, seenKey = TUTORIAL_KEY) {
     let i = 0;
     const overlay = el('div', 'tut-overlay');
     overlay.innerHTML = `
@@ -1445,16 +1712,16 @@
     function finish() {
       speechSynthesis && speechSynthesis.cancel && speechSynthesis.cancel();
       overlay.remove();
-      markTutorialSeen();
+      try { localStorage.setItem(seenKey, '1'); } catch (e) { /* */ }
       if (onDone) onDone();
     }
 
     function show() {
-      const step = TUTORIAL_STEPS[i];
+      const step = steps[i];
       emojiEl.textContent = step.emoji || '💡';
       textEl.textContent = step.text;
-      nextBtn.textContent = i === TUTORIAL_STEPS.length - 1 ? '🎉 מתחילים!' : 'הבא ▶';
-      progEl.textContent = `${i + 1} / ${TUTORIAL_STEPS.length}`;
+      nextBtn.textContent = i === steps.length - 1 ? '🎉 מתחילים!' : 'הבא ▶';
+      progEl.textContent = `${i + 1} / ${steps.length}`;
       // זרקור על היעד
       const target = step.sel && $(step.sel);
       const r = target && target.getBoundingClientRect();
@@ -1482,7 +1749,7 @@
 
     nextBtn.onclick = () => {
       i++;
-      if (i >= TUTORIAL_STEPS.length) finish();
+      if (i >= steps.length) finish();
       else show();
     };
     overlay.querySelector('#tut-skip').onclick = finish;
@@ -1546,5 +1813,7 @@
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
     showStickerAlbum, startTutorial, tutorialSeen,
     setLocalIdx, nudge, clearNudge, deedHTML,
+    showBankDialog, showMarketReport, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
+    showWhatsNew, showWhatsNewIfUpdated, VERSIONS,
   };
 })();

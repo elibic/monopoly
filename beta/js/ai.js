@@ -126,6 +126,11 @@
   function raiseFunds(g, idx, target) {
     let guard = 100;
     while (g.players[idx].money < target && guard-- > 0) {
+      // 0. משיכת השקעות — הכי זול לגייס: אין ריבית ולא מאבדים נכסים
+      if (g.financeEnabled) {
+        const held = g.holdings(idx).sort((a, b) => b.value - a.value);
+        if (held.length) { g.withdraw(idx, held[0].track, held[0].co); continue; }
+      }
       // 1. משכנתא על נכס שאינו חלק ממונופול בנוי
       const mortgageable = g.playerProps(idx)
         .filter((pos) => g.canMortgage(idx, pos))
@@ -164,9 +169,33 @@
   }
 
   // ניהול נכסים בסוף תור: פדיון משכנתאות ובניית בתים
+  /* מצב חינוך פיננסי: הבוט משקיע לפי רמת הקושי, כדי שהילד יראה
+   * שגם היריב מפעיל את הכסף שלו — וילמד מהדוגמה. */
+  function investPolicy(g, idx) {
+    if (!g.financeEnabled) return;
+    const p = g.players[idx];
+    const prof = profile(g);
+    const spare = p.money - prof.reserve - 300; // תמיד משאירים מזומן לשכר דירה וקניות
+    const COS = D.FINANCE.COMPANIES;
+    const pick = () => COS[g.market.round % COS.length].id; // מתחלף בין החברות
+    try {
+      if (g.difficulty === 'easy') {
+        if (spare >= 50 && g.rand() < 0.5) g.invest(idx, 'savings', null, 50);
+      } else if (g.difficulty === 'medium') {
+        if (spare >= 100) g.invest(idx, g.rand() < 0.5 ? 'savings' : 'deposit', null, 100);
+      } else if (spare >= 200) {
+        g.invest(idx, 'deposit', null, 100);
+        g.invest(idx, 'stocks', pick(), 100);
+      } else if (spare >= 100) {
+        g.invest(idx, 'stocks', pick(), 100);
+      }
+    } catch (e) { /* השקעה לא אפשרית כרגע — ממשיכים כרגיל */ }
+  }
+
   function manageAssets(g, idx) {
     const p = g.players[idx];
     const prof = profile(g);
+    investPolicy(g, idx);
     let guard = 50;
     // פדיון משכנתא כשיש עודף גדול (עדיפות לרחובות ממונופול)
     while (guard-- > 0) {

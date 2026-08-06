@@ -774,3 +774,55 @@ test('סבב עם פושט רגל: עדיין עדכון שוק אחד בדיו�
   playTurn(g); playTurn(g);
   assert.equal(g.market.round, 2);
 });
+
+/* ---------- הבוטים והשקעות (ai.js) ---------- */
+
+await import('../js/ai.js');
+const AI = globalThis.MonopolyAI;
+
+test('הבוט הקשה משקיע כולל מניות; הקל נוגע רק בחיסכון', () => {
+  const hard = new Game(
+    [{ name: 'א' }, { name: 'בוט', isAI: true }],
+    { finance: true, auctions: false, difficulty: 'hard', rand: seeded(3) },
+  );
+  hard.turn = 1; hard.phase = 'end';
+  AI.manageAssets(hard, 1);
+  assert.ok(hard.investTotal(1) > 0, 'הבוט הקשה לא השקיע');
+  const stocks = Object.values(hard.players[1].invest.stocks).reduce((a, b) => a + b, 0);
+  assert.ok(stocks > 0, 'הבוט הקשה לא קנה מניות');
+
+  const easy = new Game(
+    [{ name: 'א' }, { name: 'בוט', isAI: true }],
+    { finance: true, auctions: false, difficulty: 'easy', rand: () => 0.1 },
+  );
+  easy.turn = 1; easy.phase = 'end';
+  AI.manageAssets(easy, 1);
+  assert.equal(Object.values(easy.players[1].invest.stocks).reduce((a, b) => a + b, 0), 0);
+  assert.ok(easy.players[1].invest.savings > 0);
+});
+
+test('הבוט לא משקיע כשהמצב כבוי', () => {
+  const g = new Game([{ name: 'א' }, { name: 'בוט', isAI: true }], { auctions: false, difficulty: 'hard' });
+  g.turn = 1; g.phase = 'end';
+  AI.manageAssets(g, 1);
+  assert.equal(g.investTotal(1), 0);
+});
+
+test('הבוט מושך השקעות לפני משכנתא כשצריך לשלם חוב', () => {
+  const g = new Game(
+    [{ name: 'א' }, { name: 'בוט', isAI: true }],
+    { finance: true, auctions: false, diceQueue: [[1, 2], [1, 3]] },
+  );
+  g.rollDice(); g.buy(); // א' קונה את חוף אלמוג
+  g.endTurn();
+  g.players[1].money = 30;
+  g.invest(1, 'savings', null, 30);
+  g.players[1].invest.savings = 400;
+  g.owner[6] = 1; // רחוב לבוט, כדי שתהיה גם אפשרות משכנתא
+  g.rollDice(); // הבוט נוחת על מס הכנסה (4) — 200 ש"ח
+  assert.equal(g.phase, 'debt');
+  AI.handleDebt(g, 1);
+  assert.equal(g.phase, 'end');
+  assert.equal(g.mortgaged[6], false, 'הבוט משכן במקום למשוך השקעות');
+  assert.equal(g.investTotal(1), 0);
+});
