@@ -291,7 +291,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=15`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=16`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -768,19 +768,50 @@
     return SVG.house().repeat(h);
   }
 
+  // מצייר מחדש רק את החיילים הסטטיים — נדרש אחרי כל רגל תנועה
+  function paintTokens(g) {
+    for (const sq of BOARD) {
+      const toks = document.querySelector(`#sq-${sq.pos} .sq-tokens`);
+      if (!toks) continue;
+      toks.innerHTML = '';
+      for (const p of g.players) {
+        const shownPos = lastPositions[p.idx] !== undefined ? lastPositions[p.idx] : p.pos;
+        if (!p.bankrupt && shownPos === sq.pos) {
+          const t = el('span', 'tok', p.token);
+          t.style.setProperty('--pc', PLAYER_COLORS[p.idx]);
+          if (p.idx === g.turn && g.phase !== 'gameover') t.classList.add('current');
+          toks.appendChild(t);
+        }
+      }
+    }
+  }
+
   async function render(g) {
     uiGame = g; // שמירת הפניה למשחק לצורך לחיצה על משבצות
     const prev = prevMoney.slice();
 
-    // 1. אנימציות תנועה (לפני עדכון המשבצות)
-    const moves = [];
+    // 1. תנועה: כל "רגל" מונפשת בנפרד לפי יומן המהלכים, והקלף נחשף בין הרגליים
+    // (שלב 7 ממשיך את אותו ציר זמן — כאן רק מונפשות הרגליים שלפני הקלף הראשון).
+    const newLog = g.log.filter((e) => e.id > lastLogId);
+    const firstCard = newLog.find((e) => e.kind === 'card');
+    const preCardLegs = firstCard ? newLog.filter((e) => e.kind === 'move' && e.id < firstCard.id) : newLog.filter((e) => e.kind === 'move');
+    const legPlayers = new Set(preCardLegs.map((e) => e.pIdx).filter((i) => i !== undefined));
+
+    const animatedLegs = new Set(); // כדי ששלב 7 לא ינפיש שוב את מה שכבר הונפש
+    for (const leg of preCardLegs) {
+      animatedLegs.add(leg.id);
+      if (leg.pIdx === undefined || g.players[leg.pIdx].bankrupt) continue;
+      const from = lastPositions[leg.pIdx];
+      if (from === undefined || from === leg.pos) continue;
+      await animateTokenMove(g, leg.pIdx, from, leg.pos);
+      lastPositions[leg.pIdx] = leg.pos;
+    }
+    // שחקנים שזזו בלי רשומת תנועה (שחזור משחק, מהלך ישן) — השלמה בקפיצה אחת
     g.players.forEach((p, i) => {
-      if (lastPositions[i] !== undefined && lastPositions[i] !== p.pos && !p.bankrupt) {
-        moves.push({ i, from: lastPositions[i], to: p.pos });
+      if (!legPlayers.has(i) && lastPositions[i] !== undefined && lastPositions[i] !== p.pos && !p.bankrupt && !firstCard) {
+        lastPositions[i] = p.pos;
       }
     });
-    for (const m of moves) await animateTokenMove(g, m.i, m.from, m.to);
-    lastPositions = g.players.map((p) => p.pos);
 
     // 2. משבצות
     for (const sq of BOARD) {
@@ -811,7 +842,8 @@
       const toks = div.querySelector('.sq-tokens');
       toks.innerHTML = '';
       for (const p of g.players) {
-        if (!p.bankrupt && p.pos === sq.pos) {
+        const shownPos = lastPositions[p.idx] !== undefined ? lastPositions[p.idx] : p.pos;
+        if (!p.bankrupt && shownPos === sq.pos) {
           const t = el('span', 'tok', p.token);
           t.style.setProperty('--pc', PLAYER_COLORS[p.idx]);
           if (p.idx === g.turn && g.phase !== 'gameover') t.classList.add('current');
@@ -890,6 +922,14 @@
     lastLogId = g._logSeq;
     for (const entry of newEntries) {
       logEl.prepend(el('div', `entry kind-${entry.kind}`, entry.text));
+      // רגל תנועה שעוד לא הונפשה (למשל אחרי קלף ששולח אחורה או לכלא)
+      if (entry.kind === 'move' && !animatedLegs.has(entry.id) && entry.pIdx !== undefined
+          && !g.players[entry.pIdx].bankrupt
+          && lastPositions[entry.pIdx] !== undefined && lastPositions[entry.pIdx] !== entry.pos) {
+        await animateTokenMove(g, entry.pIdx, lastPositions[entry.pIdx], entry.pos);
+        lastPositions[entry.pIdx] = entry.pos;
+        paintTokens(g);
+      }
       if (entry.kind === 'buy') sounds.buy();
       if (entry.kind === 'rent' || entry.kind === 'tax') sounds.pay();
       if (entry.kind === 'money') sounds.money();
@@ -927,6 +967,10 @@
         await announce(entry.text, BANNER_ICONS[entry.kind] || '⭐', avatarFor(g, entry));
       }
     }
+
+    // סנכרון סופי: אחרי כל הרגליים החיילים יושבים במקומם האמיתי
+    lastPositions = g.players.map((p) => p.pos);
+    paintTokens(g);
 
     // 8. הבהוב המשבצת הנוכחית
     const sqDiv = $(`#sq-${cur.pos}`);
@@ -987,6 +1031,7 @@
         <div class="deed">
           <div class="deed-top">שטר קניין</div>
           <div class="deed-band" style="background:${grp.color}">${sq.name}<br><small>${grp.name}</small></div>
+          <div class="deed-price">מחיר הנכס: <b>${money(sq.price)}</b></div>
           <div class="deed-body"><table>
             <tr><td>שכר דירה</td><td>${money(sq.rent[0])}</td></tr>
             <tr><td>עם בית אחד</td><td>${money(sq.rent[1])}</td></tr>
@@ -1006,6 +1051,7 @@
       <div class="deed">
         <div class="deed-top">שטר קניין</div>
         <div class="deed-band deed-art" style="background:#546E7A">${artFor(sq)}<span>${sq.name}</span></div>
+        <div class="deed-price">מחיר הנכס: <b>${money(sq.price)}</b></div>
         <div class="deed-body">${desc}<br>משכנתא: ${money(sq.price / 2)}</div>
       </div>`;
   }
@@ -1092,10 +1138,12 @@
     const d = openDialog(`
       <h2>מכירה פומבית! 🔨</h2>
       ${deedHTML(g, a.pos)}
-      <p class="d-sub" style="margin-top:14px">
-        הצעה נוכחית: <b>${a.currentBid ? money(a.currentBid) : 'אין עדיין'}</b>
-        ${high ? ` (של ${high.token} ${high.name})` : ''}
-      </p>
+      <div class="auc-compare">
+        <span class="auc-side"><small>המחיר בבנק</small><b>${money(BOARD[a.pos].price)}</b></span>
+        <span class="auc-vs">מול</span>
+        <span class="auc-side auc-bid"><small>ההצעה עכשיו</small><b>${a.currentBid ? money(a.currentBid) : 'אין עדיין'}</b></span>
+      </div>
+      <p class="d-sub">${high ? `ההצעה הגבוהה של ${high.token} ${high.name}` : 'עוד אף אחד לא הציע — אפשר לקנות בזול!'}</p>
       ${isMyTurn ? `
         <p class="d-sub">${iAmHigh ? 'ההצעה שלך מובילה! ⭐' : 'תורך להציע!'}</p>
         <div class="d-actions">
@@ -1423,6 +1471,77 @@
     </div>`;
   }
 
+  /* אישור לפני פעולה שקשה לחזור ממנה. מסביר לילד מה בדיוק קורה ולמה
+   * זה בדרך כלל לא כדאי — ורק אחר כך מבצע. מחזיר Promise של אמת/שקר. */
+  function confirmDialog({ emoji = '🤔', title, lines = [], confirmLabel = 'כן, בטוח', cancelLabel = 'לא, השאר כמו שזה' }) {
+    return new Promise((resolve) => {
+      const d = openDialog(`
+        <h2>${emoji} ${title}</h2>
+        <div class="confirm-why">${lines.map((l) => `<p>${l}</p>`).join('')}</div>
+        <div class="d-actions">
+          <button class="big-btn green" id="c-no">${cancelLabel}</button>
+          <button class="big-btn" id="c-yes">${confirmLabel}</button>
+        </div>`);
+      d.querySelector('#c-yes').onclick = () => { closeDialog(); resolve(true); };
+      d.querySelector('#c-no').onclick = () => { closeDialog(); resolve(false); };
+    });
+  }
+
+  // הטקסטים לכל פעולה — במספרים של הנכס/האחזקה עצמה, לא בכללי
+  function confirmWithdraw(g, idx, track, co) {
+    const val = track === 'stocks' ? g.players[idx].invest.stocks[co] : g.players[idx].invest[track];
+    const name = track === 'stocks' ? (FIN.COMPANIES.find((c) => c.id === co) || {}).name : FIN.TRACKS[track].name;
+    const o = outcome100(track);
+    const next = Math.round((val * o.typical) / 100);
+    return confirmDialog({
+      emoji: '🏦',
+      title: `למשוך את הכסף מ${name}?`,
+      lines: [
+        `יש שם עכשיו <b>${money(val)}</b>, והכסף הזה עובד בשבילך.`,
+        `אם הוא יישאר, בסבב הבא הוא יהיה בדרך כלל בערך <b>${money(next)}</b>.`,
+        'אם תמשוך אותו — הוא יפסיק לגדול. אפשר תמיד להפקיד שוב אחר כך.',
+      ],
+      confirmLabel: '⬅️ כן, למשוך',
+      cancelLabel: '🌱 להשאיר שיגדל',
+    });
+  }
+
+  function confirmMortgage(g, pos) {
+    const sq = BOARD[pos];
+    const back = Math.round((sq.price / 2) * 1.1);
+    return confirmDialog({
+      emoji: '🏦',
+      title: `למשכן את "${sq.name}"?`,
+      lines: [
+        'משכון זה הלוואה מהבנק על הנכס שלך.',
+        `תקבל עכשיו רק <b>${money(sq.price / 2)}</b> — חצי מהמחיר של <b>${money(sq.price)}</b>.`,
+        'כל עוד הנכס ממושכן <b>לא תקבל ממנו שכר דירה</b>.',
+        `וכדי לקבל אותו בחזרה תצטרך לשלם <b>${money(back)}</b> — יותר ממה שקיבלת.`,
+      ],
+      confirmLabel: '🏦 כן, למשכן',
+      cancelLabel: '🏠 לא, להשאיר',
+    });
+  }
+
+  function confirmSellHouse(g, pos) {
+    const sq = BOARD[pos];
+    const grp = GROUPS[sq.group];
+    const h = g.houses[pos];
+    const rentNow = sq.rent[h];
+    const rentAfter = sq.rent[h === 5 ? 4 : Math.max(0, h - 1)];
+    return confirmDialog({
+      emoji: '🏠',
+      title: h === 5 ? `למכור את המלון ב"${sq.name}"?` : `למכור בית ב"${sq.name}"?`,
+      lines: [
+        `הבנק יחזיר לך רק <b>${money(grp.houseCost / 2)}</b> — חצי ממה ששילמת (${money(grp.houseCost)}).`,
+        `ושכר הדירה יירד מ-<b>${money(rentNow)}</b> ל-<b>${money(rentAfter)}</b>.`,
+        'בתים הם מה שמכניס לך כסף — כדאי למכור רק אם באמת חייבים.',
+      ],
+      confirmLabel: '💰 כן, למכור',
+      cancelLabel: '🏠 לא, להשאיר',
+    });
+  }
+
   function showBankDialog(g, humanIdx, { onInvest, onWithdraw, onClose }) {
     const p = g.players[humanIdx];
     const chunkBtns = (track, co) => FIN.DEPOSIT_CHUNKS
@@ -1434,6 +1553,35 @@
 
     const infoBtn = (track, co) => `<button class="fin-info-btn" data-act="info" data-track="${track}" data-co="${co || ''}" title="מה זה?">❔</button>`;
 
+    const customBtn = (track, co) => `<button class="fin-custom-btn" data-act="custom" data-track="${track}" data-co="${co || ''}">🎚️ סכום אחר</button>`;
+
+    // כמה הפקדתי מול כמה זה שווה עכשיו — הלב של "מאיפה הגיע הרווח"
+    const basisLine = (track, co) => {
+      const val = track === 'stocks' ? p.invest.stocks[co] : p.invest[track];
+      const basis = p.invest.basis ? (track === 'stocks' ? p.invest.basis.stocks[co] : p.invest.basis[track]) : 0;
+      if (!val || !basis) return '';
+      const diff = val - basis;
+      const pc = Math.round((diff / basis) * 100);
+      const cls = diff > 0 ? 'gain' : diff < 0 ? 'loss' : '';
+      return `<small class="fin-basis">הפקדת <b>${money(basis)}</b> · שווה עכשיו <b>${money(val)}</b>
+        <span class="fin-delta ${cls}">${diff > 0 ? '+' : diff < 0 ? '−' : ''}${Math.abs(diff).toLocaleString('he-IL')} ₪${basis ? ` (${pc > 0 ? '+' : pc < 0 ? '−' : ''}${Math.abs(pc)}%)` : ''}</span></small>`;
+    };
+
+    // פאנל מחוון לסכום חופשי — נפתח בתוך השורה, אחד בכל פעם
+    const sliderPanel = (track, co) => {
+      const max = Math.max(10, Math.floor(p.money / 10) * 10);
+      const start = Math.min(100, max);
+      return `<div class="fin-slider" data-for="${track}:${co || ''}" hidden>
+        <div class="fs-amount"><b class="fs-val">${start}</b> ₪</div>
+        <div class="fs-row">
+          <button class="fs-step" data-step="-10">➖</button>
+          <input type="range" class="fs-range" min="10" max="${max}" step="10" value="${start}">
+          <button class="fs-step" data-step="10">➕</button>
+        </div>
+        <button class="big-btn green fs-go" data-act="investCustom" data-track="${track}" data-co="${co || ''}">💰 להשקיע</button>
+      </div>`;
+    };
+
     const trackRow = (track) => {
       const t = FIN.TRACKS[track];
       const val = p.invest[track];
@@ -1444,7 +1592,9 @@
             <small class="fin-blurb">${outcomeLineHTML(track)}</small></span>
           <span class="fin-val">${val > 0 ? money(val) : '—'}</span>
         </div>
-        <div class="fin-row-bot">${infoBtn(track, null)}${chunkBtns(track, null)}${wdBtn(track, null, val)}</div>
+        ${basisLine(track, null)}
+        <div class="fin-row-bot">${infoBtn(track, null)}${chunkBtns(track, null)}${customBtn(track, null)}${wdBtn(track, null, val)}</div>
+        ${sliderPanel(track, null)}
       </div>`;
     };
 
@@ -1457,7 +1607,9 @@
             <small class="fin-blurb">${sparklineHTML(g.market.trend[c.id])} ${lastMoveHTML(g, c.id)}</small></span>
           <span class="fin-val">${val > 0 ? money(val) : '—'}</span>
         </div>
-        <div class="fin-row-bot">${infoBtn('stocks', c.id)}${chunkBtns('stocks', c.id)}${wdBtn('stocks', c.id, val)}</div>
+        ${basisLine('stocks', c.id)}
+        <div class="fin-row-bot">${infoBtn('stocks', c.id)}${chunkBtns('stocks', c.id)}${customBtn('stocks', c.id)}${wdBtn('stocks', c.id, val)}</div>
+        ${sliderPanel('stocks', c.id)}
       </div>`;
     };
 
@@ -1491,8 +1643,34 @@
         const co = b.dataset.co || null;
         if (b.dataset.act === 'info') showInvestInfo(b.dataset.track, co, () => showBankDialog(g, humanIdx, { onInvest, onWithdraw, onClose }));
         else if (b.dataset.act === 'invest') onInvest(b.dataset.track, co, Number(b.dataset.amt));
-        else onWithdraw(b.dataset.track, co);
+        else if (b.dataset.act === 'custom') {
+          const key = `${b.dataset.track}:${co || ''}`;
+          d.querySelectorAll('.fin-slider').forEach((s2) => { s2.hidden = s2.dataset.for !== key ? true : !s2.hidden; });
+        } else if (b.dataset.act === 'investCustom') {
+          const panel = b.closest('.fin-slider');
+          onInvest(b.dataset.track, co, Number(panel.querySelector('.fs-range').value));
+        } else onWithdraw(b.dataset.track, co);
       };
+    });
+
+    // מחוון הסכום החופשי: גרירה, חיצים, ותצוגה חיה
+    d.querySelectorAll('.fin-slider').forEach((panel) => {
+      const range = panel.querySelector('.fs-range');
+      const label = panel.querySelector('.fs-val');
+      const go = panel.querySelector('.fs-go');
+      const sync = () => {
+        label.textContent = Number(range.value).toLocaleString('he-IL');
+        go.disabled = Number(range.value) > p.money;
+      };
+      range.oninput = sync;
+      panel.querySelectorAll('.fs-step').forEach((btn) => {
+        btn.onclick = () => {
+          const next = Number(range.value) + Number(btn.dataset.step);
+          range.value = Math.min(Number(range.max), Math.max(Number(range.min), next));
+          sync();
+        };
+      });
+      sync();
     });
     d.querySelector('#d-close').onclick = () => { closeDialog(); if (onClose) onClose(); };
   }
@@ -1846,7 +2024,20 @@
   // חמש הגרסאות האחרונות, מהחדשה לישנה. current = הגרסה שרצה עכשיו.
   const VERSIONS = [
     {
-      id: 'v15', label: 'גרסה 15', date: 'אוגוסט 2026', current: true,
+      id: 'v16', label: 'גרסה 16', date: 'אוגוסט 2026', current: true,
+      title: 'משחק ברור יותר 🔍',
+      items: [
+        '🚶 החייל הולך צעד-צעד, עוצר להרים קלף — ורק אז ממשיך. בלי קפיצות פתאומיות',
+        '🏷️ מחיר הנכס מופיע בשטר הקניין, ובמכירה פומבית רואים את המחיר בבנק מול ההצעה',
+        '🤔 לפני משיכת השקעה, משכון או מכירת בית — המשחק מסביר כמה זה עולה ומבקש אישור',
+        '📈 בתיק ההשקעות כתוב כמה הפקדתם במקור מול כמה זה שווה עכשיו',
+        '🎚️ אפשר להשקיע כל סכום שרוצים, לא רק את הכפתורים המוכנים',
+        '💡 הצעות ההשקעה מגיעות הרבה פחות — ונותנות לשחק בשקט',
+        '🔁 כשלרובי יוצא דאבל רואים בסיכום שהוא מטיל שוב',
+      ],
+    },
+    {
+      id: 'v15', label: 'גרסה 15', date: 'אוגוסט 2026',
       title: 'מצב חינוך פיננסי 🏦',
       items: [
         '🏦 חדש! מצב חינוך פיננסי — בוחרים אותו במסך הפתיחה ולומדים להשקיע כסף',
@@ -2061,7 +2252,7 @@
   const TS_ICON = {
     dice: '🎲', move: '📍', buy: '🛍️', rent: '💸', tax: '🧾', money: '💰',
     jail: '👮', card: '🃏', pot: '🎁', build: '🏠', mortgage: '🏦',
-    auction: '🔨', bankrupt: '💥', trade: '🤝', win: '🏆',
+    auction: '🔨', bankrupt: '💥', trade: '🤝', win: '🏆', turn: '🔁', park: '🅿️',
   };
   const TS_NOTABLE = new Set(['buy', 'rent', 'tax', 'money', 'jail', 'card', 'pot', 'build', 'mortgage', 'auction', 'bankrupt']);
 
@@ -2113,7 +2304,8 @@
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
     showStickerAlbum, startTutorial, tutorialSeen,
     setLocalIdx, nudge, clearNudge, deedHTML,
-    showBankDialog, showMainBankDialog, setPortfolioOpener, showMarketReport, showInvestInfo, showInvestOffer, outcome100, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
+    showBankDialog, showMainBankDialog, setPortfolioOpener, showMarketReport,
+    confirmDialog, confirmWithdraw, confirmMortgage, confirmSellHouse, showInvestInfo, showInvestOffer, outcome100, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
     showWhatsNew, showWhatsNewIfUpdated, VERSIONS,
   };
 })();

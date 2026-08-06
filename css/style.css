@@ -1672,3 +1672,79 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   padding: 5px 10px; font-size: 12px; font-weight: 800; color: #7A6A45;
 }
 .mb-pot b { font-family: var(--font-title); font-size: 15px; color: #6B5636; }
+
+/* ---------- מחיר בשטר הקניין והשוואה במכירה פומבית ---------- */
+
+.deed-price {
+  background: #FFF6DC;
+  border-bottom: 2px solid #E4DCC4;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6B5636;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.deed-price b { font-family: var(--font-title); font-size: 16px; color: #4A4436; }
+
+.auc-compare {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  margin: 14px 0 6px;
+}
+.auc-side {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: white; border: 2px solid #E4DCC4; border-radius: 13px;
+  padding: 7px 16px; min-width: 108px;
+}
+.auc-side small { font-size: 11.5px; font-weight: 700; color: #7A7263; }
+.auc-side b { font-family: var(--font-title); font-size: 19px; }
+.auc-side.auc-bid { border-color: var(--gold, #F5B940); background: #FFFBF0; }
+.auc-vs { font-size: 13px; font-weight: 800; color: #A79C88; }
+
+/* ---------- הפקדה מקורית ומחוון סכום חופשי ---------- */
+
+.fin-basis {
+  display: block; font-size: 11.5px; font-weight: 700; color: #7A7263;
+  background: #FAF7EF; border-radius: 9px; padding: 4px 8px; margin-top: 2px;
+}
+.fin-basis b { color: #4A4436; }
+
+.asset-row button.fin-custom-btn {
+  background: #F1E9FB; box-shadow: 0 2px 0 #D4C3EC; font-size: 12px;
+}
+.asset-row button.fin-custom-btn:hover:not(:disabled) { background: #E6D9F7; }
+
+.fin-slider[hidden] { display: none; }   /* display:flex גובר על תכונת hidden — צריך כלל מפורש */
+.fin-slider {
+  margin-top: 7px; background: #F7FBFF; border: 2px dashed #B6D4EC;
+  border-radius: 13px; padding: 9px 11px;
+  display: flex; flex-direction: column; gap: 7px; align-items: center;
+}
+.fs-amount { font-family: var(--font-title); font-size: 24px; color: #2C4A63; }
+.fs-row { display: flex; align-items: center; gap: 9px; width: 100%; }
+.fs-range { flex: 1; -webkit-appearance: none; appearance: none; height: 12px; border-radius: 8px; background: #D6E7F5; outline: none; }
+.fs-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--blue-btn, #3D8FD1); border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,.3); cursor: pointer;
+}
+.fs-range::-moz-range-thumb {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--blue-btn, #3D8FD1); border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,.3); cursor: pointer;
+}
+.fin-slider button.fs-step {
+  font-family: var(--font-body); font-size: 17px; min-width: 44px; padding: 4px 8px;
+  background: white; border: 2px solid #B6D4EC; border-radius: 11px; cursor: pointer;
+}
+.fin-slider button.fs-step:active { transform: translateY(2px); }
+.fin-slider .fs-go { padding: 8px 22px; font-size: 17px; }
+
+/* ---------- אישור עם הסבר ---------- */
+
+.confirm-why {
+  text-align: right; display: flex; flex-direction: column; gap: 7px;
+  background: white; border: 2px solid #E4DCC4; border-radius: 14px;
+  padding: 11px 13px; margin: 6px 0 4px;
+}
+.confirm-why p { margin: 0; font-size: 14.5px; line-height: 1.5; }
+.confirm-why b { color: var(--red-deep, #A32B2F); }
