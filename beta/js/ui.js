@@ -1252,6 +1252,65 @@
     return `<span class="fin-arrow ${p > 0 ? 'gain' : 'loss'}">${p > 0 ? '▲' : '▼'} ${pct(p)}</span>`;
   }
 
+  // מד סיכון: שלוש נקודות, ככל שיותר מלאות — יותר מסוכן
+  function riskMeterHTML(track) {
+    const t = FIN.TRACKS[track];
+    const cls = ['low', 'mid', 'high'][t.risk - 1];
+    const dots = [1, 2, 3].map((i) => `<span class="fin-dot ${i <= t.risk ? 'on ' + cls : ''}"></span>`).join('');
+    return `<span class="fin-risk ${cls}" title="${t.riskLabel}">${dots}<b>${t.riskLabel}</b></span>`;
+  }
+
+  // מה קורה ל-100 ש"ח בסבב אחד: בדרך כלל / ביום טוב / ביום רע.
+  // מתורגם מהטבלאות עצמן, כך שכוונון האיזון מעדכן גם את ההסבר.
+  function outcome100(track) {
+    const t = FIN.TRACKS[track];
+    if (track === 'savings') {
+      const v = 100 + Math.round(100 * t.rate);
+      return { typical: v, best: v, worst: v };
+    }
+    const ev = t.table.reduce((sum, r) => sum + r.p * r.m, 0);
+    const ms = t.table.map((r) => r.m);
+    return {
+      typical: Math.round(100 * ev),
+      best: Math.round(100 * Math.max(...ms)),
+      worst: Math.round(100 * Math.min(...ms)),
+    };
+  }
+
+  function outcomeLineHTML(track) {
+    const o = outcome100(track);
+    if (o.best === o.worst) {
+      return `<span class="fin-odds">כל 100 ₪ הופכים ל-<b class="gain">${o.typical} ₪</b> — תמיד</span>`;
+    }
+    return `<span class="fin-odds">כל 100 ₪: בדרך כלל <b>${o.typical}</b> · ביום טוב <b class="gain">${o.best}</b> · ביום רע <b class="loss">${o.worst}</b></span>`;
+  }
+
+  // כרטיס הסבר: מה זה, מתי מרוויחים, מתי מפסידים, וכמה
+  function showInvestInfo(track, coId, onBack) {
+    const t = FIN.TRACKS[track];
+    const co = coId ? FIN.COMPANIES.find((c) => c.id === coId) : null;
+    const o = outcome100(track);
+    const title = co ? `${co.emoji} ${co.name}` : `${t.emoji} ${t.name}`;
+    const what = co ? `${co.what} ${t.what}` : t.what;
+    const good = co ? co.good : t.good;
+    const bad = co ? co.bad : t.bad;
+    const d = openDialog(`
+      <h2>${title}</h2>
+      <p class="d-sub">${riskMeterHTML(track)}</p>
+      <div class="fin-info">
+        <div class="fin-info-row"><span class="fin-info-q">מה זה?</span><span>${what}</span></div>
+        <div class="fin-info-row"><span class="fin-info-q">מתי מרוויחים? 😀</span><span>${good}</span></div>
+        <div class="fin-info-row"><span class="fin-info-q">מתי מפסידים? 😕</span><span>${bad}</span></div>
+        <div class="fin-info-row"><span class="fin-info-q">כמה כסף? 💰</span><span>
+          אם תשקיע <b>100 ₪</b>, בסבב הבא בדרך כלל יהיו לך <b>${o.typical} ₪</b>${o.best === o.worst ? ' — תמיד.'
+            : `.<br>ביום טוב מאוד: <b class="gain">${o.best} ₪</b> · ביום רע: <b class="loss">${o.worst} ₪</b>.`}
+        </span></div>
+      </div>
+      <p class="d-sub fin-info-tip">💡 ככל שאפשר להרוויח יותר — אפשר גם להפסיד יותר. זה הכלל הכי חשוב בכסף!</p>
+      <div class="d-actions"><button class="big-btn green" id="d-back">⬅️ חזרה לבנק</button></div>`);
+    d.querySelector('#d-back').onclick = () => { closeDialog(); if (onBack) onBack(); };
+  }
+
   function showBankDialog(g, humanIdx, { onInvest, onWithdraw, onClose }) {
     const p = g.players[humanIdx];
     const chunkBtns = (track, co) => FIN.DEPOSIT_CHUNKS
@@ -1261,24 +1320,32 @@
       ? `<button class="fin-wd" data-act="withdraw" data-track="${track}" data-co="${co || ''}">⬅️ משיכה ${money(val)}</button>`
       : '');
 
+    const infoBtn = (track, co) => `<button class="fin-info-btn" data-act="info" data-track="${track}" data-co="${co || ''}" title="מה זה?">❔</button>`;
+
     const trackRow = (track) => {
       const t = FIN.TRACKS[track];
       const val = p.invest[track];
       return `<div class="asset-row fin-row">
-        <span class="a-band" style="background:${t.color}"></span>
-        <span class="a-name">${t.emoji} ${t.name}<small class="fin-blurb">${t.blurb}</small></span>
-        <span class="fin-val">${val > 0 ? money(val) : '—'}</span>
-        <span class="fin-btns">${chunkBtns(track, null)}${wdBtn(track, null, val)}</span>
+        <div class="fin-row-top">
+          <span class="a-band" style="background:${t.color}"></span>
+          <span class="a-name">${t.emoji} ${t.name} ${riskMeterHTML(track)}
+            <small class="fin-blurb">${outcomeLineHTML(track)}</small></span>
+          <span class="fin-val">${val > 0 ? money(val) : '—'}</span>
+        </div>
+        <div class="fin-row-bot">${infoBtn(track, null)}${chunkBtns(track, null)}${wdBtn(track, null, val)}</div>
       </div>`;
     };
 
     const coRow = (c) => {
       const val = p.invest.stocks[c.id];
       return `<div class="asset-row fin-row">
-        <span class="a-band" style="background:${FIN.TRACKS.stocks.color}"></span>
-        <span class="a-name">${c.emoji} ${c.name}<small class="fin-blurb">${sparklineHTML(g.market.trend[c.id])} ${lastMoveHTML(g, c.id)}</small></span>
-        <span class="fin-val">${val > 0 ? money(val) : '—'}</span>
-        <span class="fin-btns">${chunkBtns('stocks', c.id)}${wdBtn('stocks', c.id, val)}</span>
+        <div class="fin-row-top">
+          <span class="a-band" style="background:${FIN.TRACKS.stocks.color}"></span>
+          <span class="a-name">${c.emoji} ${c.name}
+            <small class="fin-blurb">${sparklineHTML(g.market.trend[c.id])} ${lastMoveHTML(g, c.id)}</small></span>
+          <span class="fin-val">${val > 0 ? money(val) : '—'}</span>
+        </div>
+        <div class="fin-row-bot">${infoBtn('stocks', c.id)}${chunkBtns('stocks', c.id)}${wdBtn('stocks', c.id, val)}</div>
       </div>`;
     };
 
@@ -1288,10 +1355,12 @@
       <h2>הבנק שלי 🏦</h2>
       <p class="d-sub">בחשבון: <b>${money(p.money)}</b> · מושקע: <b>${money(total)}</b>${total || profit ? ` · ${profit >= 0 ? 'הרווחת' : 'הפסדת'} ${deltaHTML(profit)}` : ''}</p>
       <p class="d-sub">💡 שמים כסף בבנק, והוא עובד בשבילך! בקופת החיסכון הכסף בטוח וגדל לאט. במניות הוא יכול לגדול הרבה — או לרדת.</p>
+      <p class="d-sub fin-hint">לוחצים על <b>❔</b> ליד כל אפשרות כדי לראות מה זה, מתי מרוויחים ומתי מפסידים.</p>
       <div class="asset-list">
         ${trackRow('savings')}
         ${trackRow('deposit')}
-        <div class="fin-sep">🚀 מניות של חברות — קונים חלק קטן בחברה</div>
+        <div class="fin-sep">${FIN.TRACKS.stocks.emoji} מניות של חברות — קונים חלק קטן בחברה ${riskMeterHTML('stocks')}
+          <small class="fin-blurb">${outcomeLineHTML('stocks')}</small></div>
         ${FIN.COMPANIES.map(coRow).join('')}
       </div>
       <div class="d-actions"><button class="big-btn green" id="d-close">✅ סיימתי</button></div>`);
@@ -1299,15 +1368,67 @@
     d.querySelectorAll('button[data-act]').forEach((b) => {
       b.onclick = () => {
         const co = b.dataset.co || null;
-        if (b.dataset.act === 'invest') onInvest(b.dataset.track, co, Number(b.dataset.amt));
+        if (b.dataset.act === 'info') showInvestInfo(b.dataset.track, co, () => showBankDialog(g, humanIdx, { onInvest, onWithdraw, onClose }));
+        else if (b.dataset.act === 'invest') onInvest(b.dataset.track, co, Number(b.dataset.amt));
         else onWithdraw(b.dataset.track, co);
       };
     });
     d.querySelector('#d-close').onclick = () => { closeDialog(); if (onClose) onClose(); };
   }
 
+  /* הצעת השקעה יזומה — הילד לא צריך לזכור להיכנס לבנק.
+   * kind: 'first' (עוד לא השקיע) | 'windfall' (נכנס כסף) | 'profit' (הרוויח בבורסה) */
+  function showInvestOffer(g, humanIdx, { kind, reason, options, onInvest, onSkip, onOpenBank }) {
+    const p = g.players[humanIdx];
+    const head = {
+      first: 'רוצה שהכסף שלך יעבוד בשבילך? 🏦',
+      windfall: 'נכנס לך כסף! מה עושים איתו? 💰',
+      profit: 'ההשקעה שלך הרוויחה! ממשיכים? 📈',
+    }[kind] || 'רעיון להשקעה 💡';
+
+    const tip = {
+      first: 'כסף שיושב בחשבון נשאר בדיוק אותו דבר. כסף שמושקע — גדל.',
+      windfall: 'אפשר לשמור הכול, ואפשר לקחת חלק קטן ולתת לו לגדול.',
+      profit: 'ככה עובד כסף: מה שהרווחת יכול להמשיך להרוויח בעצמו.',
+    }[kind] || '';
+
+    const btns = options.map((o) => {
+      const t = FIN.TRACKS[o.track];
+      const co = o.co ? FIN.COMPANIES.find((c) => c.id === o.co) : null;
+      const label = co ? `${co.emoji} ${co.name}` : `${t.emoji} ${t.name}`;
+      const oc = outcome100(o.track);
+      const range = oc.best === oc.worst
+        ? `בטוח: כל 100 ₪ הופכים ל-${oc.typical} ₪`
+        : `בדרך כלל ${oc.typical} ₪ · ביום טוב ${oc.best} · ביום רע ${oc.worst}`;
+      return `<button class="fin-offer-btn" data-track="${o.track}" data-co="${o.co || ''}" data-amt="${o.amount}"
+        ${p.money >= o.amount ? '' : 'disabled'}>
+        <span class="fo-top">${label} — ${money(o.amount)}</span>
+        <span class="fo-mid">${riskMeterHTML(o.track)}</span>
+        <span class="fo-bot">על כל 100 ₪: ${range}</span>
+      </button>`;
+    }).join('');
+
+    const d = openDialog(`
+      <h2>${head}</h2>
+      ${reason ? `<p class="d-sub fin-offer-why">${reason}</p>` : ''}
+      <p class="d-sub">${tip}</p>
+      <div class="fin-offer-list">${btns}</div>
+      <div class="d-actions fin-offer-actions">
+        <button class="big-btn blue" id="d-more">🏦 לראות את כל האפשרויות</button>
+        <button class="mid-btn" id="d-skip">לא עכשיו, תודה</button>
+      </div>`);
+    const clip = { first: 'inv_offer_first', windfall: 'inv_offer_windfall', profit: 'inv_offer_profit' }[kind];
+    if (clip) narrator.say([clip], `${head} ${tip}`);
+
+    d.querySelectorAll('.fin-offer-btn').forEach((b) => {
+      b.onclick = () => onInvest(b.dataset.track, b.dataset.co || null, Number(b.dataset.amt));
+    });
+    d.querySelector('#d-more').onclick = () => { closeDialog(); onOpenBank(); };
+    d.querySelector('#d-skip').onclick = () => { closeDialog(); onSkip(); };
+  }
+
   // דוח הבורסה בסוף כל סבב — הלב החינוכי: לכל שינוי יש סיפור והסבר
-  function showMarketReport(g, humanIdx, onClose) {
+  function showMarketReport(g, humanIdx, onClose, onInvestMore) {
     const rep = g.market.report;
     if (!rep) { if (onClose) onClose(); return; }
     const mine = rep.entries.filter((e) => e.idx === humanIdx);
@@ -1345,13 +1466,32 @@
 
     if (soundOn) { if (myTotal > 0) sounds.gain(); else if (myTotal < 0) sounds.loss(); }
 
+    // אחרי רווח — הזדמנות ללחוץ ולהשקיע עוד, בלי לחפש את הבנק
+    const best = mine.slice().sort((a, b) => b.pct - a.pct)[0];
+    const p = g.players[humanIdx];
+    let boost = '';
+    if (onInvestMore && myTotal > 0 && best && p.money >= 50) {
+      const amt = p.money >= 100 ? 100 : 50;
+      boost = `<div class="fin-boost">
+        <div class="fin-boost-q">רוצה להשקיע עוד ב${best.name}?</div>
+        <div class="fin-boost-why">מה שהרווחת יכול להמשיך להרוויח בעצמו 🌱</div>
+        <button class="big-btn green" id="d-more-inv" data-track="${best.track}" data-co="${best.co || ''}" data-amt="${amt}">➕ עוד ${money(amt)}</button>
+      </div>`;
+    }
+
     const d = openDialog(`
       <h2>חדשות הבורסה 📊 <small class="fin-round">סבב ${rep.round}</small></h2>
       ${newsBox}
       <p class="d-sub">${headline}</p>
       <div class="asset-list">${rows}</div>
+      ${boost}
       ${others ? `<p class="d-sub fin-others">מה קרה לאחרים: ${others}</p>` : ''}
       <div class="d-actions"><button class="big-btn green" id="d-ok">👍 הבנתי</button></div>`);
+    const more = d.querySelector('#d-more-inv');
+    if (more) more.onclick = () => {
+      closeDialog();
+      onInvestMore(more.dataset.track, more.dataset.co || null, Number(more.dataset.amt));
+    };
     d.querySelector('#d-ok').onclick = () => { closeDialog(); if (onClose) onClose(); };
   }
 
@@ -1832,7 +1972,7 @@
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
     showStickerAlbum, startTutorial, tutorialSeen,
     setLocalIdx, nudge, clearNudge, deedHTML,
-    showBankDialog, showMarketReport, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
+    showBankDialog, showMarketReport, showInvestInfo, showInvestOffer, outcome100, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
     showWhatsNew, showWhatsNewIfUpdated, VERSIONS,
   };
 })();
