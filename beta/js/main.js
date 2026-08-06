@@ -719,6 +719,12 @@
     if (bankBtn) bankBtn.onclick = () => { if (!bankBtn.disabled) showBank(); };
     const mainBankBtn = $('#mainbank-btn');
     if (mainBankBtn) mainBankBtn.onclick = () => { if (!mainBankBtn.disabled) UI.showMainBankDialog(game, () => {}); };
+    // לחיצה על "החשבון שלי" בסרגל הקופות פותחת את תיק ההשקעות
+    UI.setPortfolioOpener(() => {
+      if (!game || !game.financeEnabled) return;
+      if ($('#bank-btn').disabled) { UI.toast('אפשר להשקיע רק בתור שלך 🙂'); return; }
+      showBank();
+    });
     $('#sound-btn').onclick = () => UI.setSound(!UI.isSoundOn());
     const musicBtn = $('#music-btn');
     if (musicBtn) {
