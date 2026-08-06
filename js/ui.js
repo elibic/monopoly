@@ -1404,6 +1404,100 @@
     setTimeout(() => t.remove(), 3600);
   }
 
+  /* ==================== מה חדש? — יומן גרסאות לשחקנים ==================== */
+
+  // חמש הגרסאות האחרונות, מהחדשה לישנה. current = הגרסה שרצה עכשיו.
+  const VERSIONS = [
+    {
+      id: 'v14', label: 'גרסה 14', date: 'אוגוסט 2026', current: true,
+      title: 'תיקוני משחק וקריינות 🔧',
+      items: [
+        '🅿️ חניה חופשית: עוצרים שם ומסיימים את התור, תמיד',
+        '🚂 שכר דירה חדש לרכבות: 25, 50, 75 ו-100 ₪ לפי כמה רכבות יש לכם',
+        '🏠 כשהחייל נוחת ברחוב שלכם וכל העיר בבעלותכם — המשחק מציע לבנות מיד',
+        '👆 רמז מהבהב על הכפתור שצריך ללחוץ, כדי שאף אחד לא יתקע',
+        '🏷️ תג מחיר גדול וברור על כל משבצת',
+        '🔨 הבוט התחזק במכירות הפומביות',
+        '🧪 חדש בגרסת הנסיון: מצב חינוך פיננסי — משקיעים כסף ולומדים על חיסכון ומניות',
+      ],
+    },
+    {
+      id: 'v13', label: 'גרסה 13', date: 'אוגוסט 2026',
+      title: 'משחק מרחוק עם חבר/ה 🎥',
+      items: [
+        '🎥 אפשר לשחק עם מישהו מרחוק, עם וידאו ומיקרופון',
+        '🔗 מזמינים בקישור אחד ללחיצה, בלי קודים ארוכים',
+        '📖 מדריך אינטראקטיבי למתחילים שמסביר את המשחק צעד-צעד',
+      ],
+    },
+    {
+      id: 'v12', label: 'גרסה 12', date: 'אוגוסט 2026',
+      title: 'סיום חגיגי ומדבקות 🏅',
+      items: [
+        '🏆 מסך סיום עם דירוג מנצחים וגרף שמראה מי היה עשיר מתי',
+        '🏅 אלבום מדבקות שנשמר בין משחקים',
+        '🎵 מוזיקת רקע וצלילים חדשים לכל פעולה',
+        '🧠 שלוש רמות קושי לבוט: קל, בינוני וקשה',
+        '📜 לחיצה על משבצת מציגה את שטר הקניין שלה',
+      ],
+    },
+    {
+      id: 'v11', label: 'גרסה 11', date: 'אוגוסט 2026',
+      title: 'קריינות אמיתית בעברית 🎙️',
+      items: [
+        '🎙️ קריין אמיתי מקריא את המשחק בעברית',
+        '🎁 קופה בחניה חופשית — אפשר להדליק ולכבות',
+        '🔨 מכירה פומבית כשמוותרים על קנייה — אפשר להדליק ולכבות',
+        '⬇️ אפשר להוריד את המשחק ולשחק גם בלי אינטרנט',
+        '🏙️ שם העיר מופיע על כל משבצת רחוב, כמו בלוח המקורי',
+      ],
+    },
+    {
+      id: 'v10', label: 'גרסה 10', date: 'אוגוסט 2026',
+      title: 'המשחק הראשון 🎩',
+      items: [
+        '🎲 לוח ישראלי מלא עם 40 משבצות, 8 ערים, רכבות וחברות',
+        '💳 בלי מזומן — לכל שחקן כרטיס אשראי וחשבון בנק',
+        '🤖 עד שלושה יריבי מחשב שקונים, בונים ומציעים במכירות',
+        '💾 המשחק נשמר לבד — אפשר לסגור ולחזור מתי שרוצים',
+      ],
+    },
+  ];
+
+  const WHATSNEW_KEY = 'monopoly-hebrew-seen-version';
+
+  function whatsNewHTML(limit) {
+    return VERSIONS.slice(0, limit).map((v, i) => `
+      <div class="wn-ver ${i === 0 ? 'wn-current' : ''}">
+        <div class="wn-head">
+          <span class="wn-label">${v.label}${v.current ? ' · הגרסה שלכם' : ''}</span>
+          <span class="wn-date">${v.date}</span>
+        </div>
+        <div class="wn-title">${v.title}</div>
+        <ul class="wn-items">${v.items.map((it) => `<li>${it}</li>`).join('')}</ul>
+      </div>`).join('');
+  }
+
+  function showWhatsNew(limit = 5) {
+    try { localStorage.setItem(WHATSNEW_KEY, VERSIONS[0].id); } catch (e) { /* */ }
+    const d = openDialog(`
+      <h2>מה חדש במשחק? ✨</h2>
+      <p class="d-sub">כל מה שהשתנה בחמש הגרסאות האחרונות</p>
+      <div class="wn-list">${whatsNewHTML(limit)}</div>
+      <div class="d-actions"><button class="big-btn green" id="d-ok">👍 יאללה, משחקים!</button></div>`);
+    d.querySelector('#d-ok').onclick = () => closeDialog();
+  }
+
+  // מוצג פעם אחת אחרי עדכון גרסה — לא בביקור הראשון של שחקן חדש
+  function showWhatsNewIfUpdated() {
+    let seen = null;
+    try { seen = localStorage.getItem(WHATSNEW_KEY); } catch (e) { return; }
+    if (seen === VERSIONS[0].id) return;
+    try { localStorage.setItem(WHATSNEW_KEY, VERSIONS[0].id); } catch (e) { /* */ }
+    if (!seen) return; // שחקן חדש — לא מציפים אותו ביומן גרסאות
+    setTimeout(() => showWhatsNew(2), 400);
+  }
+
   /* ==================== מדריך למתחילים ==================== */
 
   const TUTORIAL_KEY = 'monopoly-hebrew-tutorial-seen';
@@ -1546,5 +1640,6 @@
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
     showStickerAlbum, startTutorial, tutorialSeen,
     setLocalIdx, nudge, clearNudge, deedHTML,
+    showWhatsNew, showWhatsNewIfUpdated, VERSIONS,
   };
 })();

@@ -151,16 +151,22 @@
     if (albumBtn) albumBtn.onclick = () => UI.showStickerAlbum();
     const tutBtn = $('#tutorial-btn');
     if (tutBtn) tutBtn.onclick = () => UI.startTutorial();
+    const newsBtn = $('#whatsnew-btn');
+    if (newsBtn) newsBtn.onclick = () => UI.showWhatsNew();
+    UI.showWhatsNewIfUpdated(); // בפעם הראשונה אחרי עדכון — מראים מה השתנה
     const remoteBtn = $('#remote-btn');
     if (remoteBtn && globalThis.MonopolyRemote) remoteBtn.onclick = () => globalThis.MonopolyRemote.open();
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
   }
 
   // הורדת המשחק — שתי אפשרויות: לשחק אופליין, או פרויקט מלא למתכנת
+  // חשוב: DEV_BRANCH חייב להצביע על ענף הפיתוח הנוכחי, אחרת ההורדה
+  // נותנת גרסה ישנה בלי העדכונים והתיקונים האחרונים.
+  const DEV_BRANCH = 'claude/monopoly-financial-education-scrm25';
   function showDownloadDialog() {
     const repo = 'https://github.com/elibic/monopoly';
-    const playZip = `${repo}/archive/refs/heads/gh-pages.zip`;         // המשחק הרץ (שטוח)
-    const devZip = `${repo}/archive/refs/heads/claude/monopoly-hebrew-dhr54d.zip`; // מקור מלא
+    const playZip = `${repo}/archive/refs/heads/gh-pages.zip`;   // המשחק הרץ (שטוח, מתעדכן בכל פרסום)
+    const devZip = `${repo}/archive/refs/heads/${DEV_BRANCH}.zip`; // מקור מלא מענף הפיתוח הנוכחי
     const d = UI.openDialog(`
       <h2>הורדת המשחק 💻</h2>
       <div class="dl-section">
@@ -170,6 +176,8 @@
           <li>מחלצים את ה-ZIP (לחיצה ימנית ← "חלץ הכול").</li>
           <li>לחיצה כפולה על <b>index.html</b> — והמשחק רץ, גם בלי רשת! 🎉</li>
         </ol>
+        <p class="d-sub">✅ ההורדה כוללת תמיד את <b>הגרסה העדכנית ביותר</b> — כל התכונות,
+        התיקונים והקריינות שיצאו עד עכשיו, וגם את גרסת הנסיון בתיקייה <b>beta</b>.</p>
       </div>
       <div class="dl-section dl-dev">
         <b>👨‍💻 כדי שמתכנת ישפר את המשחק</b>
