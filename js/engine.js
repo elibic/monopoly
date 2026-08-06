@@ -680,8 +680,11 @@
         active: this.alive().map((p) => p.idx),
         ptr: 0,
       };
-      this.auction.ptr = this.auction.active.indexOf(this.turn);
-      if (this.auction.ptr < 0) this.auction.ptr = 0;
+      // מי שוויתר על הקנייה לא פותח את המכירה — השחקן הבא מציע ראשון,
+      // והמוותר מגיב להצעה שלו. ככה זה גם הוגן וגם ברור יותר לילד.
+      const declined = this.auction.active.indexOf(this.turn);
+      this.auction.ptr = declined < 0 ? 0 : (declined + 1) % this.auction.active.length;
+      this.auction.opener = this.auction.active[this.auction.ptr];
     }
 
     auctionTurn() { return this.auction.active[this.auction.ptr]; }

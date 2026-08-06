@@ -36,11 +36,12 @@ test('ויתור על קנייה פותח מכירה פומבית; הזוכה מ
   g.rollDice();
   g.declineBuy();
   assert.equal(g.phase, 'auction');
-  g.placeBid(0, 10);
-  g.placeBid(1, 20);
-  g.passAuction(0);
-  assert.equal(g.owner[3], 1);
-  assert.equal(g.players[1].money, 1500 - 20);
+  assert.equal(g.auctionTurn(), 1, 'מי שוויתר לא מציע ראשון');
+  g.placeBid(1, 10);
+  g.placeBid(0, 20);
+  g.passAuction(1);
+  assert.equal(g.owner[3], 0);
+  assert.equal(g.players[0].money, 1500 - 20);
   assert.equal(g.phase, 'end');
 });
 
@@ -48,10 +49,24 @@ test('מכירה פומבית בלי הצעות — הנכס נשאר בבנק',
   const g = twoPlayers({ diceQueue: [[1, 2]] });
   g.rollDice();
   g.declineBuy();
-  g.passAuction(0);
   g.passAuction(1);
+  g.passAuction(0);
   assert.equal(g.owner[3], null);
   assert.equal(g.phase, 'end');
+});
+
+test('סדר המכירה: השחקן הבא פותח, והמוותר מגיב אחריו', () => {
+  const g = new Game(
+    [{ name: 'א' }, { name: 'ב', isAI: true }, { name: 'ג', isAI: true }],
+    { diceQueue: [[1, 2]] },
+  );
+  g.rollDice();
+  g.declineBuy();
+  assert.equal(g.auctionTurn(), 1, 'הפותח הוא השחקן שאחרי המוותר');
+  g.placeBid(1, 10);
+  assert.equal(g.auctionTurn(), 2);
+  g.passAuction(2);
+  assert.equal(g.auctionTurn(), 0, 'רק עכשיו תור מי שוויתר');
 });
 
 test('שכר דירה: רחוב בודד רגיל, קבוצה שלמה בלי בתים — כפול', () => {
@@ -108,8 +123,8 @@ test('דאבל נותן תור נוסף; דאבל שלישי שולח לכלא',
   assert.equal(g.phase, 'roll');
   g.rollDice(); // אל 12 — חברת חשמל פנויה → קנייה
   g.declineBuy();
+  g.passAuction(1); // המחשב פותח (מי שוויתר לא מציע ראשון)
   g.passAuction(0);
-  g.passAuction(1);
   assert.equal(g.phase, 'roll'); // עדיין דאבל
   g.rollDice(); // דאבל שלישי → כלא
   const p = g.players[0];

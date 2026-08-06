@@ -95,9 +95,17 @@
       }
       // רכבת נוספת מכפילה הכנסה — הבוט מעריך אותה יותר ככל שיש לו רכבות
       if (sq.type === 'rail') mul += 0.12 * g.countOwned(idx, 'rail');
+      // למה הבוט רוצה את הנכס — משמש גם להסבר לילד ביומן
+      let want = 'רגיל';
+      if (missingForGroup(g, idx, a.pos) === 1) want = 'משלים';
+      else if (human && sq.type === 'street' && missingForGroup(g, human.idx, a.pos) === 1) want = 'חוסם';
+      else if (sq.type === 'rail' && g.countOwned(idx, 'rail') >= 1) want = 'רכבת';
+
       const cap = Math.min(Math.floor((sq.price * mul) / 10) * 10, p.money - 40);
+      // "עוד הצעה אחת" — לפעמים חורגים קצת מהתקרה, כמו אדם שנסחף
+      const stretch = g.rand() < 0.45 ? Math.round((0.05 + g.rand() * 0.15) * sq.price / 10) * 10 : 0;
       // סגנון: 'step' מעלה במינימום, 'jump' קופץ מדי פעם כדי להפתיע ולהרתיע
-      a.plans[idx] = { cap, style: g.rand() < 0.4 ? 'jump' : 'step' };
+      a.plans[idx] = { cap, stretch, want, style: g.rand() < 0.4 ? 'jump' : 'step', announced: false };
     }
     return a.plans[idx];
   }
@@ -107,19 +115,42 @@
     const prof = profile(g);
     const p = g.players[idx];
     const plan = auctionPlan(g, idx);
+    const sq = g.square(a.pos);
     const minBid = a.currentBid === 0 ? 10 : a.currentBid + 10;
     if (a.highBidder === idx) return null; // מובילים — מחכים
-    if (minBid > plan.cap || minBid > p.money) return 'pass';
-    // ברמה קלה — הסיכוי לוותר גדל ככל שהמחיר מתקרב לתקרה (לא נכנע אחרי סיבוב אחד)
-    if (prof.bidMistake && a.currentBid > 0 && g.rand() < prof.bidMistake * (a.currentBid / plan.cap)) {
+
+    // התקרה האפקטיבית: בנכס שהבוט באמת צריך הוא מוכן להימתח מעבר לתוכנית
+    const hardCap = Math.min(plan.cap + (plan.want === 'רגיל' ? 0 : plan.stretch), p.money);
+    if (minBid > hardCap) return 'pass';
+
+    // ברמה קלה — הסיכוי לוותר גדל ככל שהמחיר מתקרב לתקרה (לא נכנע אחרי סיבוב אחד).
+    // כשהנכס משלים לו עיר הוא כמעט לא מוותר — הצורך גובר על הטעות.
+    const mistake = prof.bidMistake * (plan.want === 'משלים' ? 0.2 : 1);
+    if (mistake && a.currentBid > 0 && g.rand() < mistake * (a.currentBid / hardCap)) {
       return 'pass';
     }
-    // קפיצת הצעה מפתיעה — מקשה על היריב "לזחול" בעשרות
-    if (plan.style === 'jump' && g.rand() < 0.5) {
-      const jump = minBid + 10 * (1 + Math.floor(g.rand() * 4)); // עד +50
-      return Math.min(jump, plan.cap, p.money);
-    }
-    return minBid;
+
+    // צעד ההצעה נגזר ממחיר הנכס — ברחוב יקר מציעים בקפיצות גדולות יותר,
+    // כדי שהמכירה לא תזחל בעשרות ותרגיש מכנית.
+    const unit = Math.max(10, Math.round(sq.price * 0.06 / 10) * 10);
+    let bid = minBid;
+    if (plan.style === 'jump' && g.rand() < 0.5) bid = minBid + unit * (1 + Math.floor(g.rand() * 3));
+    else if (g.rand() < 0.55) bid = minBid + unit * Math.floor(g.rand() * 2);
+    // כשהוא ממש רוצה את הנכס — קפיצה נחרצת שמרתיעה
+    if (plan.want === 'משלים' && a.currentBid > 0 && g.rand() < 0.4) bid = Math.max(bid, minBid + unit * 2);
+    return Math.min(Math.max(bid, minBid), hardCap);
+  }
+
+  // הסבר לילד למה הבוט נלחם על הנכס — נרשם פעם אחת לכל מכירה
+  function auctionIntent(g, idx) {
+    const plan = auctionPlan(g, idx);
+    if (plan.announced || plan.want === 'רגיל') return null;
+    plan.announced = true;
+    const name = g.players[idx].name;
+    const sqName = g.square(g.auction.pos).name;
+    if (plan.want === 'משלים') return `🔨 ${name} ממש רוצה את "${sqName}" — הוא משלים לו עיר שלמה!`;
+    if (plan.want === 'חוסם') return `🔨 ${name} לא רוצה שתשלים את העיר — הוא נלחם על "${sqName}".`;
+    return `🔨 ${name} אוסף רכבות, ולכן "${sqName}" שווה לו יותר.`;
   }
 
   // גיוס כסף עד יעד: קודם מכירת בתים מקבוצות זולות, אחר כך משכנתאות
@@ -275,7 +306,7 @@
   }
 
   globalThis.MonopolyAI = {
-    decideBuy, decideAuction, handleDebt, jailStrategy,
+    decideBuy, decideAuction, auctionIntent, handleDebt, jailStrategy,
     manageAssets, raiseFunds, proposeTrade, evaluateTrade,
   };
 })();

@@ -291,7 +291,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=17`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=18`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -1128,6 +1128,16 @@
     d.querySelector('#d-skip').onclick = () => { closeDialog(); onDecline(); };
   }
 
+  // שורת ייחוס אחת: פסק דין קצר ומחיר הבנק פעם אחת — בלי להתחרות במספר הגדול
+  function dealHint(bid, price) {
+    const inBank = `בבנק זה עולה ${money(price)}`;
+    if (!bid) return `<b class="auc-good">🟢 עוד אף אחד לא הציע</b> — ${inBank}`;
+    if (bid < price * 0.6) return `<b class="auc-good">🟢 מציאה!</b> ${inBank}`;
+    if (bid < price) return `<b class="auc-good">🟢 עדיין זול</b> — ${inBank}`;
+    if (bid === price) return `🟡 בדיוק כמו בבנק (${money(price)})`;
+    return `<b class="auc-pricey">🔴 כבר יקר</b> — ${inBank}`;
+  }
+
   function renderAuction(g, humanIdx, onBid, onPass) {
     const a = g.auction;
     const isMyTurn = g.auctionTurn() === humanIdx && !g.players[humanIdx].bankrupt;
@@ -1138,12 +1148,12 @@
     const d = openDialog(`
       <h2>מכירה פומבית! 🔨</h2>
       ${deedHTML(g, a.pos)}
-      <div class="auc-compare">
-        <span class="auc-side"><small>המחיר בבנק</small><b>${money(BOARD[a.pos].price)}</b></span>
-        <span class="auc-vs">מול</span>
-        <span class="auc-side auc-bid"><small>ההצעה עכשיו</small><b>${a.currentBid ? money(a.currentBid) : 'אין עדיין'}</b></span>
+      <div class="auc-bid-box">
+        <span class="auc-bid-label">ההצעה עכשיו</span>
+        <b class="auc-bid-amount">${a.currentBid ? money(a.currentBid) : '— אין עדיין —'}</b>
+        <span class="auc-bid-who">${high ? `של ${high.token} ${high.name}` : 'אף אחד לא הציע עדיין'}</span>
       </div>
-      <p class="d-sub">${high ? `ההצעה הגבוהה של ${high.token} ${high.name}` : 'עוד אף אחד לא הציע — אפשר לקנות בזול!'}</p>
+      <div class="auc-ref">${dealHint(a.currentBid, BOARD[a.pos].price)}</div>
       ${isMyTurn ? `
         <p class="d-sub">${iAmHigh ? 'ההצעה שלך מובילה! ⭐' : 'תורך להציע!'}</p>
         <div class="d-actions">
@@ -2024,7 +2034,18 @@
   // חמש הגרסאות האחרונות, מהחדשה לישנה. current = הגרסה שרצה עכשיו.
   const VERSIONS = [
     {
-      id: 'v17', label: 'גרסה 17', date: 'אוגוסט 2026', current: true,
+      id: 'v18', label: 'גרסה 18', date: 'אוגוסט 2026', current: true,
+      title: 'מכירה פומבית הוגנת ומעניינת 🔨',
+      items: [
+        '🔨 מי שוויתר על הקנייה כבר לא מציע ראשון — השחקן הבא פותח, והמוותר מגיב',
+        '🤖 הבוט מציע לפי כמה שהנכס באמת שווה לו: נלחם על רחוב שמשלים לו עיר, ומוותר מהר על מה שלא צריך',
+        '💬 כשהבוט נלחם על נכס — כתוב למה ("הוא משלים לו עיר שלמה!")',
+        '👀 בחלונית ברור עכשיו מה ההצעה הנוכחית (במספר גדול) ומה המחיר בבנק (בשורה קטנה מתחת)',
+        '🟢 שורת עזרה לילד: מציאה, עדיין זול, או כבר יקר',
+      ],
+    },
+    {
+      id: 'v17', label: 'גרסה 17', date: 'אוגוסט 2026',
       title: 'מראה חדש ומסך מסודר ✨',
       items: [
         '✍️ פונט חדש לכל המשחק — נקי וקריא יותר, עם כותרות שמנמנות וידידותיות',
