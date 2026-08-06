@@ -22,13 +22,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: הרצת בדיקות המנוע (ראשי + גרסת נסיון)
-        run: node --test tests/engine.test.mjs beta/tests/engine.test.mjs
+      - name: הרצת בדיקות המנוע
+        run: node --test tests/engine.test.mjs
 
       - name: פרסום לענף gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: .
-          exclude_assets: '.github,tests,beta/tests'
+          exclude_assets: '.github,tests'
           commit_message: 'פרסום אתר: ${{ github.event.head_commit.message }}'

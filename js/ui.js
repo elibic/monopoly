@@ -118,6 +118,9 @@
     cash() { tone(1047, .06, 0, 'triangle', .1); tone(1319, .08, .05, 'triangle', .1); tone(1568, .12, .11, 'triangle', .1); },
     sticker() { [784, 988, 1319, 1047, 1568].forEach((f, i) => tone(f, .18, i * .09, 'triangle', .14)); },
     tap() { tone(880, .04, 0, 'sine', .06); },
+    // מצב חינוך פיננסי: ההשקעות עלו / ירדו
+    gain() { [659, 880, 1175].forEach((f, i) => tone(f, .14, i * .08, 'triangle', .12)); },
+    loss() { tone(494, .16, 0, 'triangle', .1); tone(370, .22, .13, 'triangle', .1); },
   };
 
   /* ==================== מוזיקת רקע (WebAudio, בלי קבצים — עובד אופליין) ==================== */
@@ -213,6 +216,15 @@
     'שקלים': 'שְׁקָלִים', 'קלף': 'קְלַף', 'עשינו עסק': 'עָשִׂינוּ עֵסֶק', 'בהצלחה במשחק': 'בְּהַצְלָחָה בַּמִּשְׂחָק',
     'שלום': 'שָׁלוֹם', 'ממשיכים לשחק': 'מַמְשִׁיכִים לְשַׂחֵק', 'יוצאת': 'יוֹצֵאת', 'יוצא': 'יוֹצֵא',
     'ניסיון': 'נִסָּיוֹן', 'מתוך': 'מִתּוֹךְ', 'חייבת': 'חַיֶּבֶת', 'חייב': 'חַיָּב', 'ולצאת': 'וְלָצֵאת', 'ישר': 'יָשָׁר',
+    // מצב חינוך פיננסי
+    'ההשקעות': 'הַהַשְׁקָעוֹת', 'השקעות': 'הַשְׁקָעוֹת', 'השקעה': 'הַשְׁקָעָה', 'להשקיע': 'לְהַשְׁקִיעַ',
+    'השקיעה': 'הִשְׁקִיעָה', 'השקיע': 'הִשְׁקִיעַ', 'משקיעה': 'מַשְׁקִיעָה', 'משקיע': 'מַשְׁקִיעַ',
+    'קופת חיסכון': 'קֻפַּת חִסָּכוֹן', 'חיסכון': 'חִסָּכוֹן', 'פיקדון': 'פִּקָּדוֹן',
+    'מניות': 'מְנָיוֹת', 'מניה': 'מְנָיָה', 'הבורסה': 'הַבּוּרְסָה', 'בורסה': 'בּוּרְסָה',
+    'עדכון שוק': 'עִדְכּוּן שׁוּק', 'תשואה': 'תְּשׁוּאָה', 'רווח': 'רֶוַח', 'הפסד': 'הֶפְסֵד',
+    'מפעל הגלידה': 'מִפְעַל הַגְּלִידָה', 'חברת הצעצועים': 'חֶבְרַת הַצַּעֲצוּעִים',
+    'חלליות ישראל': 'חֲלָלִיּוֹת יִשְׂרָאֵל', 'רשת הפיצה': 'רֶשֶׁת הַפִּיצָה',
+    'משכה': 'מָשְׁכָה', 'משך': 'מָשַׁךְ', 'נפדו': 'נִפְדּוּ', 'גדלו': 'גָּדְלוּ', 'ירדו': 'יָרְדוּ',
   };
   // מהארוך לקצר, כדי ש"רחוב הרצל" ינוקד לפני "הרצל"
   const LEX_KEYS = Object.keys(LEXICON).sort((a, b) => b.length - a.length);
@@ -241,7 +253,8 @@
   }
 
   // הערה: 'offer' לא כאן — ההצעה מוקראת ע"י showBuyDialog בלבד, אחרת נוצרת כפילות
-  const SPOKEN_KINDS = new Set(['turn', 'buy', 'rent', 'jail', 'win', 'debt', 'bankrupt', 'money', 'tax', 'pot']);
+  const SPOKEN_KINDS = new Set(['turn', 'buy', 'rent', 'jail', 'win', 'debt', 'bankrupt', 'money', 'tax', 'pot',
+    'market', 'market_news']);
 
   /* ---------- קריין AI: קליפים מוקלטים מראש (audio/), עם נסיגה לקול הדפדפן ---------- */
 
@@ -263,6 +276,7 @@
     available() { return !!(this.ids && this.ids.size); },
     say(ids, fallbackText) {
       if (!soundOn) return;
+      if (!ids.length) return; // רשימה ריקה = שתיקה מכוונת (למשל השקעות של שחקן אחר)
       const usable = this.ids && ids.every((id) => this.ids.has(id));
       if (usable) {
         this.queue = this.queue.then(async () => {
@@ -277,7 +291,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=14`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=15`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -349,6 +363,12 @@
       case 'pot':
         // הקליפ אומר "זכית!" — נכון רק לשחקן המקומי
         return actor && !actor.isAI && actor.idx === localIdx ? ['ev_pot'] : null;
+      case 'market_news':
+        return [`inv_news_${entry.newsId}`];
+      case 'market':
+        // מדברים רק על ההשקעות של הילד; לשאר השחקנים מערך ריק = שקט
+        if (entry.pIdx !== localIdx) return [];
+        return [entry.delta > 0 ? 'inv_up' : entry.delta < 0 ? 'inv_down' : 'inv_flat'];
       case 'bankrupt':
         if (!vk) return null;
         return [`ev_bankrupt_${vk}`];
@@ -524,8 +544,9 @@
   const BANNER_ICONS = {
     buy: '🛍️', rent: '💸', money: '💰', tax: '🧾', jail: '👮',
     bankrupt: '💥', auction: '🔨', build: '🏠', mortgage: '🏦', trade: '🤝', pot: '🎁',
+    market_news: '📰',
   };
-  const BANNER_KINDS = new Set(['buy', 'rent', 'money', 'tax', 'jail', 'bankrupt', 'pot']);
+  const BANNER_KINDS = new Set(['buy', 'rent', 'money', 'tax', 'jail', 'bankrupt', 'pot', 'market_news']);
 
   // הדמות שמכריזה: ילד/ילדה לשחקן, רובוט למחשב, הקמע לאירועים כלליים
   function avatarFor(g, entry) {
@@ -819,6 +840,9 @@
       }
     }
 
+    // 3.6 סרגל הקופות — מוצג כל הזמן: התיק שלי, קופת הבורסה וקופת הבנק
+    renderMoneyBar(g);
+
     // 4. באנר תור
     const cur = g.current();
     $('#turn-banner').innerHTML =
@@ -841,7 +865,8 @@
           <span class="cc-chip">💳</span>
         </div>
         <div class="cc-balance"></div>
-        <div class="cc-sub"><span>חשבון בנק מונופול</span><span>🏠 ${props} נכסים</span></div>`;
+        <div class="cc-sub"><span>עובר ושב</span><span>🏠 ${props} נכסים</span></div>
+        ${portfolioLineHTML(g, i)}`;
       const balEl = card.querySelector('.cc-balance');
       if (p.bankrupt) balEl.textContent = 'פשיטת רגל';
       else animateBalance(balEl, prev[i] !== undefined ? prev[i] : p.money, p.money);
@@ -1121,6 +1146,16 @@
     const creditor = debt.creditor !== null ? g.players[debt.creditor].name : 'הבנק';
 
     const rows = [];
+    // כסף מושקע הוא הכי קל לגייס — מציגים אותו ראשון
+    if (g.financeEnabled) {
+      for (const h of g.holdings(humanIdx)) {
+        rows.push(`<div class="asset-row">
+          <span class="a-band" style="background:${h.track === 'stocks' ? FIN.TRACKS.stocks.color : FIN.TRACKS[h.track].color}"></span>
+          <span class="a-name">${h.name}</span>
+          <button data-act="withdraw" data-track="${h.track}" data-co="${h.co || ''}">🏦 משיכה +${money(h.value)}</button>
+        </div>`);
+      }
+    }
     for (const pos of g.playerProps(humanIdx)) {
       const sq = BOARD[pos];
       const grp = sq.group ? GROUPS[sq.group] : null;
@@ -1143,14 +1178,14 @@
       <h2>צריך לשלם! 💸</h2>
       <p class="debt-need">חוב של ${money(debt.amount)} ל${creditor}</p>
       <p class="d-sub">בחשבון שלך: <b>${money(p.money)}</b></p>
-      ${canPay ? '' : (rows.length ? '<p class="d-sub">אפשר למכור בתים או לקחת משכנתא:</p>' : '')}
+      ${canPay ? '' : (rows.length ? `<p class="d-sub">אפשר ${g.financeEnabled ? 'למשוך מההשקעות, ' : ''}למכור בתים או לקחת משכנתא:</p>` : '')}
       <div class="asset-list">${rows.join('')}</div>
       <div class="d-actions">
         <button class="big-btn green" id="d-settle" ${canPay ? '' : 'disabled'}>💳 משלמים את החוב</button>
         ${canRaise ? '' : '<button class="big-btn" id="d-bankrupt">😢 פשיטת רגל</button>'}
       </div>`);
     d.querySelectorAll('button[data-act]').forEach((b) => {
-      b.onclick = () => onAction(b.dataset.act, Number(b.dataset.pos));
+      b.onclick = () => onAction(b.dataset.act, Number(b.dataset.pos), { track: b.dataset.track, co: b.dataset.co || null });
     });
     d.querySelector('#d-settle').onclick = () => { closeDialog(); onSettle(); };
     const bk = d.querySelector('#d-bankrupt');
@@ -1189,6 +1224,403 @@
       b.onclick = () => onAction(b.dataset.act, Number(b.dataset.pos));
     });
     d.querySelector('#d-close').onclick = () => { closeDialog(); if (onClose) onClose(); };
+  }
+
+  /* ==================== מצב חינוך פיננסי: הבנק שלי ודוח הבורסה ==================== */
+
+  const FIN = D.FINANCE;
+  const pct = (n) => (n > 0 ? `+${n}%` : n < 0 ? `−${Math.abs(n)}%` : '0%');
+  const deltaHTML = (delta, p) =>
+    `<span class="fin-delta ${delta > 0 ? 'gain' : delta < 0 ? 'loss' : ''}">${delta > 0 ? '+' : delta < 0 ? '−' : ''}${money(Math.abs(delta))}${p !== undefined && delta !== 0 ? ` (${pct(p)})` : ''}</span>`;
+
+  // גרף מגמה זעיר לחברה — קו אחד, ירוק אם עלתה מאז ההתחלה ואדום אם ירדה
+  function sparklineHTML(points) {
+    const pts = points.slice(-8);
+    if (pts.length < 2) return '<span class="fin-spark-empty">חדש</span>';
+    const min = Math.min(...pts); const max = Math.max(...pts);
+    const span = max - min || 1;
+    const coords = pts.map((v, i) => `${(i / (pts.length - 1)) * 60},${18 - ((v - min) / span) * 16}`).join(' ');
+    // הצבע לפי התנועה האחרונה, כדי שיתאים לחץ שמוצג לידו
+    const up = pts[pts.length - 1] >= pts[pts.length - 2];
+    return `<svg class="fin-spark" viewBox="0 0 60 20" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="${coords}" fill="none" stroke="${up ? '#2E7D32' : '#C62828'}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>`;
+  }
+
+  // החץ של הסבב האחרון לחברה מסוימת
+  function lastMoveHTML(g, co) {
+    const arr = g.market.trend[co] || [];
+    if (arr.length < 2) return '';
+    const a = arr[arr.length - 2]; const b = arr[arr.length - 1];
+    const p = Math.round(((b - a) / a) * 100);
+    if (p === 0) return '<span class="fin-arrow">➖ 0%</span>';
+    return `<span class="fin-arrow ${p > 0 ? 'gain' : 'loss'}">${p > 0 ? '▲' : '▼'} ${pct(p)}</span>`;
+  }
+
+  // מד סיכון: שלוש נקודות, ככל שיותר מלאות — יותר מסוכן
+  function riskMeterHTML(track) {
+    const t = FIN.TRACKS[track];
+    const cls = ['low', 'mid', 'high'][t.risk - 1];
+    const dots = [1, 2, 3].map((i) => `<span class="fin-dot ${i <= t.risk ? 'on ' + cls : ''}"></span>`).join('');
+    return `<span class="fin-risk ${cls}" title="${t.riskLabel}">${dots}<b>${t.riskLabel}</b></span>`;
+  }
+
+  // מה קורה ל-100 ש"ח בסבב אחד: בדרך כלל / ביום טוב / ביום רע.
+  // מתורגם מהטבלאות עצמן, כך שכוונון האיזון מעדכן גם את ההסבר.
+  function outcome100(track) {
+    const t = FIN.TRACKS[track];
+    if (track === 'savings') {
+      const v = 100 + Math.round(100 * t.rate);
+      return { typical: v, best: v, worst: v };
+    }
+    const ev = t.table.reduce((sum, r) => sum + r.p * r.m, 0);
+    const ms = t.table.map((r) => r.m);
+    return {
+      typical: Math.round(100 * ev),
+      best: Math.round(100 * Math.max(...ms)),
+      worst: Math.round(100 * Math.min(...ms)),
+    };
+  }
+
+  function outcomeLineHTML(track) {
+    const o = outcome100(track);
+    if (o.best === o.worst) {
+      return `<span class="fin-odds">כל 100 ₪ הופכים ל-<b class="gain">${o.typical} ₪</b> — תמיד</span>`;
+    }
+    return `<span class="fin-odds">כל 100 ₪: בדרך כלל <b>${o.typical}</b> · ביום טוב <b class="gain">${o.best}</b> · ביום רע <b class="loss">${o.worst}</b></span>`;
+  }
+
+  // כרטיס הסבר: מה זה, מתי מרוויחים, מתי מפסידים, וכמה
+  function showInvestInfo(track, coId, onBack) {
+    const t = FIN.TRACKS[track];
+    const co = coId ? FIN.COMPANIES.find((c) => c.id === coId) : null;
+    const o = outcome100(track);
+    const title = co ? `${co.emoji} ${co.name}` : `${t.emoji} ${t.name}`;
+    const what = co ? `${co.what} ${t.what}` : t.what;
+    const good = co ? co.good : t.good;
+    const bad = co ? co.bad : t.bad;
+    const d = openDialog(`
+      <h2>${title}</h2>
+      <p class="d-sub">${riskMeterHTML(track)}</p>
+      <div class="fin-info">
+        <div class="fin-info-row"><span class="fin-info-q">מה זה?</span><span>${what}</span></div>
+        <div class="fin-info-row"><span class="fin-info-q">מתי מרוויחים? 😀</span><span>${good}</span></div>
+        <div class="fin-info-row"><span class="fin-info-q">מתי מפסידים? 😕</span><span>${bad}</span></div>
+        <div class="fin-info-row"><span class="fin-info-q">כמה כסף? 💰</span><span>
+          אם תשקיע <b>100 ₪</b>, בסבב הבא בדרך כלל יהיו לך <b>${o.typical} ₪</b>${o.best === o.worst ? ' — תמיד.'
+            : `.<br>ביום טוב מאוד: <b class="gain">${o.best} ₪</b> · ביום רע: <b class="loss">${o.worst} ₪</b>.`}
+        </span></div>
+      </div>
+      <p class="d-sub fin-info-tip">💡 ככל שאפשר להרוויח יותר — אפשר גם להפסיד יותר. זה הכלל הכי חשוב בכסף!</p>
+      <div class="d-actions"><button class="big-btn green" id="d-back">⬅️ חזרה לבנק</button></div>`);
+    d.querySelector('#d-back').onclick = () => { closeDialog(); if (onBack) onBack(); };
+  }
+
+  // מסך פעילות בנק מונופול: כמה יש לו, במה הוא משקיע וכמה הוא מרוויח.
+  // המסר לילד: הבנק לוקח את הכסף שכולם שמים אצלו, משקיע אותו — וככה מרוויח.
+  function showMainBankDialog(g, onClose) {
+    const b = g.bank;
+    const invested = g.bankInvested();
+    const rows = [
+      { emoji: FIN.TRACKS.deposit.emoji, name: FIN.TRACKS.deposit.name, val: b.invest.deposit, color: FIN.TRACKS.deposit.color },
+      ...FIN.COMPANIES.map((c) => ({ emoji: c.emoji, name: c.name, val: b.invest.stocks[c.id], color: FIN.TRACKS.stocks.color })),
+    ].filter((r) => r.val > 0);
+
+    const share = g.bankTotal() ? Math.round((invested / g.bankTotal()) * 100) : 0;
+    const d = openDialog(`
+      <h2>בנק מונופול 🏦</h2>
+      <p class="d-sub">זה הבנק של כל המשחק — הוא משלם משכורות, מוכר נכסים ושומר את הכסף של כולם.</p>
+      <div class="bank-grid">
+        <div class="bank-cell"><span class="bank-cell-label">💰 כסף בקופת הבנק</span><b>${money(b.cash)}</b></div>
+        <div class="bank-cell"><span class="bank-cell-label">📈 מושקע בבורסה</span><b>${money(invested)}</b><small>${share}% מהכסף שלו</small></div>
+        <div class="bank-cell"><span class="bank-cell-label">🌱 הרוויח מהשקעות</span><b class="${b.profit >= 0 ? 'gain' : 'loss'}">${b.profit >= 0 ? '+' : '−'}${Math.abs(b.profit).toLocaleString('he-IL')} ₪</b></div>
+        <div class="bank-cell"><span class="bank-cell-label">🧾 דמי ניהול שגבה</span><b>${money(b.fees)}</b></div>
+        <div class="bank-cell"><span class="bank-cell-label">💸 משכורות ששילם</span><b>${money(b.salaries)}</b></div>
+        <div class="bank-cell"><span class="bank-cell-label">🎁 קופת הקנסות</span><b>${money(g.pot)}</b><small>לא שייכת לבנק</small></div>
+      </div>
+      <div class="fin-sep">במה הבנק משקיע עכשיו?</div>
+      <div class="asset-list">${rows.length ? rows.map((r) => `
+        <div class="asset-row fin-row"><div class="fin-row-top">
+          <span class="a-band" style="background:${r.color}"></span>
+          <span class="a-name">${r.emoji} ${r.name}</span>
+          <span class="fin-val">${money(r.val)}</span>
+        </div></div>`).join('') : '<p class="d-sub">הבנק עוד לא התחיל להשקיע — זה קורה בסוף הסבב הראשון.</p>'}</div>
+      <p class="d-sub fin-info-tip">💡 שמים לב? גם הבנק משקיע את הכסף שלו בדיוק כמוך — וגם הוא לפעמים מפסיד.
+        הוא מרוויח גם מדמי ניהול קטנים שהוא לוקח על הכסף שהוא מנהל בשביל השחקנים.</p>
+      <div class="bank-pool">📊 קופת הבורסה כולה: <b>${money(g.marketPool())}</b>
+        <small>מתוכם השחקנים ${money(g.marketPool() - invested)} והבנק ${money(invested)} — לבנק יש הכי הרבה כסף, ולכן גם הכי הרבה מושקע.</small></div>
+      <div class="d-actions"><button class="big-btn green" id="d-ok">👍 הבנתי</button></div>`);
+    d.querySelector('#d-ok').onclick = () => { closeDialog(); if (onClose) onClose(); };
+  }
+
+  /* סרגל הקופות: שלוש הקופות של המשחק, גלויות תמיד ולחיצות.
+   * זה מה שמאפשר לילד לעקוב אחרי הכסף בלי לפתוח שום חלונית. */
+  function renderMoneyBar(g) {
+    const bar = $('#money-bar');
+    if (!bar) return;
+    bar.classList.toggle('hidden', !g.financeEnabled);
+    if (!g.financeEnabled) return;
+
+    const me = g.players[localIdx];
+    const mine = g.investTotal(localIdx);
+    const profit = g.investProfit(localIdx);
+    const pcls = profit > 0 ? 'gain' : profit < 0 ? 'loss' : '';
+    const parrow = profit > 0 ? '▲' : profit < 0 ? '▼' : '➖';
+    const bankInv = g.bankInvested();
+
+    bar.innerHTML = `
+      <div class="mb-title">💰 הכסף במשחק</div>
+      <button class="mb-cell mb-mine" data-open="portfolio">
+        <span class="mb-label">💼 החשבון שלי</span>
+        <span class="mb-rows">
+          <span class="mb-row"><span>עו"ש</span><b>${money(me.money)}</b></span>
+          <span class="mb-row"><span>תיק השקעות</span><b>${money(mine)}</b></span>
+        </span>
+        ${me.invest && me.invest.totalIn ? `<span class="mb-delta ${pcls}">${parrow} ${profit > 0 ? '+' : profit < 0 ? '−' : ''}${Math.abs(profit).toLocaleString('he-IL')} ₪</span>` : '<span class="mb-hint">לחיצה כדי להשקיע</span>'}
+      </button>
+      <div class="mb-two">
+        <button class="mb-cell mb-market" data-open="bank">
+          <span class="mb-label">📈 קופת הבורסה</span>
+          <b>${money(g.marketPool())}</b>
+          <span class="mb-hint">כל הכסף שמושקע</span>
+        </button>
+        <button class="mb-cell mb-bank" data-open="bank">
+          <span class="mb-label">🏦 בנק מונופול</span>
+          <b>${money(g.bank.cash)}</b>
+          <span class="mb-hint">מושקע: ${money(bankInv)}</span>
+        </button>
+      </div>
+      ${g.potEnabled ? `<div class="mb-pot">🎁 קופת הקנסות<b>${money(g.pot)}</b></div>` : ''}`;
+
+    bar.querySelectorAll('[data-open]').forEach((b) => {
+      b.onclick = () => {
+        if (b.dataset.open === 'bank') showMainBankDialog(g, () => {});
+        else if (onOpenPortfolio) onOpenPortfolio();
+      };
+    });
+  }
+
+  // main.js מחבר לכאן את פתיחת תיק ההשקעות (הסרגל לא יודע לשחק בעצמו)
+  let onOpenPortfolio = null;
+  function setPortfolioOpener(fn) { onOpenPortfolio = fn; }
+
+  // שורת "תיק השקעות" על הכרטיס: שווי, רווח/הפסד ואחוז — נפרד מהעו"ש
+  function portfolioLineHTML(g, idx) {
+    if (!g.financeEnabled || g.players[idx].bankrupt) return '';
+    const val = g.investTotal(idx);
+    const inv = g.players[idx].invest;
+    if (!val && !inv.totalIn) return '';
+    const profit = g.investProfit(idx);
+    const cls = profit > 0 ? 'gain' : profit < 0 ? 'loss' : '';
+    const arrow = profit > 0 ? '▲' : profit < 0 ? '▼' : '➖';
+    // אחוז מוצג רק כשיש בסיס אמיתי להשוואה (כמה הופקד)
+    const pc = inv.totalIn > 0 ? Math.round((profit / inv.totalIn) * 100) : null;
+    const pcTxt = pc === null ? '' : ` (${pc > 0 ? '+' : pc < 0 ? '−' : ''}${Math.abs(pc)}%)`;
+    return `<div class="cc-portfolio">
+      <span class="ccp-label">📈 תיק השקעות</span>
+      <span class="ccp-val">${money(val)}</span>
+      <span class="ccp-delta ${cls}">${arrow} ${profit > 0 ? '+' : profit < 0 ? '−' : ''}${Math.abs(profit).toLocaleString('he-IL')} ₪${pcTxt}</span>
+    </div>`;
+  }
+
+  function showBankDialog(g, humanIdx, { onInvest, onWithdraw, onClose }) {
+    const p = g.players[humanIdx];
+    const chunkBtns = (track, co) => FIN.DEPOSIT_CHUNKS
+      .map((amt) => `<button class="fin-chunk" data-act="invest" data-track="${track}" data-co="${co || ''}" data-amt="${amt}" ${p.money >= amt ? '' : 'disabled'}>+${amt}</button>`)
+      .join('');
+    const wdBtn = (track, co, val) => (val > 0
+      ? `<button class="fin-wd" data-act="withdraw" data-track="${track}" data-co="${co || ''}">⬅️ משיכה ${money(val)}</button>`
+      : '');
+
+    const infoBtn = (track, co) => `<button class="fin-info-btn" data-act="info" data-track="${track}" data-co="${co || ''}" title="מה זה?">❔</button>`;
+
+    const trackRow = (track) => {
+      const t = FIN.TRACKS[track];
+      const val = p.invest[track];
+      return `<div class="asset-row fin-row">
+        <div class="fin-row-top">
+          <span class="a-band" style="background:${t.color}"></span>
+          <span class="a-name">${t.emoji} ${t.name} ${riskMeterHTML(track)}
+            <small class="fin-blurb">${outcomeLineHTML(track)}</small></span>
+          <span class="fin-val">${val > 0 ? money(val) : '—'}</span>
+        </div>
+        <div class="fin-row-bot">${infoBtn(track, null)}${chunkBtns(track, null)}${wdBtn(track, null, val)}</div>
+      </div>`;
+    };
+
+    const coRow = (c) => {
+      const val = p.invest.stocks[c.id];
+      return `<div class="asset-row fin-row">
+        <div class="fin-row-top">
+          <span class="a-band" style="background:${FIN.TRACKS.stocks.color}"></span>
+          <span class="a-name">${c.emoji} ${c.name}
+            <small class="fin-blurb">${sparklineHTML(g.market.trend[c.id])} ${lastMoveHTML(g, c.id)}</small></span>
+          <span class="fin-val">${val > 0 ? money(val) : '—'}</span>
+        </div>
+        <div class="fin-row-bot">${infoBtn('stocks', c.id)}${chunkBtns('stocks', c.id)}${wdBtn('stocks', c.id, val)}</div>
+      </div>`;
+    };
+
+    const total = g.investTotal(humanIdx);
+    const profit = g.investProfit(humanIdx);
+    const pcProfit = p.invest.totalIn ? Math.round((profit / p.invest.totalIn) * 100) : 0;
+    const d = openDialog(`
+      <h2>תיק ההשקעות שלי 📈</h2>
+      <div class="pf-summary">
+        <div class="pf-box"><span class="pf-label">💳 עובר ושב</span><b>${money(p.money)}</b></div>
+        <div class="pf-arrow">⇄</div>
+        <div class="pf-box pf-invest"><span class="pf-label">📈 בתיק ההשקעות</span><b>${money(total)}</b>
+          ${p.invest.totalIn ? `<small class="fin-delta ${profit > 0 ? 'gain' : profit < 0 ? 'loss' : ''}">${profit > 0 ? '▲ +' : profit < 0 ? '▼ −' : '➖ '}${Math.abs(profit).toLocaleString('he-IL')} ₪ (${pcProfit > 0 ? '+' : pcProfit < 0 ? '−' : ''}${Math.abs(pcProfit)}%)</small>` : ''}
+        </div>
+      </div>
+      <p class="d-sub">💡 שמים כסף בבנק, והוא עובד בשבילך! בקופת החיסכון הכסף בטוח וגדל לאט. במניות הוא יכול לגדול הרבה — או לרדת.</p>
+      <p class="d-sub fin-hint">לוחצים על <b>❔</b> ליד כל אפשרות כדי לראות מה זה, מתי מרוויחים ומתי מפסידים.</p>
+      <div class="asset-list">
+        ${trackRow('savings')}
+        ${trackRow('deposit')}
+        <div class="fin-sep">${FIN.TRACKS.stocks.emoji} מניות של חברות — קונים חלק קטן בחברה ${riskMeterHTML('stocks')}
+          <small class="fin-blurb">${outcomeLineHTML('stocks')}</small></div>
+        ${FIN.COMPANIES.map(coRow).join('')}
+      </div>
+      <p class="d-sub fin-fee-note">🧾 <b>דמי ניהול:</b> על פיקדון ומניות הבנק לוקח ${Math.round(FIN.FEE_RATE * 100)}% בכל סבב
+        (מתחת ל-100 ₪ — בלי עמלה). בקופת החיסכון אין דמי ניהול בכלל.</p>
+      <div class="d-actions"><button class="big-btn green" id="d-close">✅ סיימתי</button></div>`);
+
+    d.querySelectorAll('button[data-act]').forEach((b) => {
+      b.onclick = () => {
+        const co = b.dataset.co || null;
+        if (b.dataset.act === 'info') showInvestInfo(b.dataset.track, co, () => showBankDialog(g, humanIdx, { onInvest, onWithdraw, onClose }));
+        else if (b.dataset.act === 'invest') onInvest(b.dataset.track, co, Number(b.dataset.amt));
+        else onWithdraw(b.dataset.track, co);
+      };
+    });
+    d.querySelector('#d-close').onclick = () => { closeDialog(); if (onClose) onClose(); };
+  }
+
+  /* הצעת השקעה יזומה — הילד לא צריך לזכור להיכנס לבנק.
+   * kind: 'first' (עוד לא השקיע) | 'windfall' (נכנס כסף) | 'profit' (הרוויח בבורסה) */
+  function showInvestOffer(g, humanIdx, { kind, reason, options, onInvest, onSkip, onOpenBank }) {
+    const p = g.players[humanIdx];
+    const head = {
+      first: 'רוצה שהכסף שלך יעבוד בשבילך? 🏦',
+      windfall: 'נכנס לך כסף! מה עושים איתו? 💰',
+      profit: 'ההשקעה שלך הרוויחה! ממשיכים? 📈',
+    }[kind] || 'רעיון להשקעה 💡';
+
+    const tip = {
+      first: 'כסף שיושב בחשבון נשאר בדיוק אותו דבר. כסף שמושקע — גדל.',
+      windfall: 'אפשר לשמור הכול, ואפשר לקחת חלק קטן ולתת לו לגדול.',
+      profit: 'ככה עובד כסף: מה שהרווחת יכול להמשיך להרוויח בעצמו.',
+    }[kind] || '';
+
+    const btns = options.map((o) => {
+      const t = FIN.TRACKS[o.track];
+      const co = o.co ? FIN.COMPANIES.find((c) => c.id === o.co) : null;
+      const label = co ? `${co.emoji} ${co.name}` : `${t.emoji} ${t.name}`;
+      const oc = outcome100(o.track);
+      const range = oc.best === oc.worst
+        ? `בטוח: כל 100 ₪ הופכים ל-${oc.typical} ₪`
+        : `בדרך כלל ${oc.typical} ₪ · ביום טוב ${oc.best} · ביום רע ${oc.worst}`;
+      return `<button class="fin-offer-btn" data-track="${o.track}" data-co="${o.co || ''}" data-amt="${o.amount}"
+        ${p.money >= o.amount ? '' : 'disabled'}>
+        <span class="fo-top">${label} — ${money(o.amount)}</span>
+        <span class="fo-mid">${riskMeterHTML(o.track)}</span>
+        <span class="fo-bot">על כל 100 ₪: ${range}</span>
+      </button>`;
+    }).join('');
+
+    const d = openDialog(`
+      <h2>${head}</h2>
+      ${reason ? `<p class="d-sub fin-offer-why">${reason}</p>` : ''}
+      <p class="d-sub">${tip}</p>
+      <div class="fin-offer-list">${btns}</div>
+      <div class="d-actions fin-offer-actions">
+        <button class="big-btn blue" id="d-more">🏦 לראות את כל האפשרויות</button>
+        <button class="mid-btn" id="d-skip">לא עכשיו, תודה</button>
+      </div>`);
+    const clip = { first: 'inv_offer_first', windfall: 'inv_offer_windfall', profit: 'inv_offer_profit' }[kind];
+    if (clip) narrator.say([clip], `${head} ${tip}`);
+
+    d.querySelectorAll('.fin-offer-btn').forEach((b) => {
+      b.onclick = () => onInvest(b.dataset.track, b.dataset.co || null, Number(b.dataset.amt));
+    });
+    d.querySelector('#d-more').onclick = () => { closeDialog(); onOpenBank(); };
+    d.querySelector('#d-skip').onclick = () => { closeDialog(); onSkip(); };
+  }
+
+  // דוח הבורסה בסוף כל סבב — הלב החינוכי: לכל שינוי יש סיפור והסבר
+  function showMarketReport(g, humanIdx, onClose, onInvestMore) {
+    const rep = g.market.report;
+    if (!rep) { if (onClose) onClose(); return; }
+    const mine = rep.entries.filter((e) => e.idx === humanIdx);
+    const myTotal = rep.totals[humanIdx] || 0;
+
+    let newsBox = '';
+    if (rep.news) {
+      const co = FIN.COMPANIES.find((c) => c.id === rep.news.co);
+      const holdsIt = mine.some((e) => e.co === rep.news.co);
+      const dir = rep.news.m > 1 ? 'עלתה' : 'ירדה';
+      const note = holdsIt
+        ? `יש לך מניות שלה — לכן ההשקעה שלך ${dir}!`
+        : `אין לך מניות שלה, אז זה לא השפיע על הכסף שלך הפעם.`;
+      newsBox = `<div class="fin-news">📰 <b>חדשות!</b> ${rep.news.text}
+        <div class="fin-news-note">${co.emoji} ${co.name} ${dir}. ${note}</div></div>`;
+    }
+
+    const rows = mine.map((e) => `
+      <div class="asset-row fin-report-row">
+        <span class="a-band" style="background:${e.track === 'stocks' ? FIN.TRACKS.stocks.color : FIN.TRACKS[e.track].color}"></span>
+        <span class="a-name">${e.name}<small class="fin-blurb">${e.reason}</small></span>
+        <span class="fin-val">${money(e.oldVal)} ← <b>${money(e.newVal)}</b></span>
+        <span class="fin-btns">${deltaHTML(e.delta, e.pct)}</span>
+      </div>`).join('');
+
+    const myFee = rep.fees ? rep.fees[humanIdx] || 0 : 0;
+    const feeRow = myFee ? `<div class="asset-row fin-report-row fin-fee-row"><div class="fin-row-top">
+        <span class="a-band" style="background:#B0A48A"></span>
+        <span class="a-name">🧾 דמי ניהול לבנק<small class="fin-blurb">הבנק לוקח עמלה קטנה על הכסף שהוא מנהל בשבילך</small></span>
+        <span class="fin-btns">${deltaHTML(-myFee)}</span>
+      </div></div>` : '';
+
+    const others = g.players
+      .filter((p) => p.idx !== humanIdx && !p.bankrupt && rep.totals[p.idx] !== undefined && g.holdings(p.idx).length)
+      .map((p) => `<div class="fin-other">${p.token} ${p.name}: ${deltaHTML(rep.totals[p.idx])}</div>`).join('');
+
+    const headline = mine.length
+      ? (myTotal > 0 ? `הכסף שלך עבד יפה! ${deltaHTML(myTotal)} 🎉`
+        : myTotal < 0 ? `הפעם ירדנו קצת: ${deltaHTML(myTotal)} — ככה זה בהשקעות, בדרך כלל זה חוזר לעלות 💪`
+          : 'הפעם ההשקעות שלך נשארו בדיוק אותו דבר.')
+      : 'עוד לא השקעת כסף. אפשר להתחיל דרך כפתור 🏦 הבנק שלי!';
+
+    if (soundOn) { if (myTotal > 0) sounds.gain(); else if (myTotal < 0) sounds.loss(); }
+
+    // אחרי רווח — הזדמנות ללחוץ ולהשקיע עוד, בלי לחפש את הבנק
+    const best = mine.slice().sort((a, b) => b.pct - a.pct)[0];
+    const p = g.players[humanIdx];
+    let boost = '';
+    if (onInvestMore && myTotal > 0 && best && p.money >= 50) {
+      const amt = p.money >= 100 ? 100 : 50;
+      boost = `<div class="fin-boost">
+        <div class="fin-boost-q">רוצה להשקיע עוד ב${best.name}?</div>
+        <div class="fin-boost-why">מה שהרווחת יכול להמשיך להרוויח בעצמו 🌱</div>
+        <button class="big-btn green" id="d-more-inv" data-track="${best.track}" data-co="${best.co || ''}" data-amt="${amt}">➕ עוד ${money(amt)}</button>
+      </div>`;
+    }
+
+    const d = openDialog(`
+      <h2>חדשות הבורסה 📊 <small class="fin-round">סבב ${rep.round}</small></h2>
+      ${newsBox}
+      <p class="d-sub">${headline}</p>
+      <div class="asset-list">${rows}${feeRow}</div>
+      ${boost}
+      ${others ? `<p class="d-sub fin-others">מה קרה לאחרים: ${others}</p>` : ''}
+      <div class="d-actions"><button class="big-btn green" id="d-ok">👍 הבנתי</button></div>`);
+    const more = d.querySelector('#d-more-inv');
+    if (more) more.onclick = () => {
+      closeDialog();
+      onInvestMore(more.dataset.track, more.dataset.co || null, Number(more.dataset.amt));
+    };
+    d.querySelector('#d-ok').onclick = () => { closeDialog(); if (onClose) onClose(); };
   }
 
   function showTradeDialog(g, humanIdx, aiIdx, { onSubmit, onClose }) {
@@ -1292,6 +1724,9 @@
     { id: 'railking',   emoji: '🚂', label: 'שליט/ת הרכבות',   cond: (g, i) => g.countOwned(i, 'rail') >= 2 },
     { id: 'landlord',   emoji: '🏘️', label: 'אספן/ית נכסים',   cond: (g, i) => g.playerProps(i).length >= 5 },
     { id: 'millionaire',emoji: '💰', label: 'עשיר/ה גדול/ה',   cond: (g, i) => g.netWorth(i) >= 2500 },
+    { id: 'investor',   emoji: '📈', label: 'משקיע/ה חכם/ה',   cond: (g, i) => g.financeEnabled && g.investProfit(i) > 0 },
+    { id: 'diamond',    emoji: '💎', label: 'ידיים של יהלום',   cond: (g, i) => !!(g.players[i].invest && g.players[i].invest.crashSurvived) },
+    { id: 'saver',      emoji: '🐷', label: 'חוסך/ת מתמיד/ה',   cond: (g, i) => !!(g.players[i].invest && g.players[i].invest.totalIn >= 300) },
     { id: 'player',     emoji: '🎮', label: 'שיחקתי מונופול!', cond: () => true },
   ];
   const ALBUM_KEY = 'monopoly-hebrew-stickers';
@@ -1386,6 +1821,7 @@
       <div class="win-burst">🏆</div>
       <h2>${title}</h2>
       <div class="win-standings">${rows}</div>
+      ${g.financeEnabled ? `<div class="win-finance">📈 ההשקעות שלך: הפקדת ${money(g.players[humanIdx].invest.totalIn)} · ${g.investProfit(humanIdx) >= 0 ? 'הרווחת' : 'הפסדת'} ${deltaHTML(g.investProfit(humanIdx))}</div>` : ''}
       ${wealthChart(g, extra.history)}
       <div class="win-stickers-title">המדבקות שהרווחת 🏅</div>
       <div class="sticker-strip">${stickerHTML}</div>
@@ -1404,12 +1840,29 @@
     setTimeout(() => t.remove(), 3600);
   }
 
+
   /* ==================== מה חדש? — יומן גרסאות לשחקנים ==================== */
 
   // חמש הגרסאות האחרונות, מהחדשה לישנה. current = הגרסה שרצה עכשיו.
   const VERSIONS = [
     {
-      id: 'v14', label: 'גרסה 14', date: 'אוגוסט 2026', current: true,
+      id: 'v15', label: 'גרסה 15', date: 'אוגוסט 2026', current: true,
+      title: 'מצב חינוך פיננסי 🏦',
+      items: [
+        '🏦 חדש! מצב חינוך פיננסי — בוחרים אותו במסך הפתיחה ולומדים להשקיע כסף',
+        '🐷 שלושה מסלולים: קופת חיסכון בטוחה, פיקדון, ומניות של חברות',
+        '🍦 ארבע חברות להשקעה: מפעל הגלידה, חברת הצעצועים, חלליות ישראל ורשת הפיצה',
+        '📊 בסוף כל סבב מגיע דוח בורסה שמסביר בדיוק למה הרווחתם או הפסדתם',
+        '📰 אירועי חדשות מזיזים את המניות — "קיץ לוהט, כולם קונים גלידה!"',
+        '💡 המשחק מציע להשקיע ברגעים הנכונים, ומסביר לכל אפשרות מה הסיכון ומה אפשר להרוויח',
+        '💳 החשבון מופרד: עובר ושב בצד אחד, תיק השקעות בצד שני — עם רווח באחוזים',
+        '🏦 מסך בנק מונופול: כמה כסף יש לבנק, במה הוא משקיע וכמה הוא מרוויח',
+        '🧾 דמי ניהול קטנים על פיקדון ומניות — כמו בבנק אמיתי',
+        '📈 שלוש מדבקות חדשות: משקיע/ה חכם/ה, ידיים של יהלום, וחוסך/ת מתמיד/ה',
+      ],
+    },
+    {
+      id: 'v14', label: 'גרסה 14', date: 'אוגוסט 2026',
       title: 'תיקוני משחק וקריינות 🔧',
       items: [
         '🅿️ חניה חופשית: עוצרים שם ומסיימים את התור, תמיד',
@@ -1418,7 +1871,6 @@
         '👆 רמז מהבהב על הכפתור שצריך ללחוץ, כדי שאף אחד לא יתקע',
         '🏷️ תג מחיר גדול וברור על כל משבצת',
         '🔨 הבוט התחזק במכירות הפומביות',
-        '🧪 חדש בגרסת הנסיון: מצב חינוך פיננסי — משקיעים כסף ולומדים על חיסכון ומניות',
       ],
     },
     {
@@ -1488,13 +1940,22 @@
     d.querySelector('#d-ok').onclick = () => closeDialog();
   }
 
-  // מוצג פעם אחת אחרי עדכון גרסה — לא בביקור הראשון של שחקן חדש
+  // מוצג פעם אחת אחרי עדכון גרסה — לא בביקור הראשון של שחקן חדש.
+  // שחקן ותיק מזוהה גם בלי סימון גרסה: משחק שמור, אלבום מדבקות או מדריך שנצפה.
+  function returningPlayer() {
+    try {
+      return !!(localStorage.getItem('monopoly-hebrew-save')
+        || localStorage.getItem(TUTORIAL_KEY)
+        || (localStorage.getItem(ALBUM_KEY) || '[]') !== '[]');
+    } catch (e) { return false; }
+  }
+
   function showWhatsNewIfUpdated() {
     let seen = null;
     try { seen = localStorage.getItem(WHATSNEW_KEY); } catch (e) { return; }
     if (seen === VERSIONS[0].id) return;
     try { localStorage.setItem(WHATSNEW_KEY, VERSIONS[0].id); } catch (e) { /* */ }
-    if (!seen) return; // שחקן חדש — לא מציפים אותו ביומן גרסאות
+    if (!seen && !returningPlayer()) return; // שחקן חדש לגמרי — לא מציפים אותו ביומן גרסאות
     setTimeout(() => showWhatsNew(2), 400);
   }
 
@@ -1503,6 +1964,18 @@
   const TUTORIAL_KEY = 'monopoly-hebrew-tutorial-seen';
   function tutorialSeen() { try { return localStorage.getItem(TUTORIAL_KEY) === '1'; } catch (e) { return false; } }
   function markTutorialSeen() { try { localStorage.setItem(TUTORIAL_KEY, '1'); } catch (e) { /* */ } }
+
+  // מדריך קצר למצב החינוך הפיננסי — רץ פעם אחת, בפעם הראשונה שמפעילים אותו
+  const FIN_TUTORIAL_KEY = 'monopoly-hebrew-fin-tutorial-seen';
+  function finTutorialSeen() { try { return localStorage.getItem(FIN_TUTORIAL_KEY) === '1'; } catch (e) { return false; } }
+  const FIN_TUTORIAL_STEPS = [
+    { sel: null, emoji: '🏦', text: 'בַּמִּשְׂחָק הַזֶּה יֵשׁ בַּנְק הַשְׁקָעוֹת! שָׂמִים בּוֹ כֶּסֶף — וְהוּא יָכוֹל לִגְדֹּל לְבַד, בְּלִי שֶׁתַּעֲשֶׂה כְּלוּם.' },
+    { sel: null, emoji: '🐷', text: 'קֻפַּת חִסָּכוֹן: הַכֶּסֶף שָׁם בָּטוּחַ לְגַמְרֵי. בְּכָל סִבּוּב הַבַּנְק מוֹסִיף לְךָ עוֹד קְצָת. תָּמִיד!' },
+    { sel: null, emoji: '🌳', text: 'פִּקָּדוֹן: כְּמוֹ עֵץ שֶׁגָּדֵל. בְּדֶרֶךְ כְּלָל הוּא נוֹתֵן לְךָ פֵּרוֹת, וְלִפְעָמִים הוּא פָּשׁוּט נָח.' },
+    { sel: null, emoji: '🚀', text: 'מְנָיוֹת: קוֹנִים חֵלֶק קָטָן בְּחֶבְרָה, כְּמוֹ מִפְעַל הַגְּלִידָה. אִם הַחֶבְרָה מַצְלִיחָה — הַכֶּסֶף שֶׁלְּךָ גָּדֵל הַרְבֵּה. וְאִם לֹא — הוּא יוֹרֵד. מְסֻכָּן, אֲבָל מְעַנְיֵן!' },
+    { sel: null, emoji: '💡', text: 'טִיפ שֶׁל מְבֻגָּרִים: לֹא שָׂמִים אֶת כָּל הַכֶּסֶף בְּמָקוֹם אֶחָד. קְצָת פֹּה וּקְצָת שָׁם — כָּךְ בָּטוּחַ יוֹתֵר.' },
+    { sel: '#bank-btn', emoji: '👆', text: 'בַּתּוֹר שֶׁלְּךָ לוֹחֲצִים כָּאן כְּדֵי לְהַשְׁקִיעַ אוֹ לִמְשֹׁךְ כֶּסֶף. אַחֲרֵי כָּל סִבּוּב תִּרְאֶה בַּחֲדָשׁוֹת מָה קָרָה לַכֶּסֶף שֶׁלְּךָ!' },
+  ];
 
   const TUTORIAL_STEPS = [
     { sel: null, emoji: '👋', text: 'שָׁלוֹם! אֲנִי אֶלַמֵּד אוֹתְךָ אֵיךְ מְשַׂחֲקִים מוֹנוֹפּוֹל. זֶה קַל וְכֵיף!' },
@@ -1514,7 +1987,7 @@
     { sel: '#end-turn-btn', emoji: '✅', text: 'בְּסוֹף הַתּוֹר לוֹחֲצִים כָּאן. הַמַּטָּרָה: לִהְיוֹת הָאַחֲרוֹן שֶׁנִּשְׁאָר עִם כֶּסֶף. בְּהַצְלָחָה!' },
   ];
 
-  function startTutorial(onDone) {
+  function startTutorial(onDone, steps = TUTORIAL_STEPS, seenKey = TUTORIAL_KEY) {
     let i = 0;
     const overlay = el('div', 'tut-overlay');
     overlay.innerHTML = `
@@ -1539,16 +2012,16 @@
     function finish() {
       speechSynthesis && speechSynthesis.cancel && speechSynthesis.cancel();
       overlay.remove();
-      markTutorialSeen();
+      try { localStorage.setItem(seenKey, '1'); } catch (e) { /* */ }
       if (onDone) onDone();
     }
 
     function show() {
-      const step = TUTORIAL_STEPS[i];
+      const step = steps[i];
       emojiEl.textContent = step.emoji || '💡';
       textEl.textContent = step.text;
-      nextBtn.textContent = i === TUTORIAL_STEPS.length - 1 ? '🎉 מתחילים!' : 'הבא ▶';
-      progEl.textContent = `${i + 1} / ${TUTORIAL_STEPS.length}`;
+      nextBtn.textContent = i === steps.length - 1 ? '🎉 מתחילים!' : 'הבא ▶';
+      progEl.textContent = `${i + 1} / ${steps.length}`;
       // זרקור על היעד
       const target = step.sel && $(step.sel);
       const r = target && target.getBoundingClientRect();
@@ -1576,7 +2049,7 @@
 
     nextBtn.onclick = () => {
       i++;
-      if (i >= TUTORIAL_STEPS.length) finish();
+      if (i >= steps.length) finish();
       else show();
     };
     overlay.querySelector('#tut-skip').onclick = finish;
@@ -1640,6 +2113,7 @@
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
     showStickerAlbum, startTutorial, tutorialSeen,
     setLocalIdx, nudge, clearNudge, deedHTML,
+    showBankDialog, showMainBankDialog, setPortfolioOpener, showMarketReport, showInvestInfo, showInvestOffer, outcome100, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
     showWhatsNew, showWhatsNewIfUpdated, VERSIONS,
   };
 })();

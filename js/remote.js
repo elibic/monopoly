@@ -351,6 +351,9 @@
       });
     };
     if (trade) trade.style.display = 'none';
+    // מצב חינוך פיננסי לא פעיל במשחק מרחוק (המארח פותח משחק בלי אפשרויות בית)
+    const bank = $('#bank-btn');
+    if (bank) bank.style.display = 'none';
     const restart = $('#restart-btn');
     if (restart) restart.onclick = () => { if (confirm('לצאת מהמשחק המשותף?')) location.reload(); };
   }
