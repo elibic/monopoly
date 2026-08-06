@@ -1715,6 +1715,7 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 }
 .asset-row button.fin-custom-btn:hover:not(:disabled) { background: #E6D9F7; }
 
+.fin-slider[hidden] { display: none; }   /* display:flex גובר על תכונת hidden — צריך כלל מפורש */
 .fin-slider {
   margin-top: 7px; background: #F7FBFF; border: 2px dashed #B6D4EC;
   border-radius: 13px; padding: 9px 11px;
