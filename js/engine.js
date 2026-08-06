@@ -555,7 +555,7 @@
     _resolveLanding(opts = {}) {
       const p = this.current();
       const sq = this.square(p.pos);
-      this._log(`${p.name} ${v(p, 'הגיע', 'הגיעה')} אל "${sq.name}".`, 'move');
+      this._log(`${p.name} ${v(p, 'הגיע', 'הגיעה')} אל "${sq.name}".`, 'move', { pIdx: p.idx, pos: p.pos });
 
       switch (sq.type) {
         case 'street':
@@ -601,7 +601,7 @@
             }
             // מנוחה בחניה: התור נגמר כאן בכל מקרה — גם כשזוכים בקופה
             // וגם אחרי דאבל (אין הטלה נוספת).
-            this._log(`🅿️ חניה חופשית — ${p.name} ${v(p, 'נח', 'נחה')} ו${v(p, 'מפסיד', 'מפסידה')} את התור.`, 'info');
+            this._log(`🅿️ חניה חופשית — ${p.name} ${v(p, 'נח', 'נחה')} ו${v(p, 'מפסיד', 'מפסידה')} את התור${this.doubles > 0 ? ' (גם אחרי דאבל)' : ''}.`, 'park');
             return this._afterAction({ ...opts, noExtraRoll: true });
           }
           break;
@@ -820,7 +820,7 @@
           if (pos < from) this._salary(p);
           const sq2 = this.square(pos);
           const ownerIdx = this.owner[pos];
-          this._log(`${p.name} ${v(p, 'הגיע', 'הגיעה')} אל "${sq2.name}".`, 'move');
+          this._log(`${p.name} ${v(p, 'הגיע', 'הגיעה')} אל "${sq2.name}".`, 'move', { pIdx: p.idx, pos: p.pos });
           if (ownerIdx === null) {
             this.pendingBuy = pos;
             this.phase = 'buy';
@@ -850,6 +850,7 @@
 
     _goToJail(p) {
       p.pos = C.JAIL_POS;
+      this._log(`${p.name} ${v(p, 'נכנס', 'נכנסה')} לבית הכלא.`, 'move', { pIdx: p.idx, pos: C.JAIL_POS });
       p.inJail = true;
       p.jailRolls = 0;
       this.doubles = 0;

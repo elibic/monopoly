@@ -913,3 +913,43 @@ test('שמירה ושחזור שומרים את קופת הבנק', () => {
   delete old.bank;
   assert.equal(Game.restore(old).bank.cash, F.BANK_START);
 });
+
+/* ---------- יומן תנועה: הממשק מנפיש כל רגל בנפרד לפי המשבצות ---------- */
+
+test('רשומת תנועה נושאת את המשבצת ואת השחקן', () => {
+  const g = twoPlayers({ diceQueue: [[1, 2]] });
+  g.rollDice();
+  const moves = g.log.filter((e) => e.kind === 'move');
+  assert.equal(moves.length, 1);
+  assert.equal(moves[0].pos, 3);
+  assert.equal(moves[0].pIdx, 0);
+});
+
+test('קלף שמזיז אחורה מייצר שתי רגלי תנועה — לפני הקלף ואחריו', () => {
+  const g = twoPlayers({ diceQueue: [[3, 2]], cardQueue: ['cc13'] });
+  g.players[0].pos = 28;
+  g.rollDice(); // 28+5=33 תיבת המזל, ואז 3 אחורה ל-30
+  const kinds = g.log.filter((e) => ['move', 'card'].includes(e.kind)).map((e) => e.kind);
+  assert.deepEqual(kinds.slice(0, 3), ['move', 'card', 'move'], 'הקלף חייב להיות בין שתי הרגליים');
+  const moves = g.log.filter((e) => e.kind === 'move');
+  assert.equal(moves[0].pos, 33, 'רגל ראשונה — עד משבצת ההפתעה');
+  assert.equal(moves[1].pos, 30, 'רגל שנייה — אחרי הקלף');
+});
+
+test('כניסה לכלא רושמת תנועה משלה', () => {
+  const g = twoPlayers({ diceQueue: [[2, 2]] });
+  g.players[0].pos = 26; // 26+4=30 "לך לכלא"
+  g.rollDice();
+  const moves = g.log.filter((e) => e.kind === 'move');
+  assert.equal(moves[moves.length - 1].pos, 10, 'הרגל האחרונה היא הכניסה לכלא');
+  assert.equal(g.players[0].pos, 10);
+});
+
+test('חניה חופשית מסומנת בסוג משלה כדי שתופיע בסיכום תור הבוט', () => {
+  const g = twoPlayers({ diceQueue: [[2, 2]] });
+  g.players[0].pos = 16; // 16+4=20
+  g.rollDice();
+  const park = g.log.find((e) => e.kind === 'park');
+  assert.ok(park, 'אין רשומת חניה חופשית');
+  assert.match(park.text, /דאבל/, 'צריך להסביר שגם דאבל לא נותן תור נוסף כאן');
+});

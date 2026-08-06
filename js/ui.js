@@ -768,19 +768,50 @@
     return SVG.house().repeat(h);
   }
 
+  // מצייר מחדש רק את החיילים הסטטיים — נדרש אחרי כל רגל תנועה
+  function paintTokens(g) {
+    for (const sq of BOARD) {
+      const toks = document.querySelector(`#sq-${sq.pos} .sq-tokens`);
+      if (!toks) continue;
+      toks.innerHTML = '';
+      for (const p of g.players) {
+        const shownPos = lastPositions[p.idx] !== undefined ? lastPositions[p.idx] : p.pos;
+        if (!p.bankrupt && shownPos === sq.pos) {
+          const t = el('span', 'tok', p.token);
+          t.style.setProperty('--pc', PLAYER_COLORS[p.idx]);
+          if (p.idx === g.turn && g.phase !== 'gameover') t.classList.add('current');
+          toks.appendChild(t);
+        }
+      }
+    }
+  }
+
   async function render(g) {
     uiGame = g; // שמירת הפניה למשחק לצורך לחיצה על משבצות
     const prev = prevMoney.slice();
 
-    // 1. אנימציות תנועה (לפני עדכון המשבצות)
-    const moves = [];
+    // 1. תנועה: כל "רגל" מונפשת בנפרד לפי יומן המהלכים, והקלף נחשף בין הרגליים
+    // (שלב 7 ממשיך את אותו ציר זמן — כאן רק מונפשות הרגליים שלפני הקלף הראשון).
+    const newLog = g.log.filter((e) => e.id > lastLogId);
+    const firstCard = newLog.find((e) => e.kind === 'card');
+    const preCardLegs = firstCard ? newLog.filter((e) => e.kind === 'move' && e.id < firstCard.id) : newLog.filter((e) => e.kind === 'move');
+    const legPlayers = new Set(preCardLegs.map((e) => e.pIdx).filter((i) => i !== undefined));
+
+    const animatedLegs = new Set(); // כדי ששלב 7 לא ינפיש שוב את מה שכבר הונפש
+    for (const leg of preCardLegs) {
+      animatedLegs.add(leg.id);
+      if (leg.pIdx === undefined || g.players[leg.pIdx].bankrupt) continue;
+      const from = lastPositions[leg.pIdx];
+      if (from === undefined || from === leg.pos) continue;
+      await animateTokenMove(g, leg.pIdx, from, leg.pos);
+      lastPositions[leg.pIdx] = leg.pos;
+    }
+    // שחקנים שזזו בלי רשומת תנועה (שחזור משחק, מהלך ישן) — השלמה בקפיצה אחת
     g.players.forEach((p, i) => {
-      if (lastPositions[i] !== undefined && lastPositions[i] !== p.pos && !p.bankrupt) {
-        moves.push({ i, from: lastPositions[i], to: p.pos });
+      if (!legPlayers.has(i) && lastPositions[i] !== undefined && lastPositions[i] !== p.pos && !p.bankrupt && !firstCard) {
+        lastPositions[i] = p.pos;
       }
     });
-    for (const m of moves) await animateTokenMove(g, m.i, m.from, m.to);
-    lastPositions = g.players.map((p) => p.pos);
 
     // 2. משבצות
     for (const sq of BOARD) {
@@ -811,7 +842,8 @@
       const toks = div.querySelector('.sq-tokens');
       toks.innerHTML = '';
       for (const p of g.players) {
-        if (!p.bankrupt && p.pos === sq.pos) {
+        const shownPos = lastPositions[p.idx] !== undefined ? lastPositions[p.idx] : p.pos;
+        if (!p.bankrupt && shownPos === sq.pos) {
           const t = el('span', 'tok', p.token);
           t.style.setProperty('--pc', PLAYER_COLORS[p.idx]);
           if (p.idx === g.turn && g.phase !== 'gameover') t.classList.add('current');
@@ -890,6 +922,14 @@
     lastLogId = g._logSeq;
     for (const entry of newEntries) {
       logEl.prepend(el('div', `entry kind-${entry.kind}`, entry.text));
+      // רגל תנועה שעוד לא הונפשה (למשל אחרי קלף ששולח אחורה או לכלא)
+      if (entry.kind === 'move' && !animatedLegs.has(entry.id) && entry.pIdx !== undefined
+          && !g.players[entry.pIdx].bankrupt
+          && lastPositions[entry.pIdx] !== undefined && lastPositions[entry.pIdx] !== entry.pos) {
+        await animateTokenMove(g, entry.pIdx, lastPositions[entry.pIdx], entry.pos);
+        lastPositions[entry.pIdx] = entry.pos;
+        paintTokens(g);
+      }
       if (entry.kind === 'buy') sounds.buy();
       if (entry.kind === 'rent' || entry.kind === 'tax') sounds.pay();
       if (entry.kind === 'money') sounds.money();
@@ -927,6 +967,10 @@
         await announce(entry.text, BANNER_ICONS[entry.kind] || '⭐', avatarFor(g, entry));
       }
     }
+
+    // סנכרון סופי: אחרי כל הרגליים החיילים יושבים במקומם האמיתי
+    lastPositions = g.players.map((p) => p.pos);
+    paintTokens(g);
 
     // 8. הבהוב המשבצת הנוכחית
     const sqDiv = $(`#sq-${cur.pos}`);
@@ -987,6 +1031,7 @@
         <div class="deed">
           <div class="deed-top">שטר קניין</div>
           <div class="deed-band" style="background:${grp.color}">${sq.name}<br><small>${grp.name}</small></div>
+          <div class="deed-price">מחיר הנכס: <b>${money(sq.price)}</b></div>
           <div class="deed-body"><table>
             <tr><td>שכר דירה</td><td>${money(sq.rent[0])}</td></tr>
             <tr><td>עם בית אחד</td><td>${money(sq.rent[1])}</td></tr>
@@ -1006,6 +1051,7 @@
       <div class="deed">
         <div class="deed-top">שטר קניין</div>
         <div class="deed-band deed-art" style="background:#546E7A">${artFor(sq)}<span>${sq.name}</span></div>
+        <div class="deed-price">מחיר הנכס: <b>${money(sq.price)}</b></div>
         <div class="deed-body">${desc}<br>משכנתא: ${money(sq.price / 2)}</div>
       </div>`;
   }
@@ -1092,10 +1138,12 @@
     const d = openDialog(`
       <h2>מכירה פומבית! 🔨</h2>
       ${deedHTML(g, a.pos)}
-      <p class="d-sub" style="margin-top:14px">
-        הצעה נוכחית: <b>${a.currentBid ? money(a.currentBid) : 'אין עדיין'}</b>
-        ${high ? ` (של ${high.token} ${high.name})` : ''}
-      </p>
+      <div class="auc-compare">
+        <span class="auc-side"><small>המחיר בבנק</small><b>${money(BOARD[a.pos].price)}</b></span>
+        <span class="auc-vs">מול</span>
+        <span class="auc-side auc-bid"><small>ההצעה עכשיו</small><b>${a.currentBid ? money(a.currentBid) : 'אין עדיין'}</b></span>
+      </div>
+      <p class="d-sub">${high ? `ההצעה הגבוהה של ${high.token} ${high.name}` : 'עוד אף אחד לא הציע — אפשר לקנות בזול!'}</p>
       ${isMyTurn ? `
         <p class="d-sub">${iAmHigh ? 'ההצעה שלך מובילה! ⭐' : 'תורך להציע!'}</p>
         <div class="d-actions">
@@ -2061,7 +2109,7 @@
   const TS_ICON = {
     dice: '🎲', move: '📍', buy: '🛍️', rent: '💸', tax: '🧾', money: '💰',
     jail: '👮', card: '🃏', pot: '🎁', build: '🏠', mortgage: '🏦',
-    auction: '🔨', bankrupt: '💥', trade: '🤝', win: '🏆',
+    auction: '🔨', bankrupt: '💥', trade: '🤝', win: '🏆', turn: '🔁', park: '🅿️',
   };
   const TS_NOTABLE = new Set(['buy', 'rent', 'tax', 'money', 'jail', 'card', 'pot', 'build', 'mortgage', 'auction', 'bankrupt']);
 

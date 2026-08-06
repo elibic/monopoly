@@ -21,10 +21,13 @@
   let reportShown = 0;         // הסבב האחרון שדוח הבורסה שלו כבר הוצג
   let reportPending = false;   // ממתינים לאישור השחקן על דוח הבורסה
   let offerPending = false;    // הצעת השקעה פתוחה
-  let offerCooldown = 0;       // כמה תורות להמתין עד ההצעה הבאה
+  let offerCooldown = 0;       // כמה תורות של השחקן להמתין עד ההצעה הבאה
   let lastCash = null;         // מזומן בתחילת התור הקודם — לזיהוי כסף שנכנס
   let firstOfferDone = false;  // ההצעה הראשונה ("בוא ננסה") כבר הוצגה
   let profitRound = 0;         // הסבב האחרון שבו הילד הרוויח בבורסה (להצעת המשך)
+  let offerTurnSeen = -1;      // התור האחרון שבו כבר בדקנו — כדי לספור תורות ולא קריאות
+  let humanTurnSeq = 0;        // מונה תורות של השחקן (עולה פעם אחת בכל תור)
+  let lastTurnOwner = null;    // בעל התור בסבב ה-tick הקודם — לזיהוי מעבר תור
   let wealthHistory = [];      // מדגם שווי-נטו של כל השחקנים לאורך המשחק (לגרף הסיכום)
 
   function sampleWealth() {
@@ -230,6 +233,7 @@
     reportShown = 0;
     reportPending = false;
     offerPending = false; offerCooldown = 1; lastCash = null; firstOfferDone = false; profitRound = 0;
+    offerTurnSeen = -1; humanTurnSeq = 0; lastTurnOwner = null;
     wealthHistory = [];
     syncBankButton();
     $('#setup-screen').classList.add('hidden');
@@ -262,6 +266,7 @@
     summaryPending = false;
     reportPending = false;
     offerPending = false; offerCooldown = 1; lastCash = null; profitRound = 0;
+    offerTurnSeen = -1; humanTurnSeq = 0; lastTurnOwner = null;
     firstOfferDone = game.financeEnabled && game.players[humanIdx].invest.totalIn > 0;
     reportShown = game.market ? game.market.round : 0; // לא מציגים שוב דוח ישן
     syncBankButton();
@@ -311,6 +316,12 @@
       await UI.render(game);
       updateButtons();
       saveGame(); // שמירה אוטומטית אחרי כל שינוי מצב
+
+      // מונה תורות של השחקן — הבסיס לקצב הצעות ההשקעה
+      if (game.turn !== lastTurnOwner) {
+        lastTurnOwner = game.turn;
+        if (game.turn === humanIdx) humanTurnSeq += 1;
+      }
 
       if (game.phase === 'gameover') {
         clearSave();
@@ -510,7 +521,7 @@
       UI.narrator.say(['inv_dep_h'], 'יוֹפִי! הַכֶּסֶף שֶׁלְּךָ מַתְחִיל לַעֲבֹד בִּשְׁבִילְךָ');
     } catch (e) { UI.toast(e.message); }
     offerPending = false;
-    offerCooldown = 2;
+    offerCooldown = 3;
     tick();
   }
 
@@ -535,6 +546,11 @@
     if (!['roll', 'end'].includes(game.phase)) return false;
     if (game.current().inJail) return false;
 
+    // תור חדש של השחקן? רק אז מקדמים את המונים — הפונקציה נקראת כמה פעמים בתור
+    const newTurn = humanTurnSeq !== offerTurnSeen;
+    if (!newTurn) return false;
+    offerTurnSeen = humanTurnSeq;
+
     const p = game.players[humanIdx];
     const prevCash = lastCash;
     lastCash = p.money;
@@ -549,12 +565,14 @@
     if (!firstOfferDone && game.investTotal(humanIdx) === 0) {
       kind = 'first';
       reason = `יש לך ${p.money.toLocaleString('he-IL')} ₪ בחשבון, והם פשוט יושבים שם.`;
-    } else if (profitRound === game.market.round && spare >= 200) {
+    } else if (profitRound && profitRound !== game.market.round && spare >= 300
+               && (game.market.report.totals[humanIdx] || 0) >= 30) {
+      // רק סבב אחרי הדוח, ורק על רווח משמעותי — כדי לא לרדוף אחרי הילד
       kind = 'profit';
-      profitRound = 0; // פעם אחת לכל סבב מרוויח
+      profitRound = 0;
       const won = game.market.report.totals[humanIdx] || 0;
-      reason = `בסבב האחרון ההשקעות שלך הרוויחו ${won.toLocaleString('he-IL')} ₪ — ויש לך עוד כסף פנוי.`;
-    } else if (prevCash !== null && p.money - prevCash >= 150) {
+      reason = `בסבב הקודם ההשקעות שלך הרוויחו ${won.toLocaleString('he-IL')} ₪ — ויש לך עוד כסף פנוי.`;
+    } else if (prevCash !== null && p.money - prevCash >= 250) {
       kind = 'windfall';
       reason = `נכנסו לך ${(p.money - prevCash).toLocaleString('he-IL')} ₪ מאז התור הקודם!`;
     }
@@ -568,7 +586,7 @@
       reason,
       options: offerOptions(kind),
       onInvest: (track, co, amount) => { UI.closeDialog(); quickInvest(track, co, amount); },
-      onSkip: () => { offerPending = false; offerCooldown = 3; updateButtons(); tick(); },
+      onSkip: () => { offerPending = false; offerCooldown = kind === 'profit' ? 5 : 3; updateButtons(); tick(); },
       onOpenBank: () => { offerPending = false; showBank(); },
     });
     return true;

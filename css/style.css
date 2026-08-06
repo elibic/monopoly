@@ -1672,3 +1672,32 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   padding: 5px 10px; font-size: 12px; font-weight: 800; color: #7A6A45;
 }
 .mb-pot b { font-family: var(--font-title); font-size: 15px; color: #6B5636; }
+
+/* ---------- מחיר בשטר הקניין והשוואה במכירה פומבית ---------- */
+
+.deed-price {
+  background: #FFF6DC;
+  border-bottom: 2px solid #E4DCC4;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6B5636;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.deed-price b { font-family: var(--font-title); font-size: 16px; color: #4A4436; }
+
+.auc-compare {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  margin: 14px 0 6px;
+}
+.auc-side {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: white; border: 2px solid #E4DCC4; border-radius: 13px;
+  padding: 7px 16px; min-width: 108px;
+}
+.auc-side small { font-size: 11.5px; font-weight: 700; color: #7A7263; }
+.auc-side b { font-family: var(--font-title); font-size: 19px; }
+.auc-side.auc-bid { border-color: var(--gold, #F5B940); background: #FFFBF0; }
+.auc-vs { font-size: 13px; font-weight: 800; color: #A79C88; }
