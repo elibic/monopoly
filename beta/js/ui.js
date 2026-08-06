@@ -840,6 +840,18 @@
       }
     }
 
+    // 3.6 קופת הבורסה — נפרדת לגמרי מקופת הקנסות ומקופת הבנק
+    const poolDisplay = $('#pool-display');
+    if (poolDisplay) {
+      const pool = g.financeEnabled ? g.marketPool() : 0;
+      poolDisplay.classList.toggle('hidden', !pool);
+      if (pool) {
+        poolDisplay.innerHTML = `<span class="pool-icon">📈</span>
+          <span class="pot-label">קופת הבורסה</span>
+          <span class="pot-amount">${money(pool)}</span>`;
+      }
+    }
+
     // 4. באנר תור
     const cur = g.current();
     $('#turn-banner').innerHTML =
@@ -862,7 +874,8 @@
           <span class="cc-chip">💳</span>
         </div>
         <div class="cc-balance"></div>
-        <div class="cc-sub"><span>חשבון בנק מונופול</span><span>🏠 ${props} נכסים</span></div>`;
+        <div class="cc-sub"><span>עובר ושב</span><span>🏠 ${props} נכסים</span></div>
+        ${portfolioLineHTML(g, i)}`;
       const balEl = card.querySelector('.cc-balance');
       if (p.bankrupt) balEl.textContent = 'פשיטת רגל';
       else animateBalance(balEl, prev[i] !== undefined ? prev[i] : p.money, p.money);
@@ -1236,7 +1249,8 @@
     const min = Math.min(...pts); const max = Math.max(...pts);
     const span = max - min || 1;
     const coords = pts.map((v, i) => `${(i / (pts.length - 1)) * 60},${18 - ((v - min) / span) * 16}`).join(' ');
-    const up = pts[pts.length - 1] >= pts[0];
+    // הצבע לפי התנועה האחרונה, כדי שיתאים לחץ שמוצג לידו
+    const up = pts[pts.length - 1] >= pts[pts.length - 2];
     return `<svg class="fin-spark" viewBox="0 0 60 20" preserveAspectRatio="none" aria-hidden="true">
       <polyline points="${coords}" fill="none" stroke="${up ? '#2E7D32' : '#C62828'}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>`;
@@ -1311,6 +1325,62 @@
     d.querySelector('#d-back').onclick = () => { closeDialog(); if (onBack) onBack(); };
   }
 
+  // מסך פעילות בנק מונופול: כמה יש לו, במה הוא משקיע וכמה הוא מרוויח.
+  // המסר לילד: הבנק לוקח את הכסף שכולם שמים אצלו, משקיע אותו — וככה מרוויח.
+  function showMainBankDialog(g, onClose) {
+    const b = g.bank;
+    const invested = g.bankInvested();
+    const rows = [
+      { emoji: FIN.TRACKS.deposit.emoji, name: FIN.TRACKS.deposit.name, val: b.invest.deposit, color: FIN.TRACKS.deposit.color },
+      ...FIN.COMPANIES.map((c) => ({ emoji: c.emoji, name: c.name, val: b.invest.stocks[c.id], color: FIN.TRACKS.stocks.color })),
+    ].filter((r) => r.val > 0);
+
+    const share = g.bankTotal() ? Math.round((invested / g.bankTotal()) * 100) : 0;
+    const d = openDialog(`
+      <h2>בנק מונופול 🏦</h2>
+      <p class="d-sub">זה הבנק של כל המשחק — הוא משלם משכורות, מוכר נכסים ושומר את הכסף של כולם.</p>
+      <div class="bank-grid">
+        <div class="bank-cell"><span class="bank-cell-label">💰 כסף בקופת הבנק</span><b>${money(b.cash)}</b></div>
+        <div class="bank-cell"><span class="bank-cell-label">📈 מושקע בבורסה</span><b>${money(invested)}</b><small>${share}% מהכסף שלו</small></div>
+        <div class="bank-cell"><span class="bank-cell-label">🌱 הרוויח מהשקעות</span><b class="${b.profit >= 0 ? 'gain' : 'loss'}">${b.profit >= 0 ? '+' : '−'}${Math.abs(b.profit).toLocaleString('he-IL')} ₪</b></div>
+        <div class="bank-cell"><span class="bank-cell-label">🧾 דמי ניהול שגבה</span><b>${money(b.fees)}</b></div>
+        <div class="bank-cell"><span class="bank-cell-label">💸 משכורות ששילם</span><b>${money(b.salaries)}</b></div>
+        <div class="bank-cell"><span class="bank-cell-label">🎁 קופת הקנסות</span><b>${money(g.pot)}</b><small>לא שייכת לבנק</small></div>
+      </div>
+      <div class="fin-sep">במה הבנק משקיע עכשיו?</div>
+      <div class="asset-list">${rows.length ? rows.map((r) => `
+        <div class="asset-row fin-row"><div class="fin-row-top">
+          <span class="a-band" style="background:${r.color}"></span>
+          <span class="a-name">${r.emoji} ${r.name}</span>
+          <span class="fin-val">${money(r.val)}</span>
+        </div></div>`).join('') : '<p class="d-sub">הבנק עוד לא התחיל להשקיע — זה קורה בסוף הסבב הראשון.</p>'}</div>
+      <p class="d-sub fin-info-tip">💡 שמים לב? גם הבנק משקיע את הכסף שלו בדיוק כמוך — וגם הוא לפעמים מפסיד.
+        הוא מרוויח גם מדמי ניהול קטנים שהוא לוקח על הכסף שהוא מנהל בשביל השחקנים.</p>
+      <div class="bank-pool">📊 קופת הבורסה כולה: <b>${money(g.marketPool())}</b>
+        <small>מתוכם השחקנים ${money(g.marketPool() - invested)} והבנק ${money(invested)} — לבנק יש הכי הרבה כסף, ולכן גם הכי הרבה מושקע.</small></div>
+      <div class="d-actions"><button class="big-btn green" id="d-ok">👍 הבנתי</button></div>`);
+    d.querySelector('#d-ok').onclick = () => { closeDialog(); if (onClose) onClose(); };
+  }
+
+  // שורת "תיק השקעות" על הכרטיס: שווי, רווח/הפסד ואחוז — נפרד מהעו"ש
+  function portfolioLineHTML(g, idx) {
+    if (!g.financeEnabled || g.players[idx].bankrupt) return '';
+    const val = g.investTotal(idx);
+    const inv = g.players[idx].invest;
+    if (!val && !inv.totalIn) return '';
+    const profit = g.investProfit(idx);
+    const cls = profit > 0 ? 'gain' : profit < 0 ? 'loss' : '';
+    const arrow = profit > 0 ? '▲' : profit < 0 ? '▼' : '➖';
+    // אחוז מוצג רק כשיש בסיס אמיתי להשוואה (כמה הופקד)
+    const pc = inv.totalIn > 0 ? Math.round((profit / inv.totalIn) * 100) : null;
+    const pcTxt = pc === null ? '' : ` (${pc > 0 ? '+' : pc < 0 ? '−' : ''}${Math.abs(pc)}%)`;
+    return `<div class="cc-portfolio">
+      <span class="ccp-label">📈 תיק השקעות</span>
+      <span class="ccp-val">${money(val)}</span>
+      <span class="ccp-delta ${cls}">${arrow} ${profit > 0 ? '+' : profit < 0 ? '−' : ''}${Math.abs(profit).toLocaleString('he-IL')} ₪${pcTxt}</span>
+    </div>`;
+  }
+
   function showBankDialog(g, humanIdx, { onInvest, onWithdraw, onClose }) {
     const p = g.players[humanIdx];
     const chunkBtns = (track, co) => FIN.DEPOSIT_CHUNKS
@@ -1351,9 +1421,16 @@
 
     const total = g.investTotal(humanIdx);
     const profit = g.investProfit(humanIdx);
+    const pcProfit = p.invest.totalIn ? Math.round((profit / p.invest.totalIn) * 100) : 0;
     const d = openDialog(`
-      <h2>הבנק שלי 🏦</h2>
-      <p class="d-sub">בחשבון: <b>${money(p.money)}</b> · מושקע: <b>${money(total)}</b>${total || profit ? ` · ${profit >= 0 ? 'הרווחת' : 'הפסדת'} ${deltaHTML(profit)}` : ''}</p>
+      <h2>תיק ההשקעות שלי 📈</h2>
+      <div class="pf-summary">
+        <div class="pf-box"><span class="pf-label">💳 עובר ושב</span><b>${money(p.money)}</b></div>
+        <div class="pf-arrow">⇄</div>
+        <div class="pf-box pf-invest"><span class="pf-label">📈 בתיק ההשקעות</span><b>${money(total)}</b>
+          ${p.invest.totalIn ? `<small class="fin-delta ${profit > 0 ? 'gain' : profit < 0 ? 'loss' : ''}">${profit > 0 ? '▲ +' : profit < 0 ? '▼ −' : '➖ '}${Math.abs(profit).toLocaleString('he-IL')} ₪ (${pcProfit > 0 ? '+' : pcProfit < 0 ? '−' : ''}${Math.abs(pcProfit)}%)</small>` : ''}
+        </div>
+      </div>
       <p class="d-sub">💡 שמים כסף בבנק, והוא עובד בשבילך! בקופת החיסכון הכסף בטוח וגדל לאט. במניות הוא יכול לגדול הרבה — או לרדת.</p>
       <p class="d-sub fin-hint">לוחצים על <b>❔</b> ליד כל אפשרות כדי לראות מה זה, מתי מרוויחים ומתי מפסידים.</p>
       <div class="asset-list">
@@ -1363,6 +1440,8 @@
           <small class="fin-blurb">${outcomeLineHTML('stocks')}</small></div>
         ${FIN.COMPANIES.map(coRow).join('')}
       </div>
+      <p class="d-sub fin-fee-note">🧾 <b>דמי ניהול:</b> על פיקדון ומניות הבנק לוקח ${Math.round(FIN.FEE_RATE * 100)}% בכל סבב
+        (מתחת ל-100 ₪ — בלי עמלה). בקופת החיסכון אין דמי ניהול בכלל.</p>
       <div class="d-actions"><button class="big-btn green" id="d-close">✅ סיימתי</button></div>`);
 
     d.querySelectorAll('button[data-act]').forEach((b) => {
@@ -1454,6 +1533,13 @@
         <span class="fin-btns">${deltaHTML(e.delta, e.pct)}</span>
       </div>`).join('');
 
+    const myFee = rep.fees ? rep.fees[humanIdx] || 0 : 0;
+    const feeRow = myFee ? `<div class="asset-row fin-report-row fin-fee-row"><div class="fin-row-top">
+        <span class="a-band" style="background:#B0A48A"></span>
+        <span class="a-name">🧾 דמי ניהול לבנק<small class="fin-blurb">הבנק לוקח עמלה קטנה על הכסף שהוא מנהל בשבילך</small></span>
+        <span class="fin-btns">${deltaHTML(-myFee)}</span>
+      </div></div>` : '';
+
     const others = g.players
       .filter((p) => p.idx !== humanIdx && !p.bankrupt && rep.totals[p.idx] !== undefined && g.holdings(p.idx).length)
       .map((p) => `<div class="fin-other">${p.token} ${p.name}: ${deltaHTML(rep.totals[p.idx])}</div>`).join('');
@@ -1483,7 +1569,7 @@
       <h2>חדשות הבורסה 📊 <small class="fin-round">סבב ${rep.round}</small></h2>
       ${newsBox}
       <p class="d-sub">${headline}</p>
-      <div class="asset-list">${rows}</div>
+      <div class="asset-list">${rows}${feeRow}</div>
       ${boost}
       ${others ? `<p class="d-sub fin-others">מה קרה לאחרים: ${others}</p>` : ''}
       <div class="d-actions"><button class="big-btn green" id="d-ok">👍 הבנתי</button></div>`);
@@ -1726,6 +1812,10 @@
         '🍦 ארבע חברות להשקעה: מפעל הגלידה, חברת הצעצועים, חלליות ישראל ורשת הפיצה',
         '📊 בסוף כל סבב מגיע דוח בורסה שמסביר בדיוק למה הרווחתם או הפסדתם',
         '📰 אירועי חדשות מזיזים את המניות — "קיץ לוהט, כולם קונים גלידה!"',
+        '💡 המשחק מציע להשקיע ברגעים הנכונים, ומסביר לכל אפשרות מה הסיכון ומה אפשר להרוויח',
+        '💳 החשבון מופרד: עובר ושב בצד אחד, תיק השקעות בצד שני — עם רווח באחוזים',
+        '🏦 מסך בנק מונופול: כמה כסף יש לבנק, במה הוא משקיע וכמה הוא מרוויח',
+        '🧾 דמי ניהול קטנים על פיקדון ומניות — כמו בבנק אמיתי',
         '📈 שלוש מדבקות חדשות: משקיע/ה חכם/ה, ידיים של יהלום, וחוסך/ת מתמיד/ה',
       ],
     },
@@ -1972,7 +2062,7 @@
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
     showStickerAlbum, startTutorial, tutorialSeen,
     setLocalIdx, nudge, clearNudge, deedHTML,
-    showBankDialog, showMarketReport, showInvestInfo, showInvestOffer, outcome100, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
+    showBankDialog, showMainBankDialog, showMarketReport, showInvestInfo, showInvestOffer, outcome100, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
     showWhatsNew, showWhatsNewIfUpdated, VERSIONS,
   };
 })();

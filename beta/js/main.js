@@ -247,8 +247,10 @@
 
   // כפתור הבנק מופיע רק במצב חינוך פיננסי — אחרת המסך זהה לגמרי לרגיל
   function syncBankButton() {
-    const b = $('#bank-btn');
-    if (b) b.classList.toggle('hidden', !game.financeEnabled);
+    for (const id of ['#bank-btn', '#mainbank-btn']) {
+      const b = $(id);
+      if (b) b.classList.toggle('hidden', !game.financeEnabled);
+    }
   }
 
   // שחזור משחק שמור מהביקור הקודם
@@ -397,6 +399,9 @@
     $('#trade-btn').disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));
     const bankBtn = $('#bank-btn');
     if (bankBtn) bankBtn.disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));
+    const mainBankBtn = $('#mainbank-btn');
+    // מסך הבנק הוא תצוגה בלבד — אפשר לפתוח אותו תמיד, גם בתור המחשב
+    if (mainBankBtn) mainBankBtn.disabled = !game.financeEnabled || game.phase === 'gameover';
     // רמז לחיצה: אם השחקן לא לוחץ תוך 2 שניות — אצבע מרצדת על הכפתור הנדרש
     if (!$('#roll-btn').disabled) UI.nudge($('#roll-btn'));
     else if (!$('#end-turn-btn').disabled) UI.nudge($('#end-turn-btn'));
@@ -712,6 +717,8 @@
     $('#trade-btn').onclick = () => { if (!$('#trade-btn').disabled) chooseTradePartner(); };
     const bankBtn = $('#bank-btn');
     if (bankBtn) bankBtn.onclick = () => { if (!bankBtn.disabled) showBank(); };
+    const mainBankBtn = $('#mainbank-btn');
+    if (mainBankBtn) mainBankBtn.onclick = () => { if (!mainBankBtn.disabled) UI.showMainBankDialog(game, () => {}); };
     $('#sound-btn').onclick = () => UI.setSound(!UI.isSoundOn());
     const musicBtn = $('#music-btn');
     if (musicBtn) {
