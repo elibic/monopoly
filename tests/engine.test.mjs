@@ -953,3 +953,50 @@ test('חניה חופשית מסומנת בסוג משלה כדי שתופיע �
   assert.ok(park, 'אין רשומת חניה חופשית');
   assert.match(park.text, /דאבל/, 'צריך להסביר שגם דאבל לא נותן תור נוסף כאן');
 });
+
+/* ---------- הפקדה מקורית לכל אחזקה ---------- */
+
+test('basis: ההפקדה המקורית נשמרת ולא מושפעת משוק ומעמלות', () => {
+  const g = finGame({ marketQueue: [{ mults: { ice: 1.4, toys: 1, space: 1, pizza: 1 }, deposit: 1.08 }] });
+  g.invest(0, 'stocks', 'ice', 300);
+  g.invest(0, 'stocks', 'ice', 200); // שתי הפקדות מצטברות
+  assert.equal(g.players[0].invest.basis.stocks.ice, 500);
+  playTurn(g); playTurn(g); // סבב שוק: עלייה + דמי ניהול
+  assert.ok(g.players[0].invest.stocks.ice > 500, 'הערך גדל');
+  assert.equal(g.players[0].invest.basis.stocks.ice, 500, 'ההפקדה המקורית לא זזה');
+  const h = g.holdings(0).find((x) => x.co === 'ice');
+  assert.equal(h.basis, 500);
+});
+
+test('basis: משיכה מאפסת את ההפקדה של אותה אחזקה בלבד', () => {
+  const g = finGame();
+  g.invest(0, 'savings', null, 100);
+  g.invest(0, 'deposit', null, 200);
+  g.withdraw(0, 'savings', null);
+  assert.equal(g.players[0].invest.basis.savings, 0);
+  assert.equal(g.players[0].invest.basis.deposit, 200);
+});
+
+test('basis: שורד שמירה ושחזור, ושמירה ישנה מקבלת ברירת מחדל הגיונית', () => {
+  const g = finGame({ marketQueue: [{ mults: {}, deposit: 1.08 }] });
+  g.invest(0, 'deposit', null, 400);
+  playTurn(g); playTurn(g);
+  const json = JSON.parse(JSON.stringify(g.toJSON()));
+  assert.equal(Game.restore(json).players[0].invest.basis.deposit, 400);
+
+  // שמירה ישנה בלי basis — מאותחל לשווי הנוכחי כדי שלא יוצג רווח מדומה
+  const old = JSON.parse(JSON.stringify(g.toJSON()));
+  delete old.players[0].invest.basis;
+  const r = Game.restore(old);
+  assert.equal(r.players[0].invest.basis.deposit, r.players[0].invest.deposit);
+});
+
+test('basis: פשיטת רגל מאפסת גם את ההפקדות', () => {
+  const g = finGame({ diceQueue: [[1, 3]] });
+  g.invest(0, 'savings', null, 500);
+  g.players[0].money = 0;
+  g.rollDice(); // מס הכנסה 200 — אין מזומן
+  assert.equal(g.phase, 'debt');
+  g.declareBankruptcy();
+  assert.equal(g.players[0].invest.basis.savings, 0);
+});

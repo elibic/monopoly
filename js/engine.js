@@ -14,6 +14,9 @@
     savings: 0,
     deposit: 0,
     stocks: Object.fromEntries(F.COMPANIES.map((c) => [c.id, 0])),
+    // basis = ההפקדה המקורית של כל אחזקה: עולה בהפקדה, מתאפסת במשיכה,
+    // ולא מושפעת מתנועות השוק ומדמי הניהול — כדי להראות "כמה שמתי" מול "כמה שווה".
+    basis: { savings: 0, deposit: 0, stocks: Object.fromEntries(F.COMPANIES.map((c) => [c.id, 0])) },
     totalIn: 0,   // כמה הופקד בסך הכול (להצגת רווח)
     totalOut: 0,  // כמה נמשך בסך הכול
     crash: null,  // {co, val} — נפילה שעוד לא התאוששה (למדבקת "ידיים של יהלום")
@@ -201,6 +204,19 @@
       else p.invest[track] = val;
     }
 
+    _basis(p, track, co) {
+      const b = p.invest.basis;
+      if (!b) return 0;
+      return track === 'stocks' ? (b.stocks[co] || 0) : (b[track] || 0);
+    }
+
+    _setBasis(p, track, co, val) {
+      const b = p.invest.basis;
+      if (!b) return;
+      if (track === 'stocks') b.stocks[co] = val;
+      else b[track] = val;
+    }
+
     // שם קריא לילד: "קופת חיסכון" / "מפעל הגלידה"
     _holdingName(track, co) {
       if (track === 'stocks') {
@@ -264,11 +280,13 @@
       const res = [];
       if (!p.invest) return res;
       for (const track of ['savings', 'deposit']) {
-        if (p.invest[track] > 0) res.push({ track, co: null, value: p.invest[track], name: this._holdingName(track, null) });
+        if (p.invest[track] > 0) {
+          res.push({ track, co: null, value: p.invest[track], basis: this._basis(p, track, null), name: this._holdingName(track, null) });
+        }
       }
       for (const c of F.COMPANIES) {
         const val = p.invest.stocks[c.id] || 0;
-        if (val > 0) res.push({ track: 'stocks', co: c.id, value: val, name: this._holdingName('stocks', c.id) });
+        if (val > 0) res.push({ track: 'stocks', co: c.id, value: val, basis: this._basis(p, 'stocks', c.id), name: this._holdingName('stocks', c.id) });
       }
       return res;
     }
@@ -285,6 +303,7 @@
 
       p.money -= amount;
       this._setHolding(p, track, co, this._holding(p, track, co) + amount);
+      this._setBasis(p, track, co, this._basis(p, track, co) + amount);
       p.invest.totalIn += amount;
       this._log(`🏦 ${p.name} ${v(p, 'השקיע', 'השקיעה')} ${money(amount)} ב${this._holdingName(track, co)}.`,
         'invest', { pIdx: idx, track, co, amount });
@@ -301,6 +320,7 @@
       if (!val) throw new Error('אין מה למשוך');
 
       this._setHolding(p, track, co, 0);
+      this._setBasis(p, track, co, 0);
       p.money += val;
       p.invest.totalOut += val;
       if (p.invest.crash && p.invest.crash.co === co) p.invest.crash = null; // ויתר על ההמתנה להתאוששות
@@ -1082,6 +1102,7 @@
         p.invest.savings = 0;
         p.invest.deposit = 0;
         for (const c of D.FINANCE.COMPANIES) p.invest.stocks[c.id] = 0;
+        p.invest.basis = { savings: 0, deposit: 0, stocks: Object.fromEntries(D.FINANCE.COMPANIES.map((c) => [c.id, 0])) };
         p.invest.crash = null;
         this._log(`💼 ההשקעות של ${p.name} נפדו: ${money(invested)}.`, 'withdraw', { pIdx: p.idx });
       }
@@ -1193,7 +1214,14 @@
       g.players = data.players.map((p) => ({
         ...p,
         jailCards: (p.jailCards || []).map((h) => ({ deck: h.deck, card: cardById(h.deck, h.id) })),
-        invest: p.invest ? { ...emptyInvest(), ...p.invest, stocks: { ...emptyInvest().stocks, ...(p.invest.stocks || {}) } } : emptyInvest(),
+        invest: p.invest ? {
+          ...emptyInvest(),
+          ...p.invest,
+          stocks: { ...emptyInvest().stocks, ...(p.invest.stocks || {}) },
+          basis: p.invest.basis
+            ? { ...emptyInvest().basis, ...p.invest.basis, stocks: { ...emptyInvest().basis.stocks, ...(p.invest.basis.stocks || {}) } }
+            : { savings: p.invest.savings || 0, deposit: p.invest.deposit || 0, stocks: { ...emptyInvest().basis.stocks, ...(p.invest.stocks || {}) } },
+        } : emptyInvest(),
       }));
       g.owner = data.owner;
       g.houses = data.houses;

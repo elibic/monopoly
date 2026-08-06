@@ -480,6 +480,10 @@
   function showHumanDebt() {
     UI.showDebtDialog(game, humanIdx, {
       onAction: async (act, pos, extra = {}) => {
+        // גם כאן שואלים — הילד לומד מה המחיר של כל דרך לגייס כסף
+        if (act === 'mortgage' && !(await UI.confirmMortgage(game, pos))) { showHumanDebt(); return; }
+        if (act === 'sellHouse' && !(await UI.confirmSellHouse(game, pos))) { showHumanDebt(); return; }
+        if (act === 'withdraw' && !(await UI.confirmWithdraw(game, humanIdx, extra.track, extra.co))) { showHumanDebt(); return; }
         try {
           if (act === 'mortgage') game.mortgage(pos);
           if (act === 'sellHouse') game.sellHouse(pos);
@@ -496,6 +500,9 @@
   function showManage() {
     UI.showManageDialog(game, humanIdx, {
       onAction: async (act, pos) => {
+        // פעולות שקשה לחזור מהן — קודם מסבירים ומבקשים אישור
+        if (act === 'mortgage' && !(await UI.confirmMortgage(game, pos))) { showManage(); return; }
+        if (act === 'sellHouse' && !(await UI.confirmSellHouse(game, pos))) { showManage(); return; }
         try {
           if (act === 'build') game.buildHouse(pos);
           if (act === 'sellHouse') game.sellHouse(pos);
@@ -605,6 +612,8 @@
         showBank();
       },
       onWithdraw: async (track, co) => {
+        const ok = await UI.confirmWithdraw(game, humanIdx, track, co);
+        if (!ok) { showBank(); return; }
         try {
           game.withdraw(humanIdx, track, co);
           UI.sounds.cash();
