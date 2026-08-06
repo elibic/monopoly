@@ -277,7 +277,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=13`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=14`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -290,13 +290,28 @@
     },
   };
 
-  // מיפוי רשומת יומן → קליפ קריינות (משפט שלם אחד, בלי הדבקות)
+  // מי "השחקן שלי" מול המסך — 0 במשחק יחיד; במשחק מרחוק כל צד מגדיר את עצמו.
+  // חשוב לקריינות: קליפים כמו "התור שלך!" נכונים רק לשחקן המקומי.
+  let localIdx = 0;
+  function setLocalIdx(i) { localIdx = i; }
+
+  // קליפי ה-AI המוקלטים אומרים "רובי הבוט" — נכונים רק לבוט הזה.
+  // לבוטים אחרים (רב-משתתפים) נופלים לקול הדפדפן שמקריא את השם הנכון.
+  const AI_CLIP_NAME = 'רובי הבוט';
+
+  // מיפוי רשומת יומן → קליפ קריינות (משפט שלם אחד, בלי הדבקות).
+  // מחזיר null כשאין קליפ מתאים — ואז הטקסט המלא מוקרא בקול הדפדפן.
   function narrationFor(g, entry) {
     const t = entry.text;
     const actor = g.players
       .filter((p) => t.includes(p.name))
       .sort((a, b) => t.indexOf(a.name) - t.indexOf(b.name))[0];
-    const vk = actor ? (actor.isAI ? 'ai' : 'h') : null;
+    // 'h' = השחקן המקומי (קליפים בגוף שני), 'ai' = רובי הבוט; אחרת אין קליפ מתאים
+    let vk = null;
+    if (actor) {
+      if (!actor.isAI) vk = actor.idx === localIdx ? 'h' : null;
+      else vk = actor.name === AI_CLIP_NAME ? 'ai' : null;
+    }
     const sqm = t.match(/"([^"]+)"/);
     const sqEntry = sqm ? BOARD.find((s) => s.name === sqm[1]) : null;
 
@@ -309,6 +324,8 @@
         if (!vk || !sqEntry) return null;
         return [`buy_${vk}_${sqEntry.pos}`];
       case 'rent':
+        // הקליפ "רובי הבוט שילם לך" נכון רק כשהמקבל הוא השחקן המקומי
+        if (vk === 'ai' && !t.includes(`ל${g.players[localIdx].name}`)) return null;
         if (!vk) return null;
         return [`ev_rent_${vk}`];
       case 'money':
@@ -318,22 +335,26 @@
         if (!vk) return null;
         return [`ev_tax_${vk}`];
       case 'jail':
+        // כניסה לכלא רק בהודעות "נשלח/נשלחת"; "נשאר" = שקט; כל השאר = יציאה
+        // (כולל תשלום קנס, דאבל, וכרטיס "צא מהכלא חינם")
         if (!vk) return null;
-        if (/ויצא|יצא|יוצא/.test(t)) return [`ev_jailout_${vk}`];
+        if (/נשלח/.test(t)) return [`ev_jailin_${vk}`];
         if (/נשאר/.test(t)) return null;
-        return [`ev_jailin_${vk}`];
+        return [`ev_jailout_${vk}`];
       case 'auction':
         if (t.includes('מכירה פומבית')) return ['ev_auction'];
         return null;
       case 'debt':
         return ['ev_debt'];
       case 'pot':
-        return ['ev_pot'];
+        // הקליפ אומר "זכית!" — נכון רק לשחקן המקומי
+        return actor && !actor.isAI && actor.idx === localIdx ? ['ev_pot'] : null;
       case 'bankrupt':
         if (!vk) return null;
         return [`ev_bankrupt_${vk}`];
       case 'win':
-        return [actor && !actor.isAI ? 'ev_win_h' : 'ev_lose'];
+        if (actor && !actor.isAI) return actor.idx === localIdx ? ['ev_win_h'] : null;
+        return actor && actor.name === AI_CLIP_NAME ? ['ev_lose'] : null;
       case 'trade':
         return ['ev_trade'];
       default:
@@ -550,28 +571,29 @@
     });
   }
 
-  // האם רשומת היומן דורשת אישור מהשחקן האנושי (שחקן 0)?
+  // האם רשומת היומן דורשת אישור מהשחקן המקומי? (במשחק מרחוק — כל צד רואה רק את שלו)
   function ackFor(g, entry) {
-    const human = g.players[0];
+    const human = g.players[localIdx];
     if (!human || human.bankrupt || human.isAI) return null;
     const t = entry.text;
     const amount = (t.match(/([\d,]+) ש"ח/) || [])[1] || null;
     const actor = g.players.filter((p) => t.includes(p.name))
       .sort((a, b) => t.indexOf(a.name) - t.indexOf(b.name))[0];
+    const isMe = actor && actor.idx === human.idx;
 
     switch (entry.kind) {
       case 'rent':
-        if (actor && !actor.isAI) return { title: 'שכר דירה! 💸', amount, mode: 'pay' };
+        if (isMe) return { title: 'שכר דירה! 💸', amount, mode: 'pay' };
         if (t.includes(`ל${human.name}`)) return { title: 'קיבלת שכר דירה! 🤑', amount, mode: 'receive' };
         return null;
       case 'tax':
-        if (actor && !actor.isAI) return { title: 'מס לבנק 🧾', amount, mode: 'pay' };
+        if (isMe) return { title: 'מס לבנק 🧾', amount, mode: 'pay' };
         return null;
       case 'money':
-        if (actor && !actor.isAI && t.includes('משכורת')) return { title: 'משכורת! 💰', amount, mode: 'receive' };
+        if (isMe && t.includes('משכורת')) return { title: 'משכורת! 💰', amount, mode: 'receive' };
         return null;
       case 'pot':
-        if (actor && !actor.isAI) return { title: 'זכית בקופה! 🎁', amount, mode: 'receive' };
+        if (isMe) return { title: 'זכית בקופה! 🎁', amount, mode: 'receive' };
         return null;
       default:
         return null;
@@ -855,7 +877,7 @@
         const cardClip = cardData ? [cardData.id] : [];
         narrator.say([intro, ...cardClip],
           'קלף ' + (entry.deck === 'chance' ? 'הפתעה' : 'תיבת המזל') + '. ' + entry.cardText);
-        const humanCard = !g.current().isAI;
+        const humanCard = !g.current().isAI && g.current().idx === localIdx;
         await showCardFlip(entry.deck, entry.cardText, { interactive: humanCard });
         // קלף כסף לשחקן האנושי — לוחצים "שלם"/"קבל"
         if (humanCard && cardData) {
@@ -886,6 +908,31 @@
     if (sqDiv) { sqDiv.classList.remove('flash'); void sqDiv.offsetWidth; sqDiv.classList.add('flash'); }
   }
 
+  /* ==================== רמז לחיצה (nudge) ==================== */
+  // כשנדרשת לחיצה והשחקן מהסס — אחרי 2 שניות מופיעה אצבע מרצדת על הכפתור.
+
+  let nudgeTimer = null;
+  let nudgedEl = null;
+
+  function clearNudge() {
+    if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null; }
+    if (nudgedEl) { nudgedEl.classList.remove('nudge-target'); nudgedEl = null; }
+  }
+
+  function nudge(btn, delay = 2000) {
+    clearNudge();
+    if (!btn) return;
+    nudgeTimer = setTimeout(() => {
+      nudgeTimer = null;
+      if (!document.body.contains(btn) || btn.disabled) return;
+      nudgedEl = btn;
+      btn.classList.add('nudge-target');
+    }, delay);
+  }
+
+  // כל לחיצה בדף מבטלת את הרמז — השחקן כבר יודע מה לעשות
+  document.addEventListener('pointerdown', clearNudge, true);
+
   /* ==================== דיאלוגים ==================== */
 
   function openDialog(html) {
@@ -894,10 +941,15 @@
     const d = el('div', 'dialog', html);
     root.appendChild(d);
     root.classList.remove('hidden');
+    // רמז לחיצה על הכפתור הראשי של הדיאלוג אם אין לחיצה תוך 2 שניות
+    const primary = d.querySelector('.big-btn.green:not([disabled])') ||
+                    d.querySelector('.big-btn:not([disabled])');
+    nudge(primary);
     return d;
   }
 
   function closeDialog() {
+    clearNudge();
     $('#dialog-root').classList.add('hidden');
     $('#dialog-root').innerHTML = '';
   }
@@ -923,7 +975,7 @@
         </div>`;
     }
     const desc = sq.type === 'rail'
-      ? `שכר דירה: 25 / 50 / 100 / 200 ₪<br>לפי מספר הרכבות שבבעלותך`
+      ? `שכר דירה: 25 ₪ לכל רכבת שבבעלותך<br>(25 / 50 / 75 / 100 ₪)`
       : `שכר דירה: הקוביות ×4<br>עם שתי החברות: הקוביות ×10`;
     return `
       <div class="deed">
@@ -937,7 +989,7 @@
   const TILE_INFO = {
     go: ['דרך צלחה 🎉', 'בכל פעם שעוברים כאן מקבלים 200 ₪ מהבנק!'],
     jail: ['בית הכלא 🔒', 'אפשר רק "לבקר" כאן — זה בסדר גמור, לא נכנסים לכלא.'],
-    parking: ['חניה חופשית 🅿️', 'משבצת מנוחה — פשוט חונים ונחים עד התור הבא.'],
+    parking: ['חניה חופשית 🅿️', 'משבצת מנוחה — מי שנוחת כאן מפסיד את התור (גם אחרי דאבל). אם הצטברה קופה — זוכים בכל הכסף שבה!'],
     gotojail: ['לך לכלא 🚔', 'מי שנוחת כאן הולך ישר לכלא (בלי לקבל 200 ₪).'],
     tax: ['מס 💰', 'משלמים לבנק את הסכום הרשום על המשבצת.'],
     chance: ['הפתעה ❓', 'שולפים קלף הפתעה — אולי כסף, אולי הפתעה אחרת!'],
@@ -993,7 +1045,8 @@
     const d = openDialog(`
       <h2>רוצה לקנות? 🛍️</h2>
       ${deedHTML(g, pos)}
-      <p class="d-sub" style="margin-top:14px">מחיר: <b>${money(sq.price)}</b> · בחשבון שלך: <b>${money(p.money)}</b></p>
+      <div class="price-tag">💰 המחיר: <b>${money(sq.price)}</b></div>
+      <p class="d-sub">בחשבון שלך: <b>${money(p.money)}</b></p>
       ${canAfford ? '<p class="d-sub">💡 כדאי לקנות נכסים — הם מכניסים כסף!</p>' : '<p class="d-sub">😕 אין מספיק כסף בחשבון...</p>'}
       <div class="d-actions">
         <button class="big-btn green" id="d-buy" ${canAfford ? '' : 'disabled'}>💳 קונים!</button>
@@ -1129,6 +1182,7 @@
     const d = openDialog(`
       <h2>העסקים שלי 🏠</h2>
       <p class="d-sub">בחשבון: <b>${money(p.money)}</b> · בתים במלאי הבנק: ${g.housesLeft} · מלונות: ${g.hotelsLeft}</p>
+      <p class="d-sub">🏗️ בונים בית רק כשהחייל מגיע לרחוב שלך (וכל העיר בבעלותך) — המשחק יציע לך לבנות!</p>
       <div class="asset-list">${rows.join('') || '<p class="d-sub">עוד אין לך נכסים — קנה כשנוחתים על משבצת פנויה!</p>'}</div>
       <div class="d-actions"><button class="big-btn blue" id="d-close">סגירה</button></div>`);
     d.querySelectorAll('button[data-act]').forEach((b) => {
@@ -1153,22 +1207,51 @@
     const ai = g.players[aiIdx];
     const d = openDialog(`
       <h2>הצעת עסקה 🤝</h2>
-      <p class="d-sub">מסמנים נכסים להחלפה עם ${ai.token} ${ai.name}, ואפשר להוסיף כסף:</p>
-      <div style="display:flex; gap:14px; text-align:right">
-        <div style="flex:1"><b>אני נותן/ת:</b><div class="asset-list">${mkRows(humanIdx, 'give') || '<small>אין נכסים סחירים</small>'}</div>
-          <label style="font-size:14px">💳 כסף שלי: <input type="number" id="t-mgive" min="0" step="10" value="0"></label>
+      <p class="d-sub trade-help">💡 <b>איך זה עובד?</b>
+        רוצים <b>לקנות</b> נכס? מסמנים אותו בצד "אני מבקש" וכותבים כמה כסף נותנים.
+        רוצים <b>למכור</b>? מסמנים נכס שלכם וכותבים כמה כסף מבקשים.
+        אפשר גם <b>להחליף</b> — מסמנים נכס בכל צד!</p>
+      <div class="trade-cols">
+        <div class="trade-col give">
+          <div class="trade-col-title">🫲 אני נותן ל${ai.name}:</div>
+          <div class="asset-list">${mkRows(humanIdx, 'give') || '<small>אין נכסים סחירים</small>'}</div>
+          <label class="trade-money">💳 כסף שאני נותן: <input type="number" id="t-mgive" min="0" step="10" value="0"> ₪</label>
         </div>
-        <div style="flex:1"><b>אני מקבל/ת:</b><div class="asset-list">${mkRows(aiIdx, 'get') || '<small>אין נכסים סחירים</small>'}</div>
-          <label style="font-size:14px">💳 כסף שלו: <input type="number" id="t-mget" min="0" step="10" value="0"></label>
+        <div class="trade-col get">
+          <div class="trade-col-title">🫴 אני מבקש מ${ai.name}:</div>
+          <div class="asset-list">${mkRows(aiIdx, 'get') || '<small>אין נכסים סחירים</small>'}</div>
+          <label class="trade-money">💰 כסף שאני מבקש: <input type="number" id="t-mget" min="0" step="10" value="0"> ₪</label>
         </div>
       </div>
+      <div class="trade-summary" id="t-summary"></div>
       <div class="d-actions">
         <button class="big-btn green" id="d-offer">📨 שולחים הצעה</button>
         <button class="big-btn" id="d-cancel">ביטול</button>
       </div>`);
+    // שורת סיכום חיה — שהשחקן יראה בבירור מה הוא נותן ומה מקבל
+    const refreshSummary = () => {
+      const nm = (side) => [...d.querySelectorAll(`.selected[data-side="${side}"]`)]
+        .map((r) => `"${BOARD[Number(r.dataset.pos)].name}"`);
+      const mg = Number(d.querySelector('#t-mgive').value) || 0;
+      const mr = Number(d.querySelector('#t-mget').value) || 0;
+      const giveParts = [...nm('give'), ...(mg ? [money(mg)] : [])];
+      const getParts = [...nm('get'), ...(mr ? [money(mr)] : [])];
+      const sumEl = d.querySelector('#t-summary');
+      if (!giveParts.length && !getParts.length) {
+        sumEl.innerHTML = '<span class="ts-empty">עדיין לא נבחר כלום — מסמנים נכסים או כותבים סכום 👆</span>';
+      } else {
+        sumEl.innerHTML =
+          `<span class="ts-give">אני נותן: <b>${giveParts.join(' + ') || 'כלום'}</b></span>
+           <span class="ts-arrow">⇄</span>
+           <span class="ts-get">אני מקבל: <b>${getParts.join(' + ') || 'כלום'}</b></span>`;
+      }
+    };
     d.querySelectorAll('.selectable').forEach((row) => {
-      row.onclick = () => row.classList.toggle('selected');
+      row.onclick = () => { row.classList.toggle('selected'); refreshSummary(); };
     });
+    d.querySelector('#t-mgive').oninput = refreshSummary;
+    d.querySelector('#t-mget').oninput = refreshSummary;
+    refreshSummary();
     d.querySelector('#d-offer').onclick = () => {
       const give = [...d.querySelectorAll('.selected[data-side="give"]')].map((r) => Number(r.dataset.pos));
       const get = [...d.querySelectorAll('.selected[data-side="get"]')].map((r) => Number(r.dataset.pos));
@@ -1186,8 +1269,9 @@
     const d = openDialog(`
       <h2>${ai.token} ${ai.name} מציע עסקה!</h2>
       ${deedHTML(g, pos)}
-      <p class="d-sub" style="margin-top:14px">${ai.name} רוצה לקנות ממך את <b>"${sq.name}"</b><br>
-      תמורת <b style="font-size:23px">${money(offer)}</b> (המחיר בלוח: ${money(sq.price)})</p>
+      <p class="d-sub" style="margin-top:14px">${ai.name} רוצה לקנות ממך את <b>"${sq.name}"</b></p>
+      <div class="price-tag receive">🤑 מציע לך: <b>${money(offer)}</b></div>
+      <p class="d-sub">(המחיר בלוח: ${money(sq.price)})</p>
       <div class="d-actions">
         <button class="big-btn green" id="d-acc">✅ מסכימים!</button>
         <button class="big-btn" id="d-dec">❌ לא מוכרים</button>
@@ -1461,5 +1545,6 @@
     primeFromRestore, announce, SVG, narrator, showTurnSummary,
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
     showStickerAlbum, startTutorial, tutorialSeen,
+    setLocalIdx, nudge, clearNudge, deedHTML,
   };
 })();
