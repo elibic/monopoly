@@ -840,17 +840,8 @@
       }
     }
 
-    // 3.6 קופת הבורסה — נפרדת לגמרי מקופת הקנסות ומקופת הבנק
-    const poolDisplay = $('#pool-display');
-    if (poolDisplay) {
-      const pool = g.financeEnabled ? g.marketPool() : 0;
-      poolDisplay.classList.toggle('hidden', !pool);
-      if (pool) {
-        poolDisplay.innerHTML = `<span class="pool-icon">📈</span>
-          <span class="pot-label">קופת הבורסה</span>
-          <span class="pot-amount">${money(pool)}</span>`;
-      }
-    }
+    // 3.6 סרגל הקופות — מוצג כל הזמן: התיק שלי, קופת הבורסה וקופת הבנק
+    renderMoneyBar(g);
 
     // 4. באנר תור
     const cur = g.current();
@@ -1361,6 +1352,57 @@
       <div class="d-actions"><button class="big-btn green" id="d-ok">👍 הבנתי</button></div>`);
     d.querySelector('#d-ok').onclick = () => { closeDialog(); if (onClose) onClose(); };
   }
+
+  /* סרגל הקופות: שלוש הקופות של המשחק, גלויות תמיד ולחיצות.
+   * זה מה שמאפשר לילד לעקוב אחרי הכסף בלי לפתוח שום חלונית. */
+  function renderMoneyBar(g) {
+    const bar = $('#money-bar');
+    if (!bar) return;
+    bar.classList.toggle('hidden', !g.financeEnabled);
+    if (!g.financeEnabled) return;
+
+    const me = g.players[localIdx];
+    const mine = g.investTotal(localIdx);
+    const profit = g.investProfit(localIdx);
+    const pcls = profit > 0 ? 'gain' : profit < 0 ? 'loss' : '';
+    const parrow = profit > 0 ? '▲' : profit < 0 ? '▼' : '➖';
+    const bankInv = g.bankInvested();
+
+    bar.innerHTML = `
+      <div class="mb-title">💰 הכסף במשחק</div>
+      <button class="mb-cell mb-mine" data-open="portfolio">
+        <span class="mb-label">💼 החשבון שלי</span>
+        <span class="mb-rows">
+          <span class="mb-row"><span>עו"ש</span><b>${money(me.money)}</b></span>
+          <span class="mb-row"><span>תיק השקעות</span><b>${money(mine)}</b></span>
+        </span>
+        ${me.invest && me.invest.totalIn ? `<span class="mb-delta ${pcls}">${parrow} ${profit > 0 ? '+' : profit < 0 ? '−' : ''}${Math.abs(profit).toLocaleString('he-IL')} ₪</span>` : '<span class="mb-hint">לחיצה כדי להשקיע</span>'}
+      </button>
+      <div class="mb-two">
+        <button class="mb-cell mb-market" data-open="bank">
+          <span class="mb-label">📈 קופת הבורסה</span>
+          <b>${money(g.marketPool())}</b>
+          <span class="mb-hint">כל הכסף שמושקע</span>
+        </button>
+        <button class="mb-cell mb-bank" data-open="bank">
+          <span class="mb-label">🏦 בנק מונופול</span>
+          <b>${money(g.bank.cash)}</b>
+          <span class="mb-hint">מושקע: ${money(bankInv)}</span>
+        </button>
+      </div>
+      ${g.potEnabled ? `<div class="mb-pot">🎁 קופת הקנסות<b>${money(g.pot)}</b></div>` : ''}`;
+
+    bar.querySelectorAll('[data-open]').forEach((b) => {
+      b.onclick = () => {
+        if (b.dataset.open === 'bank') showMainBankDialog(g, () => {});
+        else if (onOpenPortfolio) onOpenPortfolio();
+      };
+    });
+  }
+
+  // main.js מחבר לכאן את פתיחת תיק ההשקעות (הסרגל לא יודע לשחק בעצמו)
+  let onOpenPortfolio = null;
+  function setPortfolioOpener(fn) { onOpenPortfolio = fn; }
 
   // שורת "תיק השקעות" על הכרטיס: שווי, רווח/הפסד ואחוז — נפרד מהעו"ש
   function portfolioLineHTML(g, idx) {
@@ -2062,7 +2104,7 @@
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
     showStickerAlbum, startTutorial, tutorialSeen,
     setLocalIdx, nudge, clearNudge, deedHTML,
-    showBankDialog, showMainBankDialog, showMarketReport, showInvestInfo, showInvestOffer, outcome100, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
+    showBankDialog, showMainBankDialog, setPortfolioOpener, showMarketReport, showInvestInfo, showInvestOffer, outcome100, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
     showWhatsNew, showWhatsNewIfUpdated, VERSIONS,
   };
 })();
