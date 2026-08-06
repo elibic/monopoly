@@ -1420,6 +1420,72 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 .trade-summary .ts-arrow { font-size: 20px; }
 .trade-summary .ts-empty { color: #7A6A45; }
 
+/* ==================== מצב חינוך פיננסי ==================== */
+
+.fin-row .a-name { display: flex; flex-direction: column; gap: 2px; line-height: 1.25; }
+.fin-blurb {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #7A7263;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.fin-val { font-weight: 800; font-size: 14px; white-space: nowrap; }
+.fin-btns { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+.asset-row button.fin-chunk { min-width: 44px; background: #E3F0FB; box-shadow: 0 2px 0 #B6D4EC; }
+.asset-row button.fin-chunk:hover:not(:disabled) { background: #CFE6F8; }
+.asset-row button.fin-wd { background: #FBEFE0; box-shadow: 0 2px 0 #E6CDA8; }
+.asset-row button.fin-wd:hover:not(:disabled) { background: #F6E2C8; }
+
+.fin-delta { font-weight: 800; white-space: nowrap; }
+.fin-delta.gain { color: #2E7D32; }
+.fin-delta.loss { color: #C62828; }
+.fin-arrow { font-weight: 800; font-size: 11.5px; }
+.fin-arrow.gain { color: #2E7D32; }
+.fin-arrow.loss { color: #C62828; }
+.fin-spark { width: 52px; height: 18px; flex-shrink: 0; }
+.fin-spark-empty { font-size: 11px; color: #A79C88; }
+
+.fin-sep {
+  font-weight: 800;
+  font-size: 13.5px;
+  color: var(--brown-deep, #6B5636);
+  padding: 6px 4px 2px;
+  text-align: right;
+}
+
+.fin-news {
+  background: #FFF6DC;
+  border: 2.5px solid var(--gold);
+  border-radius: 14px;
+  padding: 11px 14px;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.fin-round { font-size: 15px; font-weight: 700; color: #8A7F6B; }
+.fin-report-row .fin-val { font-size: 13.5px; }
+.fin-others { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; }
+.fin-other { font-size: 13px; font-weight: 700; }
+
+.win-finance {
+  background: #EEF7EE;
+  border: 2px solid #BFE0BF;
+  border-radius: 13px;
+  padding: 9px 12px;
+  margin: 8px 0;
+  font-weight: 700;
+  font-size: 14.5px;
+}
+
+@media (max-width: 560px) {
+  .fin-btns { width: 100%; justify-content: flex-start; margin-top: 4px; }
+  .fin-row { flex-wrap: wrap; }
+}
+
 /* ==================== מה חדש? — יומן גרסאות ==================== */
 
 .wn-list { display: flex; flex-direction: column; gap: 12px; max-height: 58vh; overflow-y: auto; padding: 2px; }
@@ -1438,3 +1504,171 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 .wn-items { margin: 0; padding: 0 18px 0 0; display: flex; flex-direction: column; gap: 4px; }
 .wn-items li { font-size: 14px; line-height: 1.45; list-style: none; }
 .fin-news-note { font-size: 13px; font-weight: 700; color: #7A6A45; margin-top: 5px; }
+
+/* ---------- מד סיכון והסברים ---------- */
+
+.fin-risk { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; }
+.fin-risk b { font-weight: 800; margin-right: 3px; }
+.fin-risk.low { color: #2E7D32; }
+.fin-risk.mid { color: #B58100; }
+.fin-risk.high { color: #C62828; }
+.fin-dot { width: 7px; height: 7px; border-radius: 50%; background: #DCD5C2; display: inline-block; }
+.fin-dot.on.low { background: #2E7D32; }
+.fin-dot.on.mid { background: #E8A317; }
+.fin-dot.on.high { background: #C62828; }
+.fin-odds { font-size: 11.5px; font-weight: 700; color: #7A7263; }
+.fin-odds b { color: #4A4436; }
+.fin-odds b.gain, .fin-info b.gain { color: #2E7D32; }
+.fin-odds b.loss, .fin-info b.loss { color: #C62828; }
+
+.asset-row button.fin-info-btn {
+  background: #FFF4D6; box-shadow: 0 2px 0 #E4CF9B; font-size: 14px; padding: 5px 9px;
+}
+.asset-row button.fin-info-btn:hover { background: #FFEBB8; }
+
+.fin-info { display: flex; flex-direction: column; gap: 9px; text-align: right; }
+.fin-info-row {
+  display: flex; flex-direction: column; gap: 2px;
+  background: white; border: 2px solid #E4DCC4; border-radius: 13px; padding: 9px 12px;
+  font-size: 14.5px; line-height: 1.45;
+}
+.fin-info-q { font-weight: 800; color: var(--red-deep, #A32B2F); font-size: 13.5px; }
+.fin-info-tip { background: #FFF6DC; border-radius: 11px; padding: 8px 11px; margin-top: 10px; }
+
+/* ---------- הצעת השקעה יזומה ---------- */
+
+.fin-offer-why { font-weight: 800; color: #4A4436; }
+.fin-offer-list { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 2px; }
+.fin-offer-btn {
+  font-family: var(--font-body);
+  display: flex; flex-direction: column; gap: 3px; align-items: flex-end;
+  background: white; border: 2.5px solid #E4DCC4; border-radius: 15px;
+  padding: 10px 13px; cursor: pointer; text-align: right;
+  box-shadow: 0 3px 0 #E0D8C0; transition: transform .08s, box-shadow .08s, border-color .15s;
+}
+.fin-offer-btn:hover:not(:disabled) { border-color: var(--green-btn, #2FA671); background: #F6FBF4; }
+.fin-offer-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: none; }
+.fin-offer-btn:disabled { opacity: .45; cursor: not-allowed; }
+.fo-top { font-family: var(--font-title); font-size: 17px; }
+.fo-bot { font-size: 11.5px; font-weight: 700; color: #7A7263; }
+
+.fin-boost {
+  background: #EEF7EE; border: 2.5px dashed #8CC79A; border-radius: 15px;
+  padding: 11px 13px; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; align-items: center;
+}
+.fin-boost-q { font-family: var(--font-title); font-size: 17px; }
+.fin-boost-why { font-size: 13px; font-weight: 700; color: #5C7A62; }
+.fin-boost .big-btn { padding: 9px 20px; font-size: 17px; }
+.fin-offer-actions { align-items: center; }
+.fin-offer-actions .mid-btn { opacity: .8; }
+.fin-row { flex-direction: column; align-items: stretch; gap: 7px; }
+.fin-row-top { display: flex; align-items: center; gap: 9px; }
+.fin-row-top .a-name { flex: 1; }
+.fin-row-top .fin-val { min-width: 62px; text-align: left; }
+.fin-row-bot { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.fin-hint { font-size: 12.5px; background: #F3F7FB; border-radius: 10px; padding: 6px 10px; }
+
+/* ---------- הפרדת חשבונות: עו"ש, תיק השקעות, קופת הבורסה, קופת הבנק ---------- */
+
+.cc-portfolio {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin-top: 7px; padding-top: 6px;
+  border-top: 1.5px dashed rgba(255, 255, 255, .3);
+  font-size: 12px; font-weight: 700; color: rgba(255, 255, 255, .92);
+}
+.ccp-label { opacity: .85; }
+.ccp-val { font-size: 14px; font-weight: 800; }
+.ccp-delta { margin-inline-start: auto; font-weight: 800; }
+.ccp-delta.gain { color: #9CE8AE; }
+.ccp-delta.loss { color: #FFB4AE; }
+
+#pool-display {
+  display: flex; align-items: center; gap: 7px;
+  background: rgba(255, 255, 255, .85);
+  border: 2px solid #64B5F6; border-radius: 13px;
+  padding: 4px 11px; font-weight: 800; font-size: 13px;
+}
+.pool-icon { font-size: 15px; }
+
+.pf-summary { display: flex; align-items: center; gap: 8px; justify-content: center; margin-bottom: 10px; }
+.pf-box {
+  flex: 1; background: white; border: 2px solid #E4DCC4; border-radius: 14px;
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; align-items: center;
+}
+.pf-box b { font-size: 18px; font-family: var(--font-title); }
+.pf-box.pf-invest { border-color: #64B5F6; background: #F4FAFF; }
+.pf-label { font-size: 11.5px; font-weight: 700; color: #7A7263; }
+.pf-arrow { font-size: 20px; color: #A79C88; }
+
+.bank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: right; }
+.bank-cell {
+  background: white; border: 2px solid #E4DCC4; border-radius: 13px; padding: 8px 11px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.bank-cell b { font-size: 16px; font-family: var(--font-title); }
+.bank-cell b.gain { color: #2E7D32; }
+.bank-cell b.loss { color: #C62828; }
+.bank-cell small { font-size: 11px; color: #9C9280; font-weight: 600; }
+.bank-cell-label { font-size: 12px; font-weight: 700; color: #7A7263; }
+.bank-pool {
+  margin-top: 10px; background: #EEF4FB; border: 2px solid #B6D4EC;
+  border-radius: 13px; padding: 9px 12px; font-weight: 700; font-size: 14px;
+}
+.fin-fee-note { background: #FAF6EC; border-radius: 11px; padding: 7px 11px; font-size: 12.5px; }
+.fin-fee-row { opacity: .92; }
+
+@media (max-width: 560px) {
+  .bank-grid { grid-template-columns: 1fr; }
+  .pf-summary { flex-direction: column; }
+}
+.bank-pool small { display: block; font-weight: 600; font-size: 11.5px; color: #6B7B8C; margin-top: 3px; }
+
+/* ---------- סרגל הקופות: מוצג כל הזמן ---------- */
+
+#money-bar {
+  background: var(--cream, #FBF6E9);
+  border: 2.5px solid var(--board-edge, #C8B99C);
+  border-radius: 16px;
+  padding: 9px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.mb-title { font-family: var(--font-title); font-size: 14px; text-align: center; color: #6B5636; }
+.mb-two { display: flex; gap: 7px; }
+.mb-cell {
+  font-family: var(--font-body);
+  flex: 1;
+  display: flex; flex-direction: column; gap: 2px; align-items: stretch;
+  background: white; border: 2px solid #E4DCC4; border-radius: 13px;
+  padding: 7px 10px; cursor: pointer; text-align: right;
+  box-shadow: 0 2px 0 #E0D8C0;
+  transition: transform .08s, box-shadow .08s, border-color .15s;
+}
+.mb-cell:hover { border-color: var(--gold, #F5B940); background: #FFFDF6; }
+.mb-cell:active { transform: translateY(2px); box-shadow: none; }
+.mb-cell b { font-family: var(--font-title); font-size: 17px; }
+.mb-label { font-size: 12px; font-weight: 800; color: #7A7263; }
+.mb-hint { font-size: 10.5px; font-weight: 600; color: #A79C88; }
+.mb-rows { display: flex; flex-direction: column; gap: 1px; }
+.mb-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; font-weight: 700; color: #5C5445; }
+.mb-row b { font-size: 15px; }
+.mb-mine { border-color: #CBB98F; background: #FFFCF3; }
+.mb-market { border-color: #B6D4EC; }
+.mb-bank { border-color: #C9E2C9; }
+.mb-delta { font-size: 12.5px; font-weight: 800; text-align: left; }
+.mb-delta.gain { color: #2E7D32; }
+.mb-delta.loss { color: #C62828; }
+
+@media (max-width: 900px) {
+  #money-bar { flex-direction: row; align-items: stretch; flex-wrap: wrap; }
+  .mb-title { width: 100%; }
+  .mb-mine { flex: 1 1 100%; }
+  .mb-two { flex: 1 1 100%; }
+}
+.mb-pot {
+  display: flex; justify-content: space-between; align-items: baseline;
+  background: #FFF6DC; border: 2px solid #EBD9A8; border-radius: 11px;
+  padding: 5px 10px; font-size: 12px; font-weight: 800; color: #7A6A45;
+}
+.mb-pot b { font-family: var(--font-title); font-size: 15px; color: #6B5636; }
