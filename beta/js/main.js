@@ -318,29 +318,35 @@
       // המכירה הסתיימה אך דיאלוג המכירה עדיין פתוח — סוגרים אותו כדי שלא ייתקע
       if (game.phase !== 'auction') UI.closeAuctionDialog();
 
+      let dialogOpen = false; // חלונית שכבר נפתחה במעבר הזה — כדי שלא תידרס
       if (game.phase === 'auction') {
         UI.renderAuction(game, humanIdx, onHumanBid, onHumanPassAuction);
+        dialogOpen = true;
       } else if (game.phase === 'buy' && !isAI(game.turn)) {
         UI.showBuyDialog(game, () => { game.buy(); tick(); }, () => { game.declineBuy(); tick(); });
+        dialogOpen = true;
       } else if (game.phase === 'debt' && !isAI(game.debt.debtor)) {
         showHumanDebt();
+        dialogOpen = true;
       } else if (game.phase === 'roll' && !isAI(game.turn) && game.current().inJail) {
         UI.showJailDialog(game, {
           onPay: () => { game.payJailFine(); tick(); },
           onCard: () => { game.useJailCard(); tick(); },
           onRoll: () => { doRoll(); },
         });
+        dialogOpen = true;
       } else if (!isAI(game.turn) && game.turn === humanIdx && !summaryPending && !buildOfferDone
                  && (game.phase === 'end' || (game.phase === 'roll' && game.doubles > 0))
                  && game.canBuildOn(humanIdx, game.players[humanIdx].pos)) {
         // החייל הגיע לרחוב של השחקן וכל העיר בבעלותו — מציעים לבנות כאן ועכשיו
         buildOfferDone = true;
         showBuildOffer(game.players[humanIdx].pos);
+        dialogOpen = true;
       }
 
       // דוח הבורסה בסוף כל סבב — לפני שממשיכים לשחק.
       // יוצאים מהלולאה כדי שחלונית אחרת (למשל סיכום תור המחשב) לא תדרוס אותו.
-      if (game.financeEnabled && game.market.report && game.market.report.round > reportShown
+      if (game.financeEnabled && !dialogOpen && game.market.report && game.market.report.round > reportShown
           && !reportPending && game.phase !== 'gameover') {
         const rep = game.market.report;
         reportShown = rep.round;
@@ -359,7 +365,7 @@
       }
 
       // מאמן ההשקעות: מציע לילד להשקיע ברגעים הנכונים, בלי שיצטרך לזכור לבד
-      if (maybeOfferInvestment()) break;
+      if (!dialogOpen && maybeOfferInvestment()) break;
 
       const actor = currentActor();
       if (isAI(actor)) {
