@@ -1225,7 +1225,7 @@
   /* ==================== מצב חינוך פיננסי: הבנק שלי ודוח הבורסה ==================== */
 
   const FIN = D.FINANCE;
-  const pct = (n) => `${n > 0 ? '+' : ''}${n}%`;
+  const pct = (n) => (n > 0 ? `+${n}%` : n < 0 ? `−${Math.abs(n)}%` : '0%');
   const deltaHTML = (delta, p) =>
     `<span class="fin-delta ${delta > 0 ? 'gain' : delta < 0 ? 'loss' : ''}">${delta > 0 ? '+' : delta < 0 ? '−' : ''}${money(Math.abs(delta))}${p !== undefined && delta !== 0 ? ` (${pct(p)})` : ''}</span>`;
 
@@ -1322,7 +1322,7 @@
         ? `יש לך מניות שלה — לכן ההשקעה שלך ${dir}!`
         : `אין לך מניות שלה, אז זה לא השפיע על הכסף שלך הפעם.`;
       newsBox = `<div class="fin-news">📰 <b>חדשות!</b> ${rep.news.text}
-        <div class="fin-news-note">${co.emoji} ${co.name} ${dir} — ${note}</div></div>`;
+        <div class="fin-news-note">${co.emoji} ${co.name} ${dir}. ${note}</div></div>`;
     }
 
     const rows = mine.map((e) => `

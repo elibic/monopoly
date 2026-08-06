@@ -336,7 +336,8 @@
           && !reportPending && game.phase !== 'gameover') {
         const rep = game.market.report;
         reportShown = rep.round;
-        if (rep.news || rep.entries.some((e) => e.idx === humanIdx)) {
+        // מי שעדיין לא השקיע לא נעצר בכל סבב — הוא רואה רק את כרזת החדשות
+        if (rep.entries.some((e) => e.idx === humanIdx)) {
           reportPending = true;
           updateButtons();
           UI.showMarketReport(game, humanIdx, () => { reportPending = false; updateButtons(); tick(); });
