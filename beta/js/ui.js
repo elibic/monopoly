@@ -1287,7 +1287,7 @@
     const d = openDialog(`
       <h2>הבנק שלי 🏦</h2>
       <p class="d-sub">בחשבון: <b>${money(p.money)}</b> · מושקע: <b>${money(total)}</b>${total || profit ? ` · ${profit >= 0 ? 'הרווחת' : 'הפסדת'} ${deltaHTML(profit)}` : ''}</p>
-      <p class="d-sub">💡 שמים כסף בבנק — והוא עובד בשבילך! ב🐷 הוא בטוח וגדל לאט, ב🚀 הוא יכול לגדול הרבה — או לרדת.</p>
+      <p class="d-sub">💡 שמים כסף בבנק, והוא עובד בשבילך! בקופת החיסכון הכסף בטוח וגדל לאט. במניות הוא יכול לגדול הרבה — או לרדת.</p>
       <div class="asset-list">
         ${trackRow('savings')}
         ${trackRow('deposit')}
@@ -1313,8 +1313,17 @@
     const mine = rep.entries.filter((e) => e.idx === humanIdx);
     const myTotal = rep.totals[humanIdx] || 0;
 
-    const newsBox = rep.news
-      ? `<div class="fin-news">📰 <b>חדשות!</b> ${rep.news.text}</div>` : '';
+    let newsBox = '';
+    if (rep.news) {
+      const co = FIN.COMPANIES.find((c) => c.id === rep.news.co);
+      const holdsIt = mine.some((e) => e.co === rep.news.co);
+      const dir = rep.news.m > 1 ? 'עלתה' : 'ירדה';
+      const note = holdsIt
+        ? `יש לך מניות שלה — לכן ההשקעה שלך ${dir}!`
+        : `אין לך מניות שלה, אז זה לא השפיע על הכסף שלך הפעם.`;
+      newsBox = `<div class="fin-news">📰 <b>חדשות!</b> ${rep.news.text}
+        <div class="fin-news-note">${co.emoji} ${co.name} ${dir} — ${note}</div></div>`;
+    }
 
     const rows = mine.map((e) => `
       <div class="asset-row fin-report-row">

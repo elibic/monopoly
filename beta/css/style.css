@@ -1503,3 +1503,4 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 .wn-title { font-family: var(--font-title); font-size: 17px; margin: 3px 0 6px; }
 .wn-items { margin: 0; padding: 0 18px 0 0; display: flex; flex-direction: column; gap: 4px; }
 .wn-items li { font-size: 14px; line-height: 1.45; list-style: none; }
+.fin-news-note { font-size: 13px; font-weight: 700; color: #7A6A45; margin-top: 5px; }
