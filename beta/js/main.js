@@ -24,6 +24,7 @@
   let offerCooldown = 0;       // כמה תורות להמתין עד ההצעה הבאה
   let lastCash = null;         // מזומן בתחילת התור הקודם — לזיהוי כסף שנכנס
   let firstOfferDone = false;  // ההצעה הראשונה ("בוא ננסה") כבר הוצגה
+  let profitRound = 0;         // הסבב האחרון שבו הילד הרוויח בבורסה (להצעת המשך)
   let wealthHistory = [];      // מדגם שווי-נטו של כל השחקנים לאורך המשחק (לגרף הסיכום)
 
   function sampleWealth() {
@@ -226,7 +227,7 @@
     summaryPending = false;
     reportShown = 0;
     reportPending = false;
-    offerPending = false; offerCooldown = 1; lastCash = null; firstOfferDone = false;
+    offerPending = false; offerCooldown = 1; lastCash = null; firstOfferDone = false; profitRound = 0;
     wealthHistory = [];
     syncBankButton();
     $('#setup-screen').classList.add('hidden');
@@ -256,7 +257,7 @@
     aiRoundStartSeq = null;
     summaryPending = false;
     reportPending = false;
-    offerPending = false; offerCooldown = 1; lastCash = null;
+    offerPending = false; offerCooldown = 1; lastCash = null; profitRound = 0;
     firstOfferDone = game.financeEnabled && game.players[humanIdx].invest.totalIn > 0;
     reportShown = game.market ? game.market.round : 0; // לא מציגים שוב דוח ישן
     syncBankButton();
@@ -347,6 +348,7 @@
         if (rep.entries.some((e) => e.idx === humanIdx)) {
           reportPending = true;
           updateButtons();
+          if ((rep.totals[humanIdx] || 0) > 0) profitRound = rep.round;
           UI.showMarketReport(game, humanIdx, () => { reportPending = false; updateButtons(); tick(); },
             (track, co, amount) => {
               reportPending = false;
@@ -534,6 +536,11 @@
     if (!firstOfferDone && game.investTotal(humanIdx) === 0) {
       kind = 'first';
       reason = `יש לך ${p.money.toLocaleString('he-IL')} ₪ בחשבון, והם פשוט יושבים שם.`;
+    } else if (profitRound === game.market.round && spare >= 200) {
+      kind = 'profit';
+      profitRound = 0; // פעם אחת לכל סבב מרוויח
+      const won = game.market.report.totals[humanIdx] || 0;
+      reason = `בסבב האחרון ההשקעות שלך הרוויחו ${won.toLocaleString('he-IL')} ₪ — ויש לך עוד כסף פנוי.`;
     } else if (prevCash !== null && p.money - prevCash >= 150) {
       kind = 'windfall';
       reason = `נכנסו לך ${(p.money - prevCash).toLocaleString('he-IL')} ₪ מאז התור הקודם!`;
