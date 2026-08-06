@@ -681,6 +681,10 @@
     try {
       if (g.phase === 'auction') {
         const dec = AI.decideAuction(g, idx);
+        if (dec !== 'pass' && dec !== null) {
+          const why = AI.auctionIntent(g, idx);
+          if (why) UI.toast(why);
+        }
         if (dec === 'pass' || dec === null) g.passAuction(idx);
         else g.placeBid(idx, dec);
       } else if (g.phase === 'buy') {
