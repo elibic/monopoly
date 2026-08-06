@@ -612,7 +612,7 @@ test('פיקדון ומניות: עיגול לשקלים שלמים ורצפה �
   g.invest(0, 'stocks', 'ice', 100);
   playTurn(g); playTurn(g);
   assert.equal(g.players[0].invest.deposit, 48);   // 50 × 0.96
-  assert.equal(g.players[0].invest.stocks.ice, 70); // 100 × 0.7
+  assert.equal(g.players[0].invest.stocks.ice, 69); // 100 × 0.7, פחות שקל דמי ניהול
   // רצפה: ערך זעיר לא נמחק לאפס
   const g2 = finGame({ marketQueue: [{ mults: { ice: 0.5 }, deposit: 1 }] });
   g2.invest(0, 'stocks', 'ice', 100);
@@ -626,7 +626,7 @@ test('מניות: הכפולה חלה רק על החברה הנכונה', () => 
   g.invest(0, 'stocks', 'ice', 100);
   g.invest(0, 'stocks', 'pizza', 100);
   playTurn(g); playTurn(g);
-  assert.equal(g.players[0].invest.stocks.ice, 140);
+  assert.equal(g.players[0].invest.stocks.ice, 138); // 140 פחות 2 דמי ניהול (מהאחזקה הגדולה)
   assert.equal(g.players[0].invest.stocks.pizza, 80);
   assert.equal(g.players[0].invest.stocks.toys, 0);
 });
@@ -707,8 +707,8 @@ test('שמירה ושחזור: אחזקות, מגמות ומצב השוק', () =
   const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
   assert.equal(r.financeEnabled, true);
   assert.equal(r.market.round, 1);
-  assert.equal(r.players[0].invest.stocks.ice, 125);
-  assert.equal(r.players[0].invest.savings, 102);
+  assert.equal(r.players[0].invest.stocks.ice, 124); // 125 פחות שקל דמי ניהול
+  assert.equal(r.players[0].invest.savings, 102);    // בקופת החיסכון אין עמלה
   assert.equal(r.investTotal(0), g.investTotal(0));
   assert.deepEqual(r.market.trend.ice, g.market.trend.ice);
   assert.equal(r.market.report.entries.length, 2);
@@ -825,4 +825,91 @@ test('הבוט מושך השקעות לפני משכנתא כשצריך לשלם
   assert.equal(g.phase, 'end');
   assert.equal(g.mortgaged[6], false, 'הבוט משכן במקום למשוך השקעות');
   assert.equal(g.investTotal(1), 0);
+});
+
+/* ---------- שלוש הקופות: בורסה, קנסות ובנק ---------- */
+
+test('שלוש קופות נפרדות: הבורסה, קופת הקנסות והבנק', () => {
+  const g = finGame({ pot: true, diceQueue: [[1, 3]] });
+  const bankStart = g.bank.cash;
+  g.invest(0, 'stocks', 'ice', 200);
+  assert.equal(g.pot, 0, 'השקעה לא נכנסת לקופת הקנסות');
+  assert.equal(g.bank.cash, bankStart, 'השקעה לא נכנסת לבנק');
+  assert.equal(g.marketPool(), 200, 'הכסף נמצא בקופת הבורסה');
+
+  g.rollDice(); // מס הכנסה 200 → קופת הקנסות
+  assert.equal(g.pot, 200);
+  assert.equal(g.marketPool(), 200, 'קופת הקנסות לא נוגעת בבורסה');
+});
+
+test('כשקופת הקנסות כבויה — התשלומים מגיעים לבנק', () => {
+  const g = new Game(
+    [{ name: 'א' }, { name: 'ב', isAI: true }],
+    { finance: true, auctions: false, pot: false, diceQueue: [[1, 3]] },
+  );
+  const before = g.bank.cash;
+  g.rollDice(); // מס הכנסה 200
+  assert.equal(g.pot, 0);
+  assert.equal(g.bank.cash, before + 200);
+});
+
+test('הבנק משלם משכורות ומקבל את מחיר הנכס כשאין קופה', () => {
+  const g = new Game(
+    [{ name: 'א' }, { name: 'ב', isAI: true }],
+    { finance: true, auctions: false, pot: false, diceQueue: [[1, 2]] },
+  );
+  const before = g.bank.cash;
+  g.rollDice();
+  g.buy(); // חוף אלמוג 60 → לבנק
+  assert.equal(g.bank.cash, before + 60);
+  const mid = g.bank.cash;
+  g._salary(g.players[0]);
+  assert.equal(g.bank.cash, mid - 200);
+  assert.equal(g.bank.salaries, 200);
+});
+
+test('דמי ניהול: נגבים על פיקדון ומניות, לא על קופת החיסכון', () => {
+  const g = finGame({ marketQueue: [{ mults: {}, deposit: 1 }] });
+  g.invest(0, 'savings', null, 500);
+  g.invest(0, 'stocks', 'ice', 400);
+  playTurn(g); playTurn(g);
+  const rep = g.market.report;
+  assert.equal(rep.fees[0], 4, 'עמלה של 1% על 400 ש"ח המנוהלים');
+  assert.equal(g.players[0].invest.stocks.ice, 396);
+  assert.equal(g.players[0].invest.savings, 510, 'בקופת החיסכון אין עמלה');
+  assert.equal(g.bank.fees, 4, 'דמי הניהול נרשמו אצל הבנק');
+});
+
+test('סכום קטן (מתחת ל-100 ש"ח) פטור מדמי ניהול', () => {
+  const g = finGame({ marketQueue: [{ mults: {}, deposit: 1 }] });
+  g.invest(0, 'deposit', null, 50);
+  playTurn(g); playTurn(g);
+  assert.equal(g.players[0].invest.deposit, 50);
+  assert.equal(g.market.report.fees[0], undefined);
+});
+
+test('הבנק משקיע בבורסה ומרוויח יחד עם כולם', () => {
+  const g = finGame({ marketQueue: [{ mults: {}, deposit: 1 }, { mults: { ice: 1.4, toys: 1.4, space: 1.4, pizza: 1.4 }, deposit: 1.08 }] });
+  g.invest(0, 'savings', null, 100);
+  playTurn(g); playTurn(g);            // סבב 1 — הבנק מאזן ומשקיע
+  const invested = g.bankInvested();
+  assert.ok(invested > 0, 'הבנק השקיע חלק מההון שלו');
+  playTurn(g); playTurn(g);            // סבב 2 — עלייה בשוק
+  assert.ok(g.bank.profit > 0, 'הבנק הרוויח מההשקעות שלו');
+  assert.ok(g.marketPool() >= g.bankInvested(), 'קופת הבורסה כוללת גם את הבנק');
+});
+
+test('שמירה ושחזור שומרים את קופת הבנק', () => {
+  const g = finGame({ marketQueue: [{ mults: {}, deposit: 1 }] });
+  g.invest(0, 'deposit', null, 300);
+  playTurn(g); playTurn(g);
+  const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.bank.cash, g.bank.cash);
+  assert.equal(r.bank.fees, g.bank.fees);
+  assert.deepEqual(r.bank.invest, g.bank.invest);
+  assert.equal(r.marketPool(), g.marketPool());
+  // שמירה ישנה בלי בנק — נטענת עם ברירת מחדל
+  const old = JSON.parse(JSON.stringify(g.toJSON()));
+  delete old.bank;
+  assert.equal(Game.restore(old).bank.cash, F.BANK_START);
 });

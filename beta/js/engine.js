@@ -20,6 +20,17 @@
     crashSurvived: false,
   });
 
+  // בנק מונופול: הון משלו, תיק השקעות משלו, והכנסות מדמי ניהול.
+  // זה מה שמאפשר להראות לילד "במה הבנק משקיע וכמה הוא מרוויח".
+  const emptyBank = () => ({
+    cash: F.BANK_START,
+    invest: { deposit: 0, stocks: Object.fromEntries(F.COMPANIES.map((c) => [c.id, 0])) },
+    fees: 0,      // דמי ניהול שנגבו מהשחקנים
+    profit: 0,    // רווח מצטבר מהשקעות הבנק
+    salaries: 0,  // משכורות ששולמו
+    loans: 0,     // כסף שהבנק נתן במשכנתאות
+  });
+
   const emptyMarket = () => ({
     round: 0,
     trend: Object.fromEntries(F.COMPANIES.map((c) => [c.id, [100]])), // מסלול מחירים לגרף
@@ -76,6 +87,7 @@
       this.hotelsLeft = C.TOTAL_HOTELS;
       this.pot = 0; // הקופה: כל תשלום לבנק נכנס אליה, מי שנוחת בחניה חופשית זוכה
       this.market = emptyMarket(); // מצב חינוך פיננסי: שוק אחד משותף לכל השחקנים
+      this.bank = emptyBank();     // קופת בנק מונופול — נפרדת מקופת הקנסות ומהבורסה
 
       this.decks = {
         chance: shuffle(D.CHANCE_CARDS, this.rand),
@@ -199,6 +211,38 @@
       return `${t.emoji} ${t.name}`;
     }
 
+    /* שלוש קופות נפרדות במשחק:
+     *   this.pot   — קופת הקנסות והתשלומים (חוק בית: זוכים בה בחניה חופשית)
+     *   this.bank  — קופת בנק מונופול: ההון שלו, ההשקעות שלו וההכנסות שלו
+     *   marketPool — קופת הבורסה הציבורית: כל הכסף שמושקע, של כולם יחד */
+
+    _bankPay(amount, kind) {
+      this.bank.cash -= amount;
+      if (kind && this.bank[kind] !== undefined) this.bank[kind] += amount;
+    }
+
+    // תשלום לבנק: בחוק הבית הוא מגיע לקופת הקנסות, אחרת אל הבנק עצמו
+    _toBankOrPot(amount) {
+      if (this.potEnabled) this.pot += amount;
+      else this.bank.cash += amount;
+    }
+
+    bankInvested() {
+      const inv = this.bank.invest;
+      let total = inv.deposit;
+      for (const c of F.COMPANIES) total += inv.stocks[c.id] || 0;
+      return total;
+    }
+
+    bankTotal() { return this.bank.cash + this.bankInvested(); }
+
+    // כל הכסף שמושקע בבורסה — של כל השחקנים ושל הבנק יחד
+    marketPool() {
+      let total = this.bankInvested();
+      for (const p of this.players) if (!p.bankrupt) total += this.investTotal(p.idx);
+      return total;
+    }
+
     investTotal(idx) {
       const inv = this.players[idx].invest;
       if (!inv) return 0;
@@ -320,7 +364,12 @@
         if (arr.length > 13) arr.shift();
       }
 
-      const report = { round, news: news ? { id: news.id, co: news.co, m: news.m, text: news.text } : null, entries: [], totals: {} };
+      const report = {
+        round,
+        news: news ? { id: news.id, co: news.co, m: news.m, text: news.text } : null,
+        entries: [], totals: {}, fees: {},
+        bank: { profit: 0, fees: 0 },
+      };
 
       for (const p of this.players) {
         if (p.bankrupt || !p.invest) continue;
@@ -373,12 +422,57 @@
           }
         }
 
+        // דמי ניהול: הבנק גובה אחוז קטן על פיקדון ומניות (בקופת החיסכון אין עמלה)
+        const managed = p.invest.deposit + F.COMPANIES.reduce((t, c) => t + p.invest.stocks[c.id], 0);
+        // מתחת ל-100 ש"ח מנוהלים אין עמלה בכלל — כלל פשוט וברור לילד
+        const fee = Math.floor(managed * F.FEE_RATE);
+        if (fee > 0) {
+          let left = fee;
+          const feeable = this.holdings(p.idx)
+            .filter((h) => h.track !== 'savings')
+            .sort((a, b) => b.value - a.value); // גובים מהאחזקה הגדולה קודם
+          for (const h of feeable) {
+            if (left <= 0) break;
+            const cur = this._holding(p, h.track, h.co);
+            const take = Math.min(left, Math.max(0, cur - F.FLOOR));
+            if (take > 0) { this._setHolding(p, h.track, h.co, cur - take); left -= take; }
+          }
+          const taken = fee - left;
+          if (taken > 0) {
+            this.bank.cash += taken;
+            this.bank.fees += taken;
+            report.fees[p.idx] = taken;
+            report.bank.fees += taken;
+            sum -= taken;
+          }
+        }
+
         report.totals[p.idx] = sum;
         if (this.holdings(p.idx).length) {
           const word = sum > 0 ? 'גדלו' : sum < 0 ? 'ירדו' : 'נשארו כמו שהיו';
           const tail = sum === 0 ? '' : ` ב-${money(Math.abs(sum))}`;
           this._log(`📊 עדכון שוק: ההשקעות של ${p.name} ${word}${tail}.`, 'market', { pIdx: p.idx, delta: sum });
         }
+      }
+
+      // הבנק משקיע חלק מההון שלו באותו שוק — ככה הילד רואה שגם הבנק מרוויח מהכסף
+      const bInv = this.bank.invest;
+      let bankBefore = this.bankInvested();
+      bInv.deposit = Math.max(0, Math.round(bInv.deposit * depositMult));
+      for (const c of F.COMPANIES) bInv.stocks[c.id] = Math.max(0, Math.round(bInv.stocks[c.id] * mults[c.id]));
+      const bankGain = this.bankInvested() - bankBefore;
+      this.bank.profit += bankGain;
+      report.bank.profit = bankGain;
+
+      // איזון: הבנק שומר חלק קבוע מההון שלו מושקע (חצי בפיקדון, חצי מפוזר במניות)
+      const target = Math.round(this.bankTotal() * F.BANK_INVEST_SHARE);
+      const move = target - this.bankInvested();
+      if (move > 0 && this.bank.cash >= move) {
+        this.bank.cash -= move;
+        const half = Math.round(move / 2);
+        bInv.deposit += half;
+        const per = Math.round((move - half) / F.COMPANIES.length);
+        for (const c of F.COMPANIES) bInv.stocks[c.id] += per;
       }
 
       this.market.report = report;
@@ -454,6 +548,7 @@
 
     _salary(p) {
       p.money += C.GO_SALARY;
+      this._bankPay(C.GO_SALARY, 'salaries');
       this._log(`${p.name} ${v(p, 'עבר ב"דרך צלחה" וקיבל', 'עברה ב"דרך צלחה" וקיבלה')} משכורת ${money(C.GO_SALARY)}!`, 'money');
     }
 
@@ -536,7 +631,7 @@
       const p = this.current();
       if (p.money < sq.price) throw new Error('אין מספיק כסף בחשבון');
       p.money -= sq.price;
-      if (this.potEnabled) this.pot += sq.price;
+      this._toBankOrPot(sq.price);
       this.owner[pos] = p.idx;
       this.pendingBuy = null;
       this._log(`${p.name} ${v(p, 'קנה', 'קנתה')} את "${sq.name}" ב-${money(sq.price)}! 🎉`, 'buy');
@@ -611,7 +706,7 @@
       if (a.active.length === 1 && a.highBidder === a.active[0]) {
         const winner = this.players[a.highBidder];
         winner.money -= a.currentBid;
-        if (this.potEnabled) this.pot += a.currentBid;
+        this._toBankOrPot(a.currentBid);
         this.owner[a.pos] = winner.idx;
         this._log(`${winner.name} ${v(winner, 'זכה', 'זכתה')} במכירה! "${this.square(a.pos).name}" ב-${money(a.currentBid)}.`, 'buy');
         this.auction = null;
@@ -766,7 +861,7 @@
       if (this.phase !== 'roll' || !p.inJail) throw new Error('לא ניתן לשלם קנס עכשיו');
       if (p.money < C.JAIL_FINE) throw new Error('אין מספיק כסף לקנס');
       p.money -= C.JAIL_FINE;
-      if (this.potEnabled) this.pot += C.JAIL_FINE;
+      this._toBankOrPot(C.JAIL_FINE);
       p.inJail = false;
       p.jailRolls = 0;
       this._log(`${p.name} ${v(p, 'שילם קנס', 'שילמה קנס')} ${money(C.JAIL_FINE)} ${v(p, 'ויצא', 'ויצאה')} מהכלא.`, 'jail');
@@ -807,7 +902,7 @@
       const sq = this.square(pos);
       const cost = GROUPS[sq.group].houseCost;
       p.money -= cost;
-      if (this.potEnabled) this.pot += cost;
+      this._toBankOrPot(cost);
       if (this.houses[pos] === 4) {
         this.houses[pos] = 5;
         this.hotelsLeft--;
@@ -886,7 +981,7 @@
       const p = this.players[idx];
       if (p.money < cost) throw new Error('אין מספיק כסף לפדיון');
       p.money -= cost;
-      if (this.potEnabled) this.pot += cost;
+      this._toBankOrPot(cost);
       this.mortgaged[pos] = false;
       this._log(`${p.name} ${v(p, 'פדה', 'פדתה')} את "${sq.name}" מהמשכנתא תמורת ${money(cost)} (כולל 10% ריבית).`, 'mortgage');
     }
@@ -937,7 +1032,7 @@
       if (p.money >= amount) {
         p.money -= amount;
         if (creditorIdx !== null) this.players[creditorIdx].money += amount;
-        else if (this.potEnabled) this.pot += amount;
+        else this._toBankOrPot(amount);
         if (onPaid) onPaid();
         return;
       }
@@ -953,7 +1048,7 @@
       if (p.money < d.amount) throw new Error('עדיין אין מספיק כסף');
       p.money -= d.amount;
       if (d.creditor !== null) this.players[d.creditor].money += d.amount;
-      else if (this.potEnabled) this.pot += d.amount;
+      else this._toBankOrPot(d.amount);
       this.debt = null;
       this._log(`${p.name} ${v(p, 'שילם', 'שילמה')} את החוב (${money(d.amount)}).`, 'money');
       this.phase = 'end';
@@ -1063,6 +1158,7 @@
         hotelsLeft: this.hotelsLeft,
         pot: this.pot,
         market: this.market,
+        bank: this.bank,
         decks: {
           chance: this.decks.chance.map((c) => c.id),
           chest: this.decks.chest.map((c) => c.id),
@@ -1105,6 +1201,9 @@
       g.hotelsLeft = data.hotelsLeft;
       g.pot = data.pot || 0;
       g.market = data.market ? { ...emptyMarket(), ...data.market, trend: { ...emptyMarket().trend, ...(data.market.trend || {}) } } : emptyMarket();
+      g.bank = data.bank
+        ? { ...emptyBank(), ...data.bank, invest: { ...emptyBank().invest, ...(data.bank.invest || {}), stocks: { ...emptyBank().invest.stocks, ...((data.bank.invest || {}).stocks || {}) } } }
+        : emptyBank();
       g.decks = {
         chance: data.decks.chance.map((id) => cardById('chance', id)),
         chest: data.decks.chest.map((id) => cardById('chest', id)),
