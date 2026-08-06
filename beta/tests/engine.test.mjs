@@ -412,21 +412,30 @@ test('קופה: תשלומים לבנק נאספים ומי שנוחת בחני�
   assert.equal(g.players[0].money, 1300);
   g.endTurn();
   g.players[1].pos = 16;
-  g.rollDice(); // המחשב: 16+4=20 חניה חופשית — זוכה בקופה (דאבל, אבל זכייה קודם)
+  g.rollDice(); // המחשב: 16+4=20 חניה חופשית — זוכה בקופה (דאבל, אבל התור נגמר)
   assert.equal(g.pot, 0);
   assert.equal(g.players[1].money, 1700);
+  assert.equal(g.phase, 'end');
 });
 
-test('קופה: זכייה בחניה חופשית לא מפסידה תור — מקבלים הטלה נוספת', () => {
+test('חניה חופשית מפסידה את התור גם כשזוכים בקופה', () => {
   const g = twoPlayers({ diceQueue: [[1, 3], [1, 3]] });
   g.rollDice(); // אל 4 — מס הכנסה 200 לקופה
   assert.equal(g.pot, 200);
   g.endTurn();
   g.players[1].pos = 16;
-  g.rollDice(); // המחשב: 16+4=20 חניה חופשית — זוכה בקופה (בלי דאבל)
+  g.rollDice(); // המחשב: 16+4=20 חניה חופשית — זוכה בקופה
   assert.equal(g.pot, 0);
   assert.equal(g.players[1].money, 1700);
-  assert.equal(g.phase, 'roll'); // התור לא הולך לאיבוד — מטילים שוב
+  assert.equal(g.phase, 'end'); // התור נגמר — אין הטלה נוספת
+});
+
+test('חניה חופשית מפסידה את התור גם אחרי דאבל', () => {
+  const g = twoPlayers({ diceQueue: [[2, 2]] });
+  g.players[0].pos = 16; // 16+4=20 חניה חופשית, בדאבל
+  g.rollDice();
+  assert.equal(g.players[0].pos, 20);
+  assert.equal(g.phase, 'end'); // דאבל לא מזכה בהטלה נוספת בחניה
 });
 
 test('קופה: קניית נכס נכנסת לקופה', () => {
