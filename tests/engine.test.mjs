@@ -74,12 +74,14 @@ test('נחיתה על נכס של יריב גובה שכ"ד אוטומטית', (
   assert.equal(g.phase, 'end');
 });
 
-test('רכבות: שכ"ד לפי מספר רכבות', () => {
+test('רכבות: 25 ש"ח לכל רכבת בבעלות (3 רכבות = 75)', () => {
   const g = twoPlayers();
   g.owner[5] = 1;
   assert.equal(g.rentOf(5, 7), 25);
   g.owner[15] = 1;
   g.owner[25] = 1;
+  assert.equal(g.rentOf(5, 7), 75);
+  g.owner[35] = 1;
   assert.equal(g.rentOf(5, 7), 100);
 });
 
@@ -154,17 +156,18 @@ test('תשלום קנס יציאה מהכלא', () => {
   assert.equal(p.pos, 13);
 });
 
-test('בנייה שווה: אי אפשר בית שני לפני בית ראשון בכל הרחובות', () => {
+test('בנייה רק כשהחייל עומד על המשבצת (חוק בית)', () => {
   const g = twoPlayers();
   g.owner[1] = 0; g.owner[3] = 0;
   g.phase = 'end';
-  assert.equal(g.canBuildOn(0, 1), true);
+  assert.equal(g.canBuildOn(0, 1), false); // החייל ב"דרך צלחה" — לא בונים מרחוק
+  g.players[0].pos = 1;
+  assert.equal(g.canBuildOn(0, 1), true);  // הגיע למשבצת — אפשר לבנות
+  assert.equal(g.canBuildOn(0, 3), false); // ברחוב השני לא עומדים — אין בנייה
   g.buildHouse(1);
-  assert.equal(g.canBuildOn(0, 1), false); // חייבים לבנות קודם ב-3
-  assert.equal(g.canBuildOn(0, 3), true);
-  g.buildHouse(3);
-  assert.equal(g.canBuildOn(0, 1), true);
-  assert.equal(g.housesLeft, C.TOTAL_HOUSES - 2);
+  assert.equal(g.houses[1], 1);
+  assert.equal(g.canBuildOn(0, 1), true);  // אפשר להמשיך לבנות איפה שעומדים
+  assert.equal(g.housesLeft, C.TOTAL_HOUSES - 1);
 });
 
 test('מלון: אחרי 4 בתים; הבתים חוזרים למלאי', () => {
@@ -172,17 +175,19 @@ test('מלון: אחרי 4 בתים; הבתים חוזרים למלאי', () => 
   g.owner[1] = 0; g.owner[3] = 0;
   g.phase = 'end';
   g.players[0].money = 5000;
-  for (let i = 0; i < 4; i++) { g.buildHouse(1); g.buildHouse(3); }
+  g.players[0].pos = 1;
+  for (let i = 0; i < 4; i++) g.buildHouse(1);
   assert.equal(g.houses[1], 4);
   g.buildHouse(1);
   assert.equal(g.houses[1], 5);
   assert.equal(g.hotelsLeft, C.TOTAL_HOTELS - 1);
-  assert.equal(g.housesLeft, C.TOTAL_HOUSES - 4); // 8 נבנו, 4 חזרו
+  assert.equal(g.housesLeft, C.TOTAL_HOUSES); // 4 נבנו, 4 חזרו
 });
 
 test('אסור לבנות כשרחוב בקבוצה ממושכן', () => {
   const g = twoPlayers();
   g.owner[1] = 0; g.owner[3] = 0;
+  g.players[0].pos = 1;
   g.mortgaged[3] = true;
   assert.equal(g.canBuildOn(0, 1), false);
 });
@@ -407,9 +412,30 @@ test('קופה: תשלומים לבנק נאספים ומי שנוחת בחני�
   assert.equal(g.players[0].money, 1300);
   g.endTurn();
   g.players[1].pos = 16;
-  g.rollDice(); // המחשב: 16+4=20 חניה חופשית — זוכה בקופה (דאבל, אבל זכייה קודם)
+  g.rollDice(); // המחשב: 16+4=20 חניה חופשית — זוכה בקופה (דאבל, אבל התור נגמר)
   assert.equal(g.pot, 0);
   assert.equal(g.players[1].money, 1700);
+  assert.equal(g.phase, 'end');
+});
+
+test('חניה חופשית מפסידה את התור גם כשזוכים בקופה', () => {
+  const g = twoPlayers({ diceQueue: [[1, 3], [1, 3]] });
+  g.rollDice(); // אל 4 — מס הכנסה 200 לקופה
+  assert.equal(g.pot, 200);
+  g.endTurn();
+  g.players[1].pos = 16;
+  g.rollDice(); // המחשב: 16+4=20 חניה חופשית — זוכה בקופה
+  assert.equal(g.pot, 0);
+  assert.equal(g.players[1].money, 1700);
+  assert.equal(g.phase, 'end'); // התור נגמר — אין הטלה נוספת
+});
+
+test('חניה חופשית מפסידה את התור גם אחרי דאבל', () => {
+  const g = twoPlayers({ diceQueue: [[2, 2]] });
+  g.players[0].pos = 16; // 16+4=20 חניה חופשית, בדאבל
+  g.rollDice();
+  assert.equal(g.players[0].pos, 20);
+  assert.equal(g.phase, 'end'); // דאבל לא מזכה בהטלה נוספת בחניה
 });
 
 test('קופה: קניית נכס נכנסת לקופה', () => {

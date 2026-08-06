@@ -201,8 +201,10 @@
     try { history.replaceState(null, '', baseUrl()); } catch (e) { /* */ }
     UI.toast(`🎉 מחוברים! משחקים עם ${peerName}`);
     enableMedia(); // וידאו/מיקרופון מתווספים אוטומטית דרך הערוץ
-    if (role === 'host') { myIdx = 0; startHostGame(); }
-    else { myIdx = 1; send({ t: 'hello', name: myName }); }
+    if (role === 'host') { myIdx = 0; } else { myIdx = 1; }
+    UI.setLocalIdx(myIdx); // קריינות וחלוניות "שלם/קבל" — רק על השחקן שמול המסך הזה
+    if (role === 'host') startHostGame();
+    else send({ t: 'hello', name: myName });
   }
 
   function startHostGame() {
@@ -367,6 +369,9 @@
       endT.disabled = !(myTurn && game.phase === 'end');
     }
     if (manage) manage.disabled = !(myTurn && inputPhase);
+    // רמז לחיצה גם במשחק מרחוק
+    if (roll && !roll.disabled) UI.nudge(roll);
+    else if (endT && !endT.disabled) UI.nudge(endT);
   }
 
   /* ==================== משבצות וידאו ==================== */

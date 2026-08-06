@@ -10,8 +10,8 @@
   const PROFILES = {
     easy: {
       reserve: 320,        // שומר הרבה מזומן — קונה מעט
-      auctionMul: 0.45,    // הצעות נמוכות במכירה פומבית
-      auctionMonoMul: 0.7,
+      auctionMul: 0.6,     // הצעות נמוכות במכירה פומבית (אך לא ותרן מדי)
+      auctionMonoMul: 0.9,
       buildReserve: 400,   // בונה רק כשיש עודף גדול מאוד
       unmortgageSlack: 500,
       buysMistake: 0.35,   // סיכוי לוותר על קנייה טובה (טעות)
@@ -73,27 +73,53 @@
     return p.money - sq.price >= prof.reserve;
   }
 
-  // תקרת הצעה במכירה פומבית
-  function auctionCap(g, idx) {
-    const pos = g.auction.pos;
-    const sq = g.square(pos);
-    const p = g.players[idx];
-    const prof = profile(g);
-    let cap = Math.floor(sq.price * prof.auctionMul);
-    if (missingForGroup(g, idx, pos) === 1) cap = Math.floor(sq.price * prof.auctionMonoMul);
-    return Math.min(cap, p.money - 50);
+  // תוכנית מכירה פומבית לכל בוט — נקבעת פעם אחת בתחילת המכירה, עם אקראיות,
+  // כדי שהבוט לא יהיה צפוי: תקרה משתנה, סגנון הצעות משתנה, וחסימת מונופול ליריב.
+  function auctionPlan(g, idx) {
+    const a = g.auction;
+    a.plans = a.plans || {};
+    if (!a.plans[idx]) {
+      const sq = g.square(a.pos);
+      const prof = profile(g);
+      const p = g.players[idx];
+      // בסיס: פרופיל הקושי × גורם אקראי (80%–130%) — כל מכירה שונה
+      let mul = prof.auctionMul * (0.8 + g.rand() * 0.5);
+      // הנכס משלים לבוט מונופול — שווה הרבה יותר
+      if (missingForGroup(g, idx, a.pos) === 1) {
+        mul = Math.max(mul, prof.auctionMonoMul * (0.95 + g.rand() * 0.35));
+      }
+      // חסימה: אם ליריב אנושי חסר רק הרחוב הזה להשלמת עיר — נלחמים עליו
+      const human = g.players.find((pp) => !pp.isAI && !pp.bankrupt);
+      if (human && sq.type === 'street' && missingForGroup(g, human.idx, a.pos) === 1) {
+        mul = Math.max(mul, 1.05 + g.rand() * 0.4);
+      }
+      // רכבת נוספת מכפילה הכנסה — הבוט מעריך אותה יותר ככל שיש לו רכבות
+      if (sq.type === 'rail') mul += 0.12 * g.countOwned(idx, 'rail');
+      const cap = Math.min(Math.floor((sq.price * mul) / 10) * 10, p.money - 40);
+      // סגנון: 'step' מעלה במינימום, 'jump' קופץ מדי פעם כדי להפתיע ולהרתיע
+      a.plans[idx] = { cap, style: g.rand() < 0.4 ? 'jump' : 'step' };
+    }
+    return a.plans[idx];
   }
 
   function decideAuction(g, idx) {
     const a = g.auction;
     const prof = profile(g);
-    const cap = auctionCap(g, idx);
+    const p = g.players[idx];
+    const plan = auctionPlan(g, idx);
     const minBid = a.currentBid === 0 ? 10 : a.currentBid + 10;
     if (a.highBidder === idx) return null; // מובילים — מחכים
-    // ברמה קלה — לפעמים פורש מוקדם גם כשעוד משתלם
-    if (prof.bidMistake && minBid > 20 && g.rand() < prof.bidMistake) return 'pass';
-    if (minBid <= cap) return minBid;
-    return 'pass';
+    if (minBid > plan.cap || minBid > p.money) return 'pass';
+    // ברמה קלה — הסיכוי לוותר גדל ככל שהמחיר מתקרב לתקרה (לא נכנע אחרי סיבוב אחד)
+    if (prof.bidMistake && a.currentBid > 0 && g.rand() < prof.bidMistake * (a.currentBid / plan.cap)) {
+      return 'pass';
+    }
+    // קפיצת הצעה מפתיעה — מקשה על היריב "לזחול" בעשרות
+    if (plan.style === 'jump' && g.rand() < 0.5) {
+      const jump = minBid + 10 * (1 + Math.floor(g.rand() * 4)); // עד +50
+      return Math.min(jump, plan.cap, p.money);
+    }
+    return minBid;
   }
 
   // גיוס כסף עד יעד: קודם מכירת בתים מקבוצות זולות, אחר כך משכנתאות
