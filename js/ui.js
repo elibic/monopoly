@@ -291,7 +291,7 @@
         if (!soundOn) return resolve();
         let a = this.cache[id];
         // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=16`); a.preload = 'auto'; this.cache[id] = a; }
+        if (!a) { a = new Audio(`audio/${id}.mp3?v=17`); a.preload = 'auto'; this.cache[id] = a; }
         a.currentTime = 0;
         a.onended = resolve;
         a.onerror = resolve;
@@ -1387,7 +1387,7 @@
         <div class="bank-cell"><span class="bank-cell-label">🎁 קופת הקנסות</span><b>${money(g.pot)}</b><small>לא שייכת לבנק</small></div>
       </div>
       <div class="fin-sep">במה הבנק משקיע עכשיו?</div>
-      <div class="asset-list">${rows.length ? rows.map((r) => `
+      <div class="asset-list fin-list">${rows.length ? rows.map((r) => `
         <div class="asset-row fin-row"><div class="fin-row-top">
           <span class="a-band" style="background:${r.color}"></span>
           <span class="a-name">${r.emoji} ${r.name}</span>
@@ -1627,7 +1627,7 @@
       </div>
       <p class="d-sub">💡 שמים כסף בבנק, והוא עובד בשבילך! בקופת החיסכון הכסף בטוח וגדל לאט. במניות הוא יכול לגדול הרבה — או לרדת.</p>
       <p class="d-sub fin-hint">לוחצים על <b>❔</b> ליד כל אפשרות כדי לראות מה זה, מתי מרוויחים ומתי מפסידים.</p>
-      <div class="asset-list">
+      <div class="asset-list fin-list">
         ${trackRow('savings')}
         ${trackRow('deposit')}
         <div class="fin-sep">${FIN.TRACKS.stocks.emoji} מניות של חברות — קונים חלק קטן בחברה ${riskMeterHTML('stocks')}
@@ -2024,7 +2024,17 @@
   // חמש הגרסאות האחרונות, מהחדשה לישנה. current = הגרסה שרצה עכשיו.
   const VERSIONS = [
     {
-      id: 'v16', label: 'גרסה 16', date: 'אוגוסט 2026', current: true,
+      id: 'v17', label: 'גרסה 17', date: 'אוגוסט 2026', current: true,
+      title: 'מראה חדש ומסך מסודר ✨',
+      items: [
+        '✍️ פונט חדש לכל המשחק — נקי וקריא יותר, עם כותרות שמנמנות וידידותיות',
+        '🖥️ במחשב מסך הפתיחה מסודר בטורים ונכנס במסך אחד — בלי גלילה',
+        '🪟 גם החלוניות הגדולות (תיק ההשקעות, בנק מונופול) נפרסות לרוחב במקום להצריך גלילה',
+        '👇 תוקן ריצוד: האצבע המהבהבת הייתה מזיזה את פס הגלילה של החלונית',
+      ],
+    },
+    {
+      id: 'v16', label: 'גרסה 16', date: 'אוגוסט 2026',
       title: 'משחק ברור יותר 🔍',
       items: [
         '🚶 החייל הולך צעד-צעד, עוצר להרים קלף — ורק אז ממשיך. בלי קפיצות פתאומיות',
