@@ -273,9 +273,11 @@
               this.pot = 0;
               p.money += won;
               this._log(`🎁 ${p.name} ${v(p, 'נחת', 'נחתה')} בחניה חופשית ${v(p, 'וזכה', 'וזכתה')} בקופה: ${money(won)}!`, 'pot');
-            } else {
-              this._log('חניה חופשית — נחים תור אחד.', 'info');
             }
+            // מנוחה בחניה: התור נגמר כאן בכל מקרה — גם כשזוכים בקופה
+            // וגם אחרי דאבל (אין הטלה נוספת).
+            this._log(`🅿️ חניה חופשית — ${p.name} ${v(p, 'נח', 'נחה')} ו${v(p, 'מפסיד', 'מפסידה')} את התור.`, 'info');
+            return this._afterAction({ ...opts, noExtraRoll: true });
           }
           break;
       }
@@ -556,14 +558,13 @@
     canBuildOn(idx, pos) {
       const sq = this.square(pos);
       if (sq.type !== 'street' || this.owner[pos] !== idx) return false;
+      // חוק בית: בונים רק במשבצת שהחייל עומד עליה — הגעת לרחוב שלך? אפשר לבנות בו
+      if (this.players[idx].pos !== pos) return false;
       if (!this.ownsFullGroup(idx, sq.group)) return false;
       const gp = this.groupPositions(sq.group);
       if (gp.some((g) => this.mortgaged[g])) return false;
       const h = this.houses[pos];
       if (h >= 5) return false;
-      // בנייה שווה: אסור לעלות מעל המינימום בקבוצה
-      const minH = Math.min(...gp.map((g) => this.houses[g]));
-      if (h > minH) return false;
       if (h === 4) { if (this.hotelsLeft < 1) return false; }
       else if (this.housesLeft < 1) return false;
       return this.players[idx].money >= GROUPS[sq.group].houseCost;

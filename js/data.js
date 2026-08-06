@@ -121,7 +121,7 @@
     { id: 'plane', emoji: '✈️', name: 'מטוס' },
   ];
 
-  const RAIL_RENTS = [25, 50, 100, 200]; // לפי מספר רכבות בבעלות
+  const RAIL_RENTS = [25, 50, 75, 100]; // 25 ש"ח לכל רכבת בבעלות (חוק בית פשוט לילדים)
 
   globalThis.MONOPOLY_DATA = { CONSTANTS, GROUPS, BOARD, CHANCE_CARDS, CHEST_CARDS, TOKENS, RAIL_RENTS };
 })();

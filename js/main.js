@@ -15,6 +15,7 @@
   const humanIdx = 0;
   let aiTimer = null;
   let tradeOfferedThisRound = false;
+  let buildOfferDone = false;  // הצעת בנייה אחת לכל נחיתה — לא מציקים שוב באותו תור
   let aiRoundStartSeq = null; // מיקום היומן כשתור המחשב/ים התחיל — לסיכום
   let summaryPending = false;  // ממתינים לאישור השחקן על סיכום תור המחשב
   let wealthHistory = [];      // מדגם שווי-נטו של כל השחקנים לאורך המשחק (לגרף הסיכום)
@@ -281,6 +282,12 @@
           onCard: () => { game.useJailCard(); tick(); },
           onRoll: () => { doRoll(); },
         });
+      } else if (!isAI(game.turn) && game.turn === humanIdx && !summaryPending && !buildOfferDone
+                 && (game.phase === 'end' || (game.phase === 'roll' && game.doubles > 0))
+                 && game.canBuildOn(humanIdx, game.players[humanIdx].pos)) {
+        // החייל הגיע לרחוב של השחקן וכל העיר בבעלותו — מציעים לבנות כאן ועכשיו
+        buildOfferDone = true;
+        showBuildOffer(game.players[humanIdx].pos);
       }
 
       const actor = currentActor();
@@ -311,15 +318,47 @@
     $('#end-turn-btn').disabled = !(humanTurn && game.phase === 'end');
     $('#manage-btn').disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));
     $('#trade-btn').disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));
+    // רמז לחיצה: אם השחקן לא לוחץ תוך 2 שניות — אצבע מרצדת על הכפתור הנדרש
+    if (!$('#roll-btn').disabled) UI.nudge($('#roll-btn'));
+    else if (!$('#end-turn-btn').disabled) UI.nudge($('#end-turn-btn'));
   }
 
   // הטלת קוביות עם אנימציית תלת-ממד — לאדם ולמחשב
   async function doRoll() {
     $('#roll-btn').disabled = true;
+    buildOfferDone = false; // נחיתה חדשה — אפשר להציע בנייה שוב
     sampleWealth(); // מדגם שווי-נטו לפני ההטלה — לגרף בסיכום המשחק
     game.rollDice();
     await UI.animateDice(game.dice[0], game.dice[1]);
     tick();
+  }
+
+  // הצעת בנייה כשהחייל מגיע לרחוב של השחקן (וכל העיר בבעלותו)
+  function showBuildOffer(pos) {
+    const sq = D.BOARD[pos];
+    const grp = D.GROUPS[sq.group];
+    const cost = grp.houseCost;
+    const h = game.houses[pos];
+    const next = h === 4 ? 'מלון 🏨' : 'בית 🏠';
+    const now = h === 5 ? 'יש כאן מלון 🏨' : h > 0 ? `יש כאן כבר ${h === 1 ? 'בית אחד' : h + ' בתים'}` : '';
+    const d = UI.openDialog(`
+      <h2>הגעת לרחוב שלך! 🏗️</h2>
+      <p class="d-sub">כל העיר <b>${grp.name}</b> בבעלותך — אפשר לבנות ב"${sq.name}"!</p>
+      <div class="price-tag">🏗️ ${next} — המחיר: <b>${cost.toLocaleString('he-IL')} ₪</b></div>
+      <p class="d-sub">${now ? now + ' · ' : ''}בחשבון שלך: <b>${game.players[humanIdx].money.toLocaleString('he-IL')} ₪</b></p>
+      <div class="d-actions">
+        <button class="big-btn green" id="d-build">🏠 בונים!</button>
+        <button class="big-btn" id="d-nobuild">לא עכשיו</button>
+      </div>`);
+    UI.speak('הִגַּעְתָּ לִרְחוֹב שֶׁלְּךָ! רוֹצִים לִבְנוֹת?', { raw: true });
+    d.querySelector('#d-build').onclick = () => {
+      UI.closeDialog();
+      try { game.buildHouse(pos); } catch (e) { UI.toast(e.message); }
+      // אפשר להמשיך לבנות באותו רחוב? מציעים שוב (עד מלון או עד שנגמר הכסף)
+      if (game.canBuildOn(humanIdx, pos)) showBuildOffer(pos);
+      tick();
+    };
+    d.querySelector('#d-nobuild').onclick = () => { UI.closeDialog(); tick(); };
   }
 
   /* ---------- פעולות השחקן האנושי ---------- */
