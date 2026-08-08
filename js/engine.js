@@ -125,7 +125,11 @@
     }
 
     ownsFullGroup(idx, group) {
-      return this.groupPositions(group).every((p) => this.owner[p] === idx);
+      const gp = this.groupPositions(group);
+      // הגנה: קבוצה לא מוכרת מחזירה רשימה ריקה, ו-every על רשימה ריקה הוא true.
+      // בלי השורה הזאת "אין עיר" היה נחשב "כל העיר שלך".
+      if (!gp.length) return false;
+      return gp.every((p) => this.owner[p] === idx);
     }
 
     playerProps(idx) {
@@ -907,16 +911,24 @@
     canBuildOn(idx, pos) {
       const sq = this.square(pos);
       if (sq.type !== 'street' || this.owner[pos] !== idx) return false;
-      // חוק בית: בונים רק במשבצת שהחייל עומד עליה — הגעת לרחוב שלך? אפשר לבנות בו
-      if (this.players[idx].pos !== pos) return false;
       if (!this.ownsFullGroup(idx, sq.group)) return false;
       const gp = this.groupPositions(sq.group);
+      // חוק בית: בונים רק כשהחייל נמצא בעיר הזאת — הגעת לעיר שלך? אפשר לבנות בה
+      if (!gp.includes(this.players[idx].pos)) return false;
       if (gp.some((g) => this.mortgaged[g])) return false;
       const h = this.houses[pos];
       if (h >= 5) return false;
+      // בנייה שווה: אסור להקדים רחוב אחד בעיר ביותר מבית אחד על פני הנמוך שבהם.
+      // בלי זה אפשר היה להעמיד מלון ברחוב אחד בזמן שהשאר ריקים.
+      if (h > Math.min(...gp.map((g) => this.houses[g]))) return false;
       if (h === 4) { if (this.hotelsLeft < 1) return false; }
       else if (this.housesLeft < 1) return false;
       return this.players[idx].money >= GROUPS[sq.group].houseCost;
+    }
+
+    // כל הרחובות שמותר לשחקן לבנות בהם עכשיו — לפי סדר הבנייה השווה
+    buildablePositions(idx) {
+      return this.playerProps(idx).filter((pos) => this.canBuildOn(idx, pos));
     }
 
     buildHouse(pos) {

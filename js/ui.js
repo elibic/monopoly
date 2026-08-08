@@ -1252,6 +1252,19 @@
     };
   }
 
+  // למה אי אפשר לבנות כאן? הסבר קצר בשפת ילדים, כדי שחוסר כפתור לא ייראה כתקלה
+  function buildBlockReason(g, idx, pos) {
+    const sq = BOARD[pos];
+    if (sq.type !== 'street' || g.owner[pos] !== idx || g.houses[pos] >= 5) return '';
+    if (!g.ownsFullGroup(idx, sq.group)) return `צריך את כל ${GROUPS[sq.group].name}`;
+    const gp = g.groupPositions(sq.group);
+    if (gp.some((x) => g.mortgaged[x])) return 'יש משכנתא בעיר';
+    if (g.houses[pos] > Math.min(...gp.map((x) => g.houses[x]))) return 'קודם בונים ברחוב השני';
+    if (!gp.includes(g.players[idx].pos)) return 'צריך להגיע לעיר';
+    if (g.players[idx].money < GROUPS[sq.group].houseCost) return 'אין מספיק כסף';
+    return '';
+  }
+
   function showManageDialog(g, humanIdx, { onAction, onClose }) {
     const props = g.playerProps(humanIdx);
     const p = g.players[humanIdx];
@@ -1260,6 +1273,7 @@
       const grp = sq.group ? GROUPS[sq.group] : null;
       const actions = [];
       if (g.canBuildOn(humanIdx, pos)) actions.push(`<button data-act="build" data-pos="${pos}">🏠 בנייה ‎-${money(grp.houseCost)}</button>`);
+      else if (buildBlockReason(g, humanIdx, pos)) actions.push(`<span class="a-note">${buildBlockReason(g, humanIdx, pos)}</span>`);
       if (g.canSellHouseOn(humanIdx, pos)) actions.push(`<button data-act="sellHouse" data-pos="${pos}">מכירת בית +${money(grp.houseCost / 2)}</button>`);
       if (g.canMortgage(humanIdx, pos)) actions.push(`<button data-act="mortgage" data-pos="${pos}">משכנתא +${money(sq.price / 2)}</button>`);
       if (g.mortgaged[pos]) {
@@ -1275,7 +1289,8 @@
     const d = openDialog(`
       <h2>העסקים שלי 🏠</h2>
       <p class="d-sub">בחשבון: <b>${money(p.money)}</b> · בתים במלאי הבנק: ${g.housesLeft} · מלונות: ${g.hotelsLeft}</p>
-      <p class="d-sub">🏗️ בונים בית רק כשהחייל מגיע לרחוב שלך (וכל העיר בבעלותך) — המשחק יציע לך לבנות!</p>
+      <p class="d-sub">🏗️ בונים רק כשהחייל מגיע לעיר שכולה בבעלותך — והמשחק יציע לך לבנות!</p>
+      <p class="d-sub">⚖️ בונים <b>בבתים שווים</b>: קודם בית אחד בכל רחוב בעיר, ורק אחר כך השני.</p>
       <div class="asset-list">${rows.join('') || '<p class="d-sub">עוד אין לך נכסים — קנה כשנוחתים על משבצת פנויה!</p>'}</div>
       <div class="d-actions"><button class="big-btn blue" id="d-close">סגירה</button></div>`);
     d.querySelectorAll('button[data-act]').forEach((b) => {

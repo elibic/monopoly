@@ -352,10 +352,10 @@
         dialogOpen = true;
       } else if (!isAI(game.turn) && game.turn === humanIdx && !summaryPending && !buildOfferDone
                  && (game.phase === 'end' || (game.phase === 'roll' && game.doubles > 0))
-                 && game.canBuildOn(humanIdx, game.players[humanIdx].pos)) {
-        // החייל הגיע לרחוב של השחקן וכל העיר בבעלותו — מציעים לבנות כאן ועכשיו
+                 && buildableHere().length) {
+        // החייל הגיע לעיר של השחקן וכולה בבעלותו — מציעים לבנות כאן ועכשיו
         buildOfferDone = true;
-        showBuildOffer(game.players[humanIdx].pos);
+        showBuildOffer();
         dialogOpen = true;
       }
 
@@ -430,31 +430,54 @@
     tick();
   }
 
-  // הצעת בנייה כשהחייל מגיע לרחוב של השחקן (וכל העיר בבעלותו)
-  function showBuildOffer(pos) {
-    const sq = D.BOARD[pos];
-    const grp = D.GROUPS[sq.group];
+  // הרחובות שמותר לבנות בהם עכשיו — רק בעיר שהחייל עומד בה
+  function buildableHere() {
+    const here = D.BOARD[game.players[humanIdx].pos];
+    if (!here || here.type !== 'street') return [];
+    return game.buildablePositions(humanIdx).filter((p) => D.BOARD[p].group === here.group);
+  }
+
+  // הצעת בנייה כשהחייל מגיע לעיר של השחקן (וכולה בבעלותו).
+  // חוק הבנייה השווה קובע איפה מותר — לכן מציגים רק את הרחובות שתורם עכשיו.
+  function showBuildOffer() {
+    const options = buildableHere();
+    if (!options.length) { tick(); return; }
+    const grp = D.GROUPS[D.BOARD[options[0]].group];
     const cost = grp.houseCost;
-    const h = game.houses[pos];
-    const next = h === 4 ? 'מלון 🏨' : 'בית 🏠';
-    const now = h === 5 ? 'יש כאן מלון 🏨' : h > 0 ? `יש כאן כבר ${h === 1 ? 'בית אחד' : h + ' בתים'}` : '';
+    const gp = game.groupPositions(D.BOARD[options[0]].group);
+    const stateOf = (p) => {
+      const h = game.houses[p];
+      return h === 5 ? '🏨' : h > 0 ? '🏠'.repeat(h) : '—';
+    };
+    // תמונת מצב של כל העיר, כדי שיהיה ברור למה בונים דווקא כאן
+    const cityRows = gp.map((p) => `
+      <div class="asset-row">
+        <span class="a-band" style="background:${grp.color}"></span>
+        <span class="a-name">${D.BOARD[p].name} ${stateOf(p)}</span>
+        ${options.includes(p)
+          ? `<button data-build="${p}">${game.houses[p] === 4 ? '🏨 מלון' : '🏠 בית'} ‎-${cost.toLocaleString('he-IL')} ₪</button>`
+          : '<span class="a-note">לא תורו</span>'}
+      </div>`).join('');
     const d = UI.openDialog(`
-      <h2>הגעת לרחוב שלך! 🏗️</h2>
-      <p class="d-sub">כל העיר <b>${grp.name}</b> בבעלותך — אפשר לבנות ב"${sq.name}"!</p>
-      <div class="price-tag">🏗️ ${next} — המחיר: <b>${cost.toLocaleString('he-IL')} ₪</b></div>
-      <p class="d-sub">${now ? now + ' · ' : ''}בחשבון שלך: <b>${game.players[humanIdx].money.toLocaleString('he-IL')} ₪</b></p>
+      <h2>הגעת לעיר שלך! 🏗️</h2>
+      <p class="d-sub">כל העיר <b>${grp.name}</b> בבעלותך — אפשר לבנות בה!</p>
+      <p class="d-sub">בונים <b>בבתים שווים</b>: קודם בית אחד בכל רחוב, ורק אז השני.</p>
+      <div class="asset-list">${cityRows}</div>
+      <p class="d-sub">בחשבון שלך: <b>${game.players[humanIdx].money.toLocaleString('he-IL')} ₪</b></p>
       <div class="d-actions">
-        <button class="big-btn green" id="d-build">🏠 בונים!</button>
         <button class="big-btn" id="d-nobuild">לא עכשיו</button>
       </div>`);
-    UI.speak('הִגַּעְתָּ לִרְחוֹב שֶׁלְּךָ! רוֹצִים לִבְנוֹת?', { raw: true });
-    d.querySelector('#d-build').onclick = () => {
-      UI.closeDialog();
-      try { game.buildHouse(pos); } catch (e) { UI.toast(e.message); }
-      // אפשר להמשיך לבנות באותו רחוב? מציעים שוב (עד מלון או עד שנגמר הכסף)
-      if (game.canBuildOn(humanIdx, pos)) showBuildOffer(pos);
-      tick();
-    };
+    UI.speak('הִגַּעְתָּ לָעִיר שֶׁלְּךָ! רוֹצִים לִבְנוֹת?', { raw: true });
+    d.querySelectorAll('[data-build]').forEach((btn) => {
+      btn.onclick = () => {
+        const pos = Number(btn.dataset.build);
+        UI.closeDialog();
+        try { game.buildHouse(pos); } catch (e) { UI.toast(e.message); }
+        // נשאר עוד מה לבנות בעיר הזאת? מציעים שוב
+        if (buildableHere().length) showBuildOffer();
+        tick();
+      };
+    });
     d.querySelector('#d-nobuild').onclick = () => { UI.closeDialog(); tick(); };
   }
 

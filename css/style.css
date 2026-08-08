@@ -1019,6 +1019,8 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 }
 .asset-row .a-band { width: 17px; height: 17px; border-radius: 5px; flex-shrink: 0; border: 1.5px solid rgba(0, 0, 0, .3); }
 .asset-row .a-name { font-weight: 700; flex: 1; }
+/* רחוב שעדיין לא תורו בבנייה השווה — מוצג אפור, בלי כפתור */
+.asset-row .a-note { font-size: 13px; color: #8A8375; font-weight: 600; }
 .asset-row button {
   font-family: var(--font-body);
   font-size: 12.5px;

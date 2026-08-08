@@ -171,32 +171,89 @@ test('תשלום קנס יציאה מהכלא', () => {
   assert.equal(p.pos, 13);
 });
 
-test('בנייה רק כשהחייל עומד על המשבצת (חוק בית)', () => {
+test('בנייה רק כשהחייל נמצא בעיר (חוק בית)', () => {
   const g = twoPlayers();
   g.owner[1] = 0; g.owner[3] = 0;
   g.phase = 'end';
   assert.equal(g.canBuildOn(0, 1), false); // החייל ב"דרך צלחה" — לא בונים מרחוק
   g.players[0].pos = 1;
-  assert.equal(g.canBuildOn(0, 1), true);  // הגיע למשבצת — אפשר לבנות
-  assert.equal(g.canBuildOn(0, 3), false); // ברחוב השני לא עומדים — אין בנייה
+  assert.equal(g.canBuildOn(0, 1), true);  // הגיע לעיר — אפשר לבנות
+  assert.equal(g.canBuildOn(0, 3), true);  // וגם ברחוב השני של אותה עיר
   g.buildHouse(1);
   assert.equal(g.houses[1], 1);
-  assert.equal(g.canBuildOn(0, 1), true);  // אפשר להמשיך לבנות איפה שעומדים
   assert.equal(g.housesLeft, C.TOTAL_HOUSES - 1);
 });
 
-test('מלון: אחרי 4 בתים; הבתים חוזרים למלאי', () => {
+test('בנייה שווה: אי אפשר להקדים רחוב אחד בעיר', () => {
   const g = twoPlayers();
   g.owner[1] = 0; g.owner[3] = 0;
   g.phase = 'end';
   g.players[0].money = 5000;
   g.players[0].pos = 1;
-  for (let i = 0; i < 4; i++) g.buildHouse(1);
+  g.buildHouse(1);
+  // ברחוב הראשון כבר יש בית ובשני אין — התור של השני
+  assert.equal(g.canBuildOn(0, 1), false);
+  assert.equal(g.canBuildOn(0, 3), true);
+  assert.throws(() => g.buildHouse(1), /בנייה לא חוקית/);
+  g.buildHouse(3);
+  assert.equal(g.canBuildOn(0, 1), true); // חזרו להיות שווים
+});
+
+test('אסור להעמיד מלון בזמן שרחוב אחר בעיר ריק', () => {
+  const g = twoPlayers();
+  g.owner[1] = 0; g.owner[3] = 0;
+  g.phase = 'end';
+  g.players[0].money = 5000;
+  g.players[0].pos = 1;
+  let built = 0;
+  for (let i = 0; i < 10; i++) if (g.canBuildOn(0, 1)) { g.buildHouse(1); built++; }
+  assert.equal(built, 1, 'רק בית אחד עד שהרחוב השני משלים');
+  assert.equal(g.houses[1], 1);
+  assert.equal(g.houses[3], 0);
+});
+
+test('אין עיר שלמה — אין בנייה בכלל', () => {
+  const g = twoPlayers();
+  g.owner[1] = 0; // רק רחוב אחד מתוך שניים באילת
+  g.phase = 'end';
+  g.players[0].pos = 1;
+  assert.equal(g.canBuildOn(0, 1), false);
+  assert.throws(() => g.buildHouse(1), /בנייה לא חוקית/);
+  assert.equal(g.houses[1], 0);
+});
+
+test('קבוצה לא מוכרת אינה נחשבת "כל העיר שלך"', () => {
+  const g = twoPlayers();
+  assert.equal(g.ownsFullGroup(0, undefined), false);
+  assert.equal(g.ownsFullGroup(0, 'no-such-city'), false);
+});
+
+test('מלון: אחרי 4 בתים בכל העיר; הבתים חוזרים למלאי', () => {
+  const g = twoPlayers();
+  g.owner[1] = 0; g.owner[3] = 0;
+  g.phase = 'end';
+  g.players[0].money = 5000;
+  g.players[0].pos = 1;
+  // בונים לסירוגין עד 4 בתים בכל רחוב — כמו בחוקי המשחק
+  for (let i = 0; i < 4; i++) { g.buildHouse(1); g.buildHouse(3); }
   assert.equal(g.houses[1], 4);
+  assert.equal(g.houses[3], 4);
   g.buildHouse(1);
   assert.equal(g.houses[1], 5);
   assert.equal(g.hotelsLeft, C.TOTAL_HOTELS - 1);
-  assert.equal(g.housesLeft, C.TOTAL_HOUSES); // 4 נבנו, 4 חזרו
+  assert.equal(g.housesLeft, C.TOTAL_HOUSES - 4); // 8 נבנו, 4 חזרו מהמלון
+});
+
+test('buildablePositions מחזיר רק רחובות חוקיים לבנייה', () => {
+  const g = twoPlayers();
+  g.owner[1] = 0; g.owner[3] = 0;
+  g.owner[6] = 0; // רחוב בודד בטבריה — אין עיר שלמה
+  g.phase = 'end';
+  g.players[0].money = 5000;
+  g.players[0].pos = 1;
+  assert.deepEqual(g.buildablePositions(0), [1, 3]);
+  g.buildHouse(1);
+  assert.deepEqual(g.buildablePositions(0), [3]);
 });
 
 test('אסור לבנות כשרחוב בקבוצה ממושכן', () => {
