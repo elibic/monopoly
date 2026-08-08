@@ -1353,48 +1353,94 @@
     speak('יֵשׁ לְךָ כֶּסֶף לִגְבּוֹת!', { raw: true });
   }
 
+  // כשנגמר הכסף, השאלה האמיתית היא "מה עדיף?" — ולכן כל דרך לגייס
+  // כסף מוצגת עם שני מספרים: כמה היא מכניסה עכשיו, וכמה היא באמת
+  // עולה. הרשימה ממוינת מהזול ליקר, והזול ביותר מסומן.
+  function debtOptions(g, idx) {
+    const opts = [];
+
+    // 1. משיכת השקעה — הכסף שלך, בלי קנס ובלי לוותר על נכס
+    if (g.financeEnabled) {
+      for (const h of g.holdings(idx)) {
+        opts.push({
+          gain: h.value,
+          cost: 0,
+          color: h.track === 'stocks' ? FIN.TRACKS.stocks.color : FIN.TRACKS[h.track].color,
+          name: h.name,
+          why: 'הכסף שלך — בלי קנס',
+          attrs: `data-act="withdraw" data-track="${h.track}" data-co="${h.co || ''}"`,
+          verb: '🏦 משיכה',
+        });
+      }
+    }
+
+    for (const pos of g.playerProps(idx)) {
+      const sq = BOARD[pos];
+      const grp = sq.group ? GROUPS[sq.group] : null;
+      const label = `${sq.name}${g.houses[pos] ? ' ' + (g.houses[pos] === 5 ? '🏨' : '🏠'.repeat(g.houses[pos])) : ''}`;
+
+      // 2. משכנתא — מקבלים חצי מחיר, והפדיון עולה 10% ריבית
+      if (g.canMortgage(idx, pos)) {
+        const rentNow = sq.type === 'street' ? sq.rent[0] : 0;
+        opts.push({
+          gain: sq.price / 2,
+          cost: Math.round((sq.price / 2) * 0.1),
+          color: grp ? grp.color : '#546E7A',
+          name: label,
+          why: `הפדיון יעלה ${money(Math.round((sq.price / 2) * 1.1))}${rentNow ? ' · בינתיים בלי שכר דירה' : ''}`,
+          attrs: `data-act="mortgage" data-pos="${pos}"`,
+          verb: '🔒 משכנתא',
+        });
+      }
+
+      // 3. מכירת בית — מקבלים חצי ממה ששילמת, ושכר הדירה צונח
+      if (g.canSellHouseOn(idx, pos)) {
+        const h = g.houses[pos];
+        const rentBefore = sq.rent[h === 5 ? 5 : h];
+        const rentAfter = sq.rent[h === 5 ? 4 : h - 1];
+        opts.push({
+          gain: grp.houseCost / 2,
+          cost: grp.houseCost / 2,
+          color: grp.color,
+          name: label,
+          why: `בנית ב-${money(grp.houseCost)} ומקבל חצי · שכר הדירה יירד מ-${money(rentBefore)} ל-${money(rentAfter)}`,
+          attrs: `data-act="sellHouse" data-pos="${pos}"`,
+          verb: h === 5 ? '🏨 מכירת מלון' : '🏠 מכירת בית',
+        });
+      }
+    }
+
+    // מהזול ליקר; בעלות זהה — קודם מה שמכניס יותר
+    opts.sort((a, b) => a.cost - b.cost || b.gain - a.gain);
+    return opts;
+  }
+
   function showDebtDialog(g, humanIdx, { onAction, onSettle, onBankrupt }) {
     const debt = g.debt;
     const p = g.players[humanIdx];
     const canPay = p.money >= debt.amount;
     const canRaise = g.canAffordDebt();
     const creditor = debt.creditor !== null ? g.players[debt.creditor].name : 'הבנק';
+    const missing = Math.max(0, debt.amount - p.money);
+    const opts = canPay ? [] : debtOptions(g, humanIdx);
 
-    const rows = [];
-    // כסף מושקע הוא הכי קל לגייס — מציגים אותו ראשון
-    if (g.financeEnabled) {
-      for (const h of g.holdings(humanIdx)) {
-        rows.push(`<div class="asset-row">
-          <span class="a-band" style="background:${h.track === 'stocks' ? FIN.TRACKS.stocks.color : FIN.TRACKS[h.track].color}"></span>
-          <span class="a-name">${h.name}</span>
-          <button data-act="withdraw" data-track="${h.track}" data-co="${h.co || ''}">🏦 משיכה +${money(h.value)}</button>
-        </div>`);
-      }
-    }
-    for (const pos of g.playerProps(humanIdx)) {
-      const sq = BOARD[pos];
-      const grp = sq.group ? GROUPS[sq.group] : null;
-      const actions = [];
-      if (g.canSellHouseOn(humanIdx, pos)) {
-        actions.push(`<button data-act="sellHouse" data-pos="${pos}">מכירת בית +${money(grp.houseCost / 2)}</button>`);
-      }
-      if (g.canMortgage(humanIdx, pos)) {
-        actions.push(`<button data-act="mortgage" data-pos="${pos}">משכנתא +${money(sq.price / 2)}</button>`);
-      }
-      if (!actions.length) continue;
-      rows.push(`<div class="asset-row">
-        <span class="a-band" style="background:${grp ? grp.color : '#546E7A'}"></span>
-        <span class="a-name">${sq.name}${g.houses[pos] ? ' ' + (g.houses[pos] === 5 ? '🏨' : '🏠'.repeat(g.houses[pos])) : ''}</span>
-        ${actions.join('')}
-      </div>`);
-    }
+    const rows = opts.map((o, i) => `
+      <div class="asset-row debt-opt${i === 0 ? ' best' : ''}">
+        <span class="a-band" style="background:${o.color}"></span>
+        <span class="a-name">${esc(o.name)}${i === 0 ? ' <span class="best-tag">👍 הכי משתלם</span>' : ''}
+          <small class="opt-why">${esc(o.why)}</small></span>
+        <span class="opt-cost">${o.cost === 0 ? 'בלי קנס' : `עולה לך ${money(o.cost)}`}</span>
+        <button ${o.attrs}>${o.verb} +${money(o.gain)}</button>
+      </div>`).join('');
 
     const d = openDialog(`
       <h2>צריך לשלם! 💸</h2>
-      <p class="debt-need">חוב של ${money(debt.amount)} ל${creditor}</p>
-      <p class="d-sub">בחשבון שלך: <b>${money(p.money)}</b></p>
-      ${canPay ? '' : (rows.length ? `<p class="d-sub">אפשר ${g.financeEnabled ? 'למשוך מההשקעות, ' : ''}למכור בתים או לקחת משכנתא:</p>` : '')}
-      <div class="asset-list">${rows.join('')}</div>
+      <p class="debt-need">חוב של ${money(debt.amount)} ל${esc(creditor)}</p>
+      <p class="d-sub">בחשבון שלך: <b>${money(p.money)}</b>${missing ? ` · <b class="miss">חסרים ${money(missing)}</b>` : ''}</p>
+      ${canPay ? '' : (rows
+        ? '<p class="d-sub">🤔 <b>מה עדיף?</b> כל שורה מראה כמה כסף היא מכניסה — וכמה היא באמת עולה לך.</p>'
+        : '<p class="d-sub">אין יותר מה למכור או למשכן...</p>')}
+      <div class="asset-list">${rows}</div>
       <div class="d-actions">
         <button class="big-btn green" id="d-settle" ${canPay ? '' : 'disabled'}>💳 משלמים את החוב</button>
         ${canRaise ? '' : '<button class="big-btn" id="d-bankrupt">😢 פשיטת רגל</button>'}

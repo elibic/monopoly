@@ -1058,6 +1058,24 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 .pay-entry input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .pay-entry input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .pay-currency { font-family: var(--font-title); font-size: 26px; color: #7A6F5E; }
+/* ---------- "מה עדיף?" — דרכים לגייס כסף, מהזול ליקר ---------- */
+.asset-row.debt-opt { flex-wrap: wrap; align-items: flex-start; }
+.asset-row.debt-opt .a-name { display: flex; flex-direction: column; gap: 2px; min-width: 45%; }
+.asset-row.debt-opt .opt-why { font-weight: 500; font-size: 12.5px; color: #7A6F5E; line-height: 1.35; }
+.asset-row.debt-opt .opt-cost {
+  font-size: 13px;
+  font-weight: 700;
+  color: #B3541E;
+  background: #FDF1E3;
+  border-radius: 9px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.asset-row.debt-opt.best { border-color: #1F9D55; background: #F4FBF6; }
+.asset-row.debt-opt.best .opt-cost { color: #17663A; background: #DFF0E4; }
+.best-tag { font-size: 12px; color: #1F9D55; font-weight: 700; }
+.debt-need + .d-sub .miss { color: #D93A3A; }
+
 .pay-step { margin-bottom: 2px; }
 .pay-step[hidden] { display: none; }
 .pay-entry input:disabled { background: #F3F0E6; color: #B5AE9E; }
