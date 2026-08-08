@@ -1276,3 +1276,13 @@ test('פשיטת רגל מחזירה גם מלון וגם בתים למלאי', 
   assert.equal(g.hotelsLeft, C.TOTAL_HOTELS);
   assert.equal(g.housesLeft, C.TOTAL_HOUSES);
 });
+
+test('תרגיל החשבון נשמר ונטען, ותלוי במצב הידני', () => {
+  const g = new Game([{ name: 'א' }, { name: 'ב', isAI: true }], { manualPay: true, payMath: true });
+  assert.equal(g.payMath, true);
+  const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.payMath, true);
+  // בלי העברות ידניות אין תרגיל
+  const auto = new Game([{ name: 'א' }, { name: 'ב', isAI: true }], { payMath: true });
+  assert.equal(auto.payMath, false);
+});

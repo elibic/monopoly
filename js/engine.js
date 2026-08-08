@@ -86,6 +86,8 @@
       // ברירת המחדל של המנוע היא החוקים הקלאסיים (גבייה אוטומטית);
       // המשחק עצמו מדליק את המצב הזה במסך הפתיחה.
       this.manualPay = opts.manualPay === true;
+      // תרגיל החשבון: הילד גם מחשב כמה יישאר בחשבון אחרי ההעברה
+      this.payMath = opts.payMath === true && this.manualPay;
 
       this.players = playersSpec.map((p, idx) => ({
         idx,
@@ -1315,6 +1317,7 @@
           ? { debtor: this.debt.debtor, creditor: this.debt.creditor, amount: this.debt.amount, reason: this.debt.reason, cont: this.debt.cont }
           : null,
         manualPay: this.manualPay,
+        payMath: this.payMath,
         pendingPay: this.pendingPay
           ? { payer: this.pendingPay.payer, creditor: this.pendingPay.creditor, amount: this.pendingPay.amount, reason: this.pendingPay.reason, cont: this.pendingPay.cont }
           : null,
@@ -1335,6 +1338,7 @@
         finance: data.financeEnabled === true,
         difficulty: data.difficulty || 'medium',
         manualPay: data.manualPay === true,
+        payMath: data.payMath === true,
       });
       // שמירות ישנות (מלפני מצב החינוך הפיננסי) נטענות עם ברירות מחדל ריקות
       g.players = data.players.map((p) => ({

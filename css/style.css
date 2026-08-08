@@ -1058,6 +1058,24 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 .pay-entry input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .pay-entry input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .pay-currency { font-family: var(--font-title); font-size: 26px; color: #7A6F5E; }
+.pay-step { margin-bottom: 2px; }
+.pay-step[hidden] { display: none; }
+.pay-entry input:disabled { background: #F3F0E6; color: #B5AE9E; }
+/* "כמה יש לי?" — היתרה מוסתרת עד שבודקים אותה בלחיצה */
+.pay-balance { text-align: center; margin: 6px 0 2px; font-size: 15px; min-height: 32px; }
+.peek-btn {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  background: #EEF4FA;
+  border: 2px dashed #7FA9CF;
+  color: #2A5D87;
+  border-radius: 12px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.peek-btn:hover { background: #DDEAF6; }
+.peek-btn:active { transform: translateY(2px); }
 .pay-feedback { text-align: center; font-weight: 700; font-size: 15.5px; min-height: 22px; margin: 2px 0 6px; }
 .pay-feedback.ok { color: #1F9D55; }
 .pay-feedback.bad { color: #D93A3A; }

@@ -1209,12 +1209,13 @@
 
   // הכסף לא זז לבד. הילד רואה למי, כמה ולמה — ומקליד את הסכום.
   // אחרי שלושה ניסיונות שגויים נפתחת עזרה, כדי שזה יישאר משחק ולא מבחן.
-  function showPayDialog(g, humanIdx, { onConfirm }) {
+  function showPayDialog(g, humanIdx, { onConfirm, onWrong }) {
     const d0 = g.pendingPay;
     const p = g.players[d0.payer]; // המשלם נקבע לפי ההעברה עצמה, לא לפי מי פתח
     const toName = d0.creditor !== null ? g.players[d0.creditor].name : '🏦 הבנק';
     const toToken = d0.creditor !== null ? g.players[d0.creditor].token : '🏦';
     const after = p.money - d0.amount;
+    const math = !!g.payMath; // תרגיל החשבון — רק במצב שנבחר במסך הפתיחה
     let wrongTries = 0;
 
     const d = openDialog(`
@@ -1225,52 +1226,103 @@
           <span>מעבירים אל<br><b>${esc(toName)}</b></span></div>
         <div class="pay-amount">${money(d0.amount)}</div>
       </div>
-      <p class="d-sub">הקלידו את הסכום להעברה:</p>
-      <div class="pay-entry">
-        <input id="pay-input" type="number" inputmode="numeric" min="0" placeholder="כמה?" autocomplete="off">
-        <span class="pay-currency">₪</span>
+
+      <div class="pay-step">
+        <p class="d-sub">${math ? '1️⃣ ' : ''}הקלידו את הסכום להעברה:</p>
+        <div class="pay-entry">
+          <input id="pay-input" type="number" inputmode="numeric" min="0" placeholder="כמה?" autocomplete="off">
+          <span class="pay-currency">₪</span>
+        </div>
+        <p class="pay-feedback" id="pay-fb">&nbsp;</p>
       </div>
-      <p class="pay-feedback" id="pay-fb">&nbsp;</p>
-      <p class="d-sub">בחשבון: <b>${money(p.money)}</b> ← אחרי ההעברה: <b>${money(after)}</b></p>
+
+      <div class="pay-step" id="pay-step2" ${math ? '' : 'hidden'}>
+        <p class="d-sub">2️⃣ וכמה יישאר לך בחשבון אחרי ההעברה?</p>
+        <div class="pay-entry">
+          <input id="left-input" type="number" inputmode="numeric" placeholder="כמה יישאר?" autocomplete="off" disabled>
+          <span class="pay-currency">₪</span>
+        </div>
+        <p class="pay-feedback" id="left-fb">&nbsp;</p>
+      </div>
+
+      <div class="pay-balance">
+        <button class="peek-btn" id="pay-peek">🔍 לבדוק כמה יש לי</button>
+        <span id="pay-balance-val" hidden>בחשבון: <b>${money(p.money)}</b>${math ? '' : ` ← אחרי ההעברה: <b>${money(after)}</b>`}</span>
+      </div>
       <div class="d-actions">
         <button class="big-btn green" id="pay-go" disabled>💳 מעבירים!</button>
         <button class="big-btn" id="pay-help" hidden>💡 עזרה</button>
       </div>`);
 
     const input = d.querySelector('#pay-input');
+    const leftInput = d.querySelector('#left-input');
     const go = d.querySelector('#pay-go');
     const fb = d.querySelector('#pay-fb');
+    const leftFb = d.querySelector('#left-fb');
     const help = d.querySelector('#pay-help');
+    const peek = d.querySelector('#pay-peek');
 
-    const check = () => {
-      const val = input.value.trim();
-      if (val === '') { fb.textContent = ' '; fb.className = 'pay-feedback'; go.disabled = true; return; }
-      const n = Number(val);
-      if (n === d0.amount) {
-        fb.textContent = '✅ בדיוק! אפשר להעביר';
-        fb.className = 'pay-feedback ok';
-        go.disabled = false;
-      } else {
-        fb.textContent = n < d0.amount ? '⬆️ צריך יותר' : '⬇️ זה יותר מדי';
-        fb.className = 'pay-feedback bad';
-        go.disabled = true;
-      }
+    // "כמה יש לי?" — היתרה מוסתרת עד שבודקים, כדי שהבדיקה תהיה פעולה
+    peek.onclick = () => {
+      peek.hidden = true;
+      d.querySelector('#pay-balance-val').hidden = false;
+      sounds.tick();
     };
-    input.oninput = check;
-    input.onkeydown = (e) => { if (e.key === 'Enter' && !go.disabled) go.click(); };
+
+    const amountOK = () => Number(input.value) === d0.amount;
+    const leftOK = () => !math || Number(leftInput.value) === after;
+
+    const refresh = () => {
+      const v1 = input.value.trim();
+      if (v1 === '') { fb.textContent = ' '; fb.className = 'pay-feedback'; }
+      else if (amountOK()) { fb.textContent = '✅ בדיוק!'; fb.className = 'pay-feedback ok'; }
+      else {
+        fb.textContent = Number(v1) < d0.amount ? '⬆️ צריך יותר' : '⬇️ זה יותר מדי';
+        fb.className = 'pay-feedback bad';
+      }
+      // השלב השני נפתח רק אחרי שהסכום הראשון נכון
+      if (math) {
+        leftInput.disabled = !amountOK();
+        const v2 = leftInput.value.trim();
+        if (!amountOK() || v2 === '') { leftFb.textContent = ' '; leftFb.className = 'pay-feedback'; }
+        else if (leftOK()) { leftFb.textContent = '✅ נכון! יופי'; leftFb.className = 'pay-feedback ok'; }
+        else {
+          leftFb.textContent = Number(v2) < after ? '⬆️ יישאר יותר' : '⬇️ יישאר פחות';
+          leftFb.className = 'pay-feedback bad';
+        }
+      }
+      go.disabled = !(amountOK() && leftOK());
+    };
+    input.oninput = () => {
+      refresh();
+      if (amountOK() && math) setTimeout(() => leftInput.focus(), 30);
+    };
+    leftInput.oninput = refresh;
+    const enterGo = (e) => { if (e.key === 'Enter' && !go.disabled) go.click(); };
+    input.onkeydown = enterGo;
+    leftInput.onkeydown = enterGo;
+
+    // כל ניסיון שגוי מקרב את העזרה — ונספר לסיכום בסוף המשחק
+    const missed = () => {
+      wrongTries++;
+      if (onWrong) onWrong();
+      if (wrongTries >= 2) help.hidden = false;
+    };
+    input.onblur = () => { if (input.value.trim() !== '' && !amountOK()) missed(); };
+    leftInput.onblur = () => { if (!leftInput.disabled && leftInput.value.trim() !== '' && !leftOK()) missed(); };
 
     go.onclick = () => {
-      const typed = Number(input.value);
-      if (typed !== d0.amount) {
-        wrongTries++;
-        if (wrongTries >= 3) help.hidden = false;
-        return;
-      }
+      if (!amountOK() || !leftOK()) { missed(); return; }
       closeDialog();
-      onConfirm(typed);
+      onConfirm(d0.amount);
     };
-    // עזרה אמיתית: ממלאת את הסכום, אבל ההעברה עדיין נעשית בלחיצה של הילד
-    help.onclick = () => { input.value = String(d0.amount); check(); input.focus(); };
+    // עזרה אמיתית: ממלאת את התשובה, אבל ההעברה עדיין נעשית בלחיצה של הילד
+    help.onclick = () => {
+      if (!amountOK()) input.value = String(d0.amount);
+      else if (math) leftInput.value = String(after);
+      refresh();
+      (amountOK() && math && !leftOK() ? leftInput : input).focus();
+    };
     // מי שמתקשה יראה עזרה גם בלי לנסות — אחרי חצי דקה מול המסך
     setTimeout(() => { if (document.body.contains(help)) help.hidden = false; }, 30000);
     setTimeout(() => input.focus(), 50);

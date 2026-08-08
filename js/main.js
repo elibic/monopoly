@@ -78,8 +78,12 @@
   let chosenDifficulty = 'easy'; // ברירת מחדל ידידותית לילדים
   try { chosenDifficulty = localStorage.getItem(DIFF_KEY) || 'easy'; } catch (e) { /* */ }
   const MP_KEY = 'monopoly-hebrew-manualpay';
-  let chosenManualPay = true; // ברירת מחדל: הילד מעביר את הכסף בעצמו
-  try { chosenManualPay = localStorage.getItem(MP_KEY) !== 'off'; } catch (e) { /* */ }
+  // math = הילד מעביר וגם מחשב כמה יישאר · on = מעביר בלבד · off = הבנק גובה לבד
+  let chosenPayMode = 'math';
+  try {
+    const saved = localStorage.getItem(MP_KEY);
+    if (saved === 'off' || saved === 'on' || saved === 'math') chosenPayMode = saved;
+  } catch (e) { /* */ }
 
   function initSetup() {
     // הקמע בפתיחה ובמרכז הלוח
@@ -179,12 +183,12 @@
     const mpPicker = $('#manualpay-picker');
     if (mpPicker) {
       mpPicker.querySelectorAll('.opt-btn').forEach((b) => {
-        b.classList.toggle('selected', (b.dataset.mp === 'on') === chosenManualPay);
+        b.classList.toggle('selected', b.dataset.mp === chosenPayMode);
         b.onclick = () => {
           mpPicker.querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
           b.classList.add('selected');
-          chosenManualPay = b.dataset.mp === 'on';
-          try { localStorage.setItem(MP_KEY, chosenManualPay ? 'on' : 'off'); } catch (e) { /* */ }
+          chosenPayMode = b.dataset.mp;
+          try { localStorage.setItem(MP_KEY, chosenPayMode); } catch (e) { /* */ }
         };
       });
     }
@@ -254,7 +258,9 @@
 
     game = new Game(spec, {
       auctions: chosenAuctions, pot: chosenPot, difficulty: chosenDifficulty,
-      finance: chosenFinance, manualPay: chosenManualPay,
+      finance: chosenFinance,
+      manualPay: chosenPayMode !== 'off',
+      payMath: chosenPayMode === 'math',
     });
     aiRoundStartSeq = null;
     summaryPending = false;
@@ -379,6 +385,7 @@
             try { game.confirmPayment(typed); } catch (e) { UI.toast(e.message); }
             tick();
           },
+          onWrong: () => { game.players[game.pendingPay.payer].stats.mathWrong += 1; },
         });
         dialogOpen = true;
       } else if (game.phase === 'collect' && !isAI(game.pendingCollect.payee)) {
