@@ -16,6 +16,9 @@
   const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const money = (n) => `${n.toLocaleString('he-IL')} ₪`;
+  // שם השחקן מגיע מהקלדה חופשית — מנטרלים תווי HTML לפני שמציגים אותו
+  const esc = (s) => String(s === undefined || s === null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const PLAYER_COLORS = ['#E0393E', '#3D8FD1', '#2FA671', '#8E44AD', '#E67E22', '#16A085'];
   let uiGame = null; // הפניה למשחק הנוכחי — לשליפת שטר קניין בלחיצה על משבצת
 
@@ -602,13 +605,18 @@
       .sort((a, b) => t.indexOf(a.name) - t.indexOf(b.name))[0];
     const isMe = actor && actor.idx === human.idx;
 
+    // במצב העברות ידניות התשלום נעשה בחלונית ההעברה האמיתית, שבה
+    // הילד מקליד את הסכום. אישור "שלם" נוסף כאן רק היה דורס אותה.
+    const manual = !!g.manualPay;
+
     switch (entry.kind) {
       case 'rent':
-        if (isMe) return { title: 'שכר דירה! 💸', amount, mode: 'pay' };
-        if (t.includes(`ל${human.name}`)) return { title: 'קיבלת שכר דירה! 🤑', amount, mode: 'receive' };
+        if (isMe) return manual ? null : { title: 'שכר דירה! 💸', amount, mode: 'pay' };
+        // גם הכניסה עוברת בחלונית הגבייה — בלי אישור כפול
+        if (t.includes(`ל${human.name}`)) return manual ? null : { title: 'קיבלת שכר דירה! 🤑', amount, mode: 'receive' };
         return null;
       case 'tax':
-        if (isMe) return { title: 'מס לבנק 🧾', amount, mode: 'pay' };
+        if (isMe) return manual ? null : { title: 'מס לבנק 🧾', amount, mode: 'pay' };
         return null;
       case 'money':
         if (isMe && t.includes('משכורת')) return { title: 'משכורת! 💰', amount, mode: 'receive' };
@@ -947,7 +955,8 @@
         // קלף כסף לשחקן האנושי — לוחצים "שלם"/"קבל"
         if (humanCard && cardData) {
           const act = cardData.action;
-          if (act.type === 'pay') await showAckDialog({ title: 'הקלף אומר לשלם 💳', amount: act.amount, mode: 'pay' });
+          // תשלום מקלף עובר בחלונית ההעברה הידנית — בלי אישור כפול
+          if (act.type === 'pay' && !g.manualPay) await showAckDialog({ title: 'הקלף אומר לשלם 💳', amount: act.amount, mode: 'pay' });
           if (act.type === 'receive') await showAckDialog({ title: 'הקלף נותן לך כסף! 🤑', amount: act.amount, mode: 'receive' });
           if (act.type === 'collectFromAll') await showAckDialog({ title: 'כולם משלמים לך! 🥳', amount: act.amount * (g.alive().length - 1), mode: 'receive' });
           if (act.type === 'payToAll') await showAckDialog({ title: 'משלמים לכל המשתתפים 💳', amount: act.amount * (g.alive().length - 1), mode: 'pay' });
@@ -1196,48 +1205,242 @@
     if (cardBtn) cardBtn.onclick = () => { closeDialog(); onCard(); };
   }
 
+  /* ---------- העברה ידנית: הילד מעביר את הכסף בעצמו ---------- */
+
+  // הכסף לא זז לבד. הילד רואה למי, כמה ולמה — ומקליד את הסכום.
+  // אחרי שלושה ניסיונות שגויים נפתחת עזרה, כדי שזה יישאר משחק ולא מבחן.
+  function showPayDialog(g, humanIdx, { onConfirm, onWrong }) {
+    const d0 = g.pendingPay;
+    const p = g.players[d0.payer]; // המשלם נקבע לפי ההעברה עצמה, לא לפי מי פתח
+    const toName = d0.creditor !== null ? g.players[d0.creditor].name : '🏦 הבנק';
+    const toToken = d0.creditor !== null ? g.players[d0.creditor].token : '🏦';
+    const after = p.money - d0.amount;
+    const math = !!g.payMath; // תרגיל החשבון — רק במצב שנבחר במסך הפתיחה
+    let wrongTries = 0;
+
+    const d = openDialog(`
+      <h2>העברה מהחשבון שלך 💸</h2>
+      <p class="d-sub">${esc(d0.reason)}</p>
+      <div class="pay-card">
+        <div class="pay-to"><span class="pay-token">${toToken}</span>
+          <span>מעבירים אל<br><b>${esc(toName)}</b></span></div>
+        <div class="pay-amount">${money(d0.amount)}</div>
+      </div>
+
+      <div class="pay-step">
+        <p class="d-sub">${math ? '1️⃣ ' : ''}הקלידו את הסכום להעברה:</p>
+        <div class="pay-entry">
+          <input id="pay-input" type="number" inputmode="numeric" min="0" placeholder="כמה?" autocomplete="off">
+          <span class="pay-currency">₪</span>
+        </div>
+        <p class="pay-feedback" id="pay-fb">&nbsp;</p>
+      </div>
+
+      <div class="pay-step" id="pay-step2" ${math ? '' : 'hidden'}>
+        <p class="d-sub">2️⃣ וכמה יישאר לך בחשבון אחרי ההעברה?</p>
+        <div class="pay-entry">
+          <input id="left-input" type="number" inputmode="numeric" placeholder="כמה יישאר?" autocomplete="off" disabled>
+          <span class="pay-currency">₪</span>
+        </div>
+        <p class="pay-feedback" id="left-fb">&nbsp;</p>
+      </div>
+
+      <div class="pay-balance">
+        <button class="peek-btn" id="pay-peek">🔍 לבדוק כמה יש לי</button>
+        <span id="pay-balance-val" hidden>בחשבון: <b>${money(p.money)}</b>${math ? '' : ` ← אחרי ההעברה: <b>${money(after)}</b>`}</span>
+      </div>
+      <div class="d-actions">
+        <button class="big-btn green" id="pay-go" disabled>💳 מעבירים!</button>
+        <button class="big-btn" id="pay-help" hidden>💡 עזרה</button>
+      </div>`);
+
+    const input = d.querySelector('#pay-input');
+    const leftInput = d.querySelector('#left-input');
+    const go = d.querySelector('#pay-go');
+    const fb = d.querySelector('#pay-fb');
+    const leftFb = d.querySelector('#left-fb');
+    const help = d.querySelector('#pay-help');
+    const peek = d.querySelector('#pay-peek');
+
+    // "כמה יש לי?" — היתרה מוסתרת עד שבודקים, כדי שהבדיקה תהיה פעולה
+    peek.onclick = () => {
+      peek.hidden = true;
+      d.querySelector('#pay-balance-val').hidden = false;
+      sounds.tick();
+    };
+
+    const amountOK = () => Number(input.value) === d0.amount;
+    const leftOK = () => !math || Number(leftInput.value) === after;
+
+    const refresh = () => {
+      const v1 = input.value.trim();
+      if (v1 === '') { fb.textContent = ' '; fb.className = 'pay-feedback'; }
+      else if (amountOK()) { fb.textContent = '✅ בדיוק!'; fb.className = 'pay-feedback ok'; }
+      else {
+        fb.textContent = Number(v1) < d0.amount ? '⬆️ צריך יותר' : '⬇️ זה יותר מדי';
+        fb.className = 'pay-feedback bad';
+      }
+      // השלב השני נפתח רק אחרי שהסכום הראשון נכון
+      if (math) {
+        leftInput.disabled = !amountOK();
+        const v2 = leftInput.value.trim();
+        if (!amountOK() || v2 === '') { leftFb.textContent = ' '; leftFb.className = 'pay-feedback'; }
+        else if (leftOK()) { leftFb.textContent = '✅ נכון! יופי'; leftFb.className = 'pay-feedback ok'; }
+        else {
+          leftFb.textContent = Number(v2) < after ? '⬆️ יישאר יותר' : '⬇️ יישאר פחות';
+          leftFb.className = 'pay-feedback bad';
+        }
+      }
+      go.disabled = !(amountOK() && leftOK());
+    };
+    input.oninput = () => {
+      refresh();
+      if (amountOK() && math) setTimeout(() => leftInput.focus(), 30);
+    };
+    leftInput.oninput = refresh;
+    const enterGo = (e) => { if (e.key === 'Enter' && !go.disabled) go.click(); };
+    input.onkeydown = enterGo;
+    leftInput.onkeydown = enterGo;
+
+    // כל ניסיון שגוי מקרב את העזרה — ונספר לסיכום בסוף המשחק
+    const missed = () => {
+      wrongTries++;
+      if (onWrong) onWrong();
+      if (wrongTries >= 2) help.hidden = false;
+    };
+    input.onblur = () => { if (input.value.trim() !== '' && !amountOK()) missed(); };
+    leftInput.onblur = () => { if (!leftInput.disabled && leftInput.value.trim() !== '' && !leftOK()) missed(); };
+
+    go.onclick = () => {
+      if (!amountOK() || !leftOK()) { missed(); return; }
+      closeDialog();
+      onConfirm(d0.amount);
+    };
+    // עזרה אמיתית: ממלאת את התשובה, אבל ההעברה עדיין נעשית בלחיצה של הילד
+    help.onclick = () => {
+      if (!amountOK()) input.value = String(d0.amount);
+      else if (math) leftInput.value = String(after);
+      refresh();
+      (amountOK() && math && !leftOK() ? leftInput : input).focus();
+    };
+    // מי שמתקשה יראה עזרה גם בלי לנסות — אחרי חצי דקה מול המסך
+    setTimeout(() => { if (document.body.contains(help)) help.hidden = false; }, 30000);
+    setTimeout(() => input.focus(), 50);
+    speak(`צָרִיךְ לְהַעֲבִיר ${d0.amount} שֶׁקֶל`, { raw: true });
+  }
+
+  /* ---------- גבייה: הכסף לא נכנס לבד, גובים אותו ---------- */
+
+  // מישהו נחת על הנכס שלך. הכסף יצא מהכיס שלו — אבל נכנס אליך רק
+  // כשאתה גובה. זה הרגע שבו ילד מבין למה שווה להחזיק נכסים.
+  function showCollectDialog(g, { onCollect }) {
+    const c = g.pendingCollect;
+    const me = g.players[c.payee];
+    const from = g.players[c.payer];
+    const d = openDialog(`
+      <h2>יש לך כסף לגבות! 💰</h2>
+      <p class="d-sub">${esc(c.reason)}</p>
+      <div class="pay-card collect">
+        <div class="pay-to"><span class="pay-token">${from ? from.token : '🏦'}</span>
+          <span>${from ? esc(from.name) : 'הבנק'} משלם/ת לך</span></div>
+        <div class="pay-amount">${money(c.amount)}</div>
+      </div>
+      <p class="d-sub">בחשבון שלך: <b>${money(me.money)}</b> ← אחרי הגבייה: <b>${money(me.money + c.amount)}</b></p>
+      <div class="d-actions">
+        <button class="big-btn green" id="collect-go">🤑 גובים!</button>
+      </div>`);
+    d.querySelector('#collect-go').onclick = () => { closeDialog(); sounds.coin(); onCollect(); };
+    speak('יֵשׁ לְךָ כֶּסֶף לִגְבּוֹת!', { raw: true });
+  }
+
+  // כשנגמר הכסף, השאלה האמיתית היא "מה עדיף?" — ולכן כל דרך לגייס
+  // כסף מוצגת עם שני מספרים: כמה היא מכניסה עכשיו, וכמה היא באמת
+  // עולה. הרשימה ממוינת מהזול ליקר, והזול ביותר מסומן.
+  function debtOptions(g, idx) {
+    const opts = [];
+
+    // 1. משיכת השקעה — הכסף שלך, בלי קנס ובלי לוותר על נכס
+    if (g.financeEnabled) {
+      for (const h of g.holdings(idx)) {
+        opts.push({
+          gain: h.value,
+          cost: 0,
+          color: h.track === 'stocks' ? FIN.TRACKS.stocks.color : FIN.TRACKS[h.track].color,
+          name: h.name,
+          why: 'הכסף שלך — בלי קנס',
+          attrs: `data-act="withdraw" data-track="${h.track}" data-co="${h.co || ''}"`,
+          verb: '🏦 משיכה',
+        });
+      }
+    }
+
+    for (const pos of g.playerProps(idx)) {
+      const sq = BOARD[pos];
+      const grp = sq.group ? GROUPS[sq.group] : null;
+      const label = `${sq.name}${g.houses[pos] ? ' ' + (g.houses[pos] === 5 ? '🏨' : '🏠'.repeat(g.houses[pos])) : ''}`;
+
+      // 2. משכנתא — מקבלים חצי מחיר, והפדיון עולה 10% ריבית
+      if (g.canMortgage(idx, pos)) {
+        const rentNow = sq.type === 'street' ? sq.rent[0] : 0;
+        opts.push({
+          gain: sq.price / 2,
+          cost: Math.round((sq.price / 2) * 0.1),
+          color: grp ? grp.color : '#546E7A',
+          name: label,
+          why: `הפדיון יעלה ${money(Math.round((sq.price / 2) * 1.1))}${rentNow ? ' · בינתיים בלי שכר דירה' : ''}`,
+          attrs: `data-act="mortgage" data-pos="${pos}"`,
+          verb: '🔒 משכנתא',
+        });
+      }
+
+      // 3. מכירת בית — מקבלים חצי ממה ששילמת, ושכר הדירה צונח
+      if (g.canSellHouseOn(idx, pos)) {
+        const h = g.houses[pos];
+        const rentBefore = sq.rent[h === 5 ? 5 : h];
+        const rentAfter = sq.rent[h === 5 ? 4 : h - 1];
+        opts.push({
+          gain: grp.houseCost / 2,
+          cost: grp.houseCost / 2,
+          color: grp.color,
+          name: label,
+          why: `בנית ב-${money(grp.houseCost)} ומקבל חצי · שכר הדירה יירד מ-${money(rentBefore)} ל-${money(rentAfter)}`,
+          attrs: `data-act="sellHouse" data-pos="${pos}"`,
+          verb: h === 5 ? '🏨 מכירת מלון' : '🏠 מכירת בית',
+        });
+      }
+    }
+
+    // מהזול ליקר; בעלות זהה — קודם מה שמכניס יותר
+    opts.sort((a, b) => a.cost - b.cost || b.gain - a.gain);
+    return opts;
+  }
+
   function showDebtDialog(g, humanIdx, { onAction, onSettle, onBankrupt }) {
     const debt = g.debt;
     const p = g.players[humanIdx];
     const canPay = p.money >= debt.amount;
     const canRaise = g.canAffordDebt();
     const creditor = debt.creditor !== null ? g.players[debt.creditor].name : 'הבנק';
+    const missing = Math.max(0, debt.amount - p.money);
+    const opts = canPay ? [] : debtOptions(g, humanIdx);
 
-    const rows = [];
-    // כסף מושקע הוא הכי קל לגייס — מציגים אותו ראשון
-    if (g.financeEnabled) {
-      for (const h of g.holdings(humanIdx)) {
-        rows.push(`<div class="asset-row">
-          <span class="a-band" style="background:${h.track === 'stocks' ? FIN.TRACKS.stocks.color : FIN.TRACKS[h.track].color}"></span>
-          <span class="a-name">${h.name}</span>
-          <button data-act="withdraw" data-track="${h.track}" data-co="${h.co || ''}">🏦 משיכה +${money(h.value)}</button>
-        </div>`);
-      }
-    }
-    for (const pos of g.playerProps(humanIdx)) {
-      const sq = BOARD[pos];
-      const grp = sq.group ? GROUPS[sq.group] : null;
-      const actions = [];
-      if (g.canSellHouseOn(humanIdx, pos)) {
-        actions.push(`<button data-act="sellHouse" data-pos="${pos}">מכירת בית +${money(grp.houseCost / 2)}</button>`);
-      }
-      if (g.canMortgage(humanIdx, pos)) {
-        actions.push(`<button data-act="mortgage" data-pos="${pos}">משכנתא +${money(sq.price / 2)}</button>`);
-      }
-      if (!actions.length) continue;
-      rows.push(`<div class="asset-row">
-        <span class="a-band" style="background:${grp ? grp.color : '#546E7A'}"></span>
-        <span class="a-name">${sq.name}${g.houses[pos] ? ' ' + (g.houses[pos] === 5 ? '🏨' : '🏠'.repeat(g.houses[pos])) : ''}</span>
-        ${actions.join('')}
-      </div>`);
-    }
+    const rows = opts.map((o, i) => `
+      <div class="asset-row debt-opt${i === 0 ? ' best' : ''}">
+        <span class="a-band" style="background:${o.color}"></span>
+        <span class="a-name">${esc(o.name)}${i === 0 ? ' <span class="best-tag">👍 הכי משתלם</span>' : ''}
+          <small class="opt-why">${esc(o.why)}</small></span>
+        <span class="opt-cost">${o.cost === 0 ? 'בלי קנס' : `עולה לך ${money(o.cost)}`}</span>
+        <button ${o.attrs}>${o.verb} +${money(o.gain)}</button>
+      </div>`).join('');
 
     const d = openDialog(`
       <h2>צריך לשלם! 💸</h2>
-      <p class="debt-need">חוב של ${money(debt.amount)} ל${creditor}</p>
-      <p class="d-sub">בחשבון שלך: <b>${money(p.money)}</b></p>
-      ${canPay ? '' : (rows.length ? `<p class="d-sub">אפשר ${g.financeEnabled ? 'למשוך מההשקעות, ' : ''}למכור בתים או לקחת משכנתא:</p>` : '')}
-      <div class="asset-list">${rows.join('')}</div>
+      <p class="debt-need">חוב של ${money(debt.amount)} ל${esc(creditor)}</p>
+      <p class="d-sub">בחשבון שלך: <b>${money(p.money)}</b>${missing ? ` · <b class="miss">חסרים ${money(missing)}</b>` : ''}</p>
+      ${canPay ? '' : (rows
+        ? '<p class="d-sub">🤔 <b>מה עדיף?</b> כל שורה מראה כמה כסף היא מכניסה — וכמה היא באמת עולה לך.</p>'
+        : '<p class="d-sub">אין יותר מה למכור או למשכן...</p>')}
+      <div class="asset-list">${rows}</div>
       <div class="d-actions">
         <button class="big-btn green" id="d-settle" ${canPay ? '' : 'disabled'}>💳 משלמים את החוב</button>
         ${canRaise ? '' : '<button class="big-btn" id="d-bankrupt">😢 פשיטת רגל</button>'}
@@ -1252,6 +1455,19 @@
     };
   }
 
+  // למה אי אפשר לבנות כאן? הסבר קצר בשפת ילדים, כדי שחוסר כפתור לא ייראה כתקלה
+  function buildBlockReason(g, idx, pos) {
+    const sq = BOARD[pos];
+    if (sq.type !== 'street' || g.owner[pos] !== idx || g.houses[pos] >= 5) return '';
+    if (!g.ownsFullGroup(idx, sq.group)) return `צריך את כל ${GROUPS[sq.group].name}`;
+    const gp = g.groupPositions(sq.group);
+    if (gp.some((x) => g.mortgaged[x])) return 'יש משכנתא בעיר';
+    if (g.houses[pos] > Math.min(...gp.map((x) => g.houses[x]))) return 'קודם בונים ברחוב השני';
+    if (!gp.includes(g.players[idx].pos)) return 'צריך להגיע לעיר';
+    if (g.players[idx].money < GROUPS[sq.group].houseCost) return 'אין מספיק כסף';
+    return '';
+  }
+
   function showManageDialog(g, humanIdx, { onAction, onClose }) {
     const props = g.playerProps(humanIdx);
     const p = g.players[humanIdx];
@@ -1260,6 +1476,7 @@
       const grp = sq.group ? GROUPS[sq.group] : null;
       const actions = [];
       if (g.canBuildOn(humanIdx, pos)) actions.push(`<button data-act="build" data-pos="${pos}">🏠 בנייה ‎-${money(grp.houseCost)}</button>`);
+      else if (buildBlockReason(g, humanIdx, pos)) actions.push(`<span class="a-note">${buildBlockReason(g, humanIdx, pos)}</span>`);
       if (g.canSellHouseOn(humanIdx, pos)) actions.push(`<button data-act="sellHouse" data-pos="${pos}">מכירת בית +${money(grp.houseCost / 2)}</button>`);
       if (g.canMortgage(humanIdx, pos)) actions.push(`<button data-act="mortgage" data-pos="${pos}">משכנתא +${money(sq.price / 2)}</button>`);
       if (g.mortgaged[pos]) {
@@ -1275,7 +1492,8 @@
     const d = openDialog(`
       <h2>העסקים שלי 🏠</h2>
       <p class="d-sub">בחשבון: <b>${money(p.money)}</b> · בתים במלאי הבנק: ${g.housesLeft} · מלונות: ${g.hotelsLeft}</p>
-      <p class="d-sub">🏗️ בונים בית רק כשהחייל מגיע לרחוב שלך (וכל העיר בבעלותך) — המשחק יציע לך לבנות!</p>
+      <p class="d-sub">🏗️ בונים רק כשהחייל מגיע לעיר שכולה בבעלותך — והמשחק יציע לך לבנות!</p>
+      <p class="d-sub">⚖️ בונים <b>בבתים שווים</b>: קודם בית אחד בכל רחוב בעיר, ורק אחר כך השני.</p>
       <div class="asset-list">${rows.join('') || '<p class="d-sub">עוד אין לך נכסים — קנה כשנוחתים על משבצת פנויה!</p>'}</div>
       <div class="d-actions"><button class="big-btn blue" id="d-close">סגירה</button></div>`);
     d.querySelectorAll('button[data-act]').forEach((b) => {
@@ -1967,6 +2185,48 @@
     d.querySelector('#al-close').onclick = () => closeDialog();
   }
 
+  /* ---------- סיכום המשחק: מה הילד באמת עשה ---------- */
+
+  // לא רק "מי ניצח" — כמה העברות ביצע, כמה גבה, מה הייתה העסקה
+  // הגדולה שלו. אלה המספרים שהופכים משחק לשיעור.
+  function statsHTML(g, idx) {
+    const s = g.players[idx].stats;
+    if (!s) return '';
+    const items = [];
+    if (s.transfers) items.push({ e: '💳', n: s.transfers, l: s.transfers === 1 ? 'העברה שביצעת' : 'העברות שביצעת' });
+    if (s.paid) items.push({ e: '💸', n: money(s.paid), l: 'שילמת בסך הכול' });
+    if (s.biggestPay) items.push({ e: '😬', n: money(s.biggestPay), l: 'התשלום הכי גדול' });
+    if (s.collections) items.push({ e: '🤑', n: s.collections, l: s.collections === 1 ? 'פעם גבית כסף' : 'פעמים גבית כסף' });
+    if (s.collected) items.push({ e: '💰', n: money(s.collected), l: 'גבית בסך הכול' });
+    if (s.biggestCollect) items.push({ e: '🎯', n: money(s.biggestCollect), l: 'הגבייה הכי גדולה' });
+    if (s.salary) items.push({ e: '🚀', n: money(s.salary), l: 'משכורות מ"דרך צלחה"' });
+    if (s.bought) items.push({ e: '🏷️', n: s.bought, l: s.bought === 1 ? 'נכס שקנית' : 'נכסים שקנית' });
+    if (s.housesBuilt) items.push({ e: '🏠', n: s.housesBuilt, l: s.housesBuilt === 1 ? 'בית שבנית' : 'בתים שבנית' });
+    if (s.hotelsBuilt) items.push({ e: '🏨', n: s.hotelsBuilt, l: s.hotelsBuilt === 1 ? 'מלון שבנית' : 'מלונות שבנית' });
+    if (!items.length) return '';
+
+    // שורת סיכום אחת בשפה של ילד: יצא לך יותר או נכנס לך יותר?
+    const net = s.collected + s.salary - s.paid;
+    const verdict = s.collected + s.paid === 0 ? ''
+      : net > 0 ? `📈 נכנס לך יותר ממה שיצא — ${money(net)} ביתרה חיובית. יפה!`
+      : net < 0 ? `📉 יצא לך יותר ממה שנכנס — ${money(-net)}. בפעם הבאה כדאי לקנות עוד רחובות!`
+      : '⚖️ נכנס בדיוק כמו שיצא!';
+
+    const mathNote = g.payMath && s.transfers
+      ? (s.mathWrong === 0
+          ? '<div class="win-math ok">🧮 כל תרגילי החשבון יצאו נכון בפעם הראשונה — מדהים!</div>'
+          : `<div class="win-math">🧮 ${s.mathWrong} ${s.mathWrong === 1 ? 'פעם' : 'פעמים'} התרגיל לא יצא בפעם הראשונה — וזה בסדר גמור, ככה לומדים.</div>`)
+      : '';
+
+    return `<div class="win-stats-title">מה עשית במשחק הזה 📊</div>
+      <div class="win-stats">${items.map((it) => `
+        <div class="win-stat"><span class="ws-emoji">${it.e}</span>
+          <span class="ws-num">${it.n}</span>
+          <span class="ws-label">${it.l}</span></div>`).join('')}</div>
+      ${verdict ? `<div class="win-verdict">${verdict}</div>` : ''}
+      ${mathNote}`;
+  }
+
   function showWin(g, onRestart, extra = {}) {
     const w = g.players[g.winner];
     const isF = w.gender === 'f';
@@ -2010,6 +2270,7 @@
       <h2>${title}</h2>
       <div class="win-standings">${rows}</div>
       ${g.financeEnabled ? `<div class="win-finance">📈 ההשקעות שלך: הפקדת ${money(g.players[humanIdx].invest.totalIn)} · ${g.investProfit(humanIdx) >= 0 ? 'הרווחת' : 'הפסדת'} ${deltaHTML(g.investProfit(humanIdx))}</div>` : ''}
+      ${statsHTML(g, humanIdx)}
       ${wealthChart(g, extra.history)}
       <div class="win-stickers-title">המדבקות שהרווחת 🏅</div>
       <div class="sticker-strip">${stickerHTML}</div>
@@ -2029,12 +2290,27 @@
   }
 
 
+
   /* ==================== מה חדש? — יומן גרסאות לשחקנים ==================== */
 
   // חמש הגרסאות האחרונות, מהחדשה לישנה. current = הגרסה שרצה עכשיו.
   const VERSIONS = [
     {
-      id: 'v18', label: 'גרסה 18', date: 'אוגוסט 2026', current: true,
+      id: 'v19', label: 'גרסה 19', date: 'אוגוסט 2026', current: true,
+      title: 'אתם הבנקאים! 💳',
+      items: [
+        '💳 הכסף כבר לא זז לבד! בכל תשלום נפתחת חלונית העברה — רואים למי, כמה ולמה, מקלידים את הסכום ומעבירים',
+        '🧮 תרגיל חשבון אמיתי: היתרה מוסתרת עד שלוחצים "לבדוק כמה יש לי", ואחרי הסכום שואלים גם כמה יישאר. יש עזרה למי שנתקע',
+        '🤑 גבייה יזומה: בוט שנחת על הרחוב שלכם משלם — אבל הכסף נכנס רק כשלוחצים "גובים!"',
+        '🤔 נגמר הכסף? החלונית מראה כל דרך לגייס כסף עם המחיר האמיתי שלה, ממוינת מהזול ליקר, עם סימון "הכי משתלם"',
+        '📊 בסוף המשחק — סיכום אישי: כמה העברות ביצעתם, כמה גביתם, מה היה התשלום הכי גדול וכמה בניתם',
+        '🏠 תוקן באג: אי אפשר יותר להעמיד מלון ברחוב אחד בזמן שרחוב אחר באותה עיר ריק — בונים בבתים שווים, כמו בחוקים',
+        '🏗️ הגעתם לעיר שכולה שלכם? אפשר לבנות בכל רחוב בה שתורו הגיע, והחלונית מראה את מצב כל העיר',
+        '🐞 כפתור דיווח באג חדש: אוסף לבד צילום מסך, את יומן המשחק ואת כל מה שקרה — ושולח בקובץ אחד',
+      ],
+    },
+    {
+      id: 'v18', label: 'גרסה 18', date: 'אוגוסט 2026',
       title: 'מכירה פומבית הוגנת ומעניינת 🔨',
       items: [
         '🔨 מי שוויתר על הקנייה כבר לא מציע ראשון — השחקן הבא פותח, והמוותר מגיב',
@@ -2328,7 +2604,7 @@
 
   globalThis.MonopolyUI = {
     buildBoard, render, animateDice, openDialog, closeDialog,
-    showBuyDialog, renderAuction, showJailDialog, showDebtDialog,
+    showBuyDialog, renderAuction, showJailDialog, showDebtDialog, showPayDialog, showCollectDialog,
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
     primeFromRestore, announce, SVG, narrator, showTurnSummary,

@@ -227,7 +227,7 @@
     const allowed = [
       'rollDice', 'buy', 'declineBuy', 'placeBid', 'passAuction', 'endTurn',
       'payJailFine', 'useJailCard', 'buildHouse', 'sellHouse', 'mortgage',
-      'unmortgage', 'settleDebt', 'declareBankruptcy',
+      'unmortgage', 'settleDebt', 'declareBankruptcy', 'confirmPayment', 'collectMoney',
     ];
     if (!allowed.includes(act.fn)) return;
     try {
@@ -294,6 +294,8 @@
     if (game.phase !== 'auction') UI.closeAuctionDialog();
 
     const sig = [game.phase, game.turn, game.debt ? game.debt.debtor : '-',
+      game.pendingPay ? game.pendingPay.payer + ':' + game.pendingPay.amount : '-',
+      game.pendingCollect ? game.pendingCollect.payee + ':' + game.pendingCollect.amount : '-',
       game.phase === 'auction' ? game.auctionTurn() : '-'].join(':');
     const sigChanged = sig !== lastUiSig;
     lastUiSig = sig;
@@ -316,6 +318,16 @@
     if (game.phase === 'buy') {
       if (myTurn) UI.showBuyDialog(game, () => doAction({ fn: 'buy' }), () => doAction({ fn: 'declineBuy' }));
       else UI.toast(`🛍️ ${peerName} מחליט/ה אם לקנות...`);
+    } else if (game.phase === 'pay') {
+      if (game.pendingPay.payer === myIdx) {
+        UI.showPayDialog(game, myIdx, {
+          onConfirm: (typed) => doAction({ fn: 'confirmPayment', args: [typed] }),
+        });
+      } else UI.toast(`💳 ${peerName} מעביר/ה תשלום...`);
+    } else if (game.phase === 'collect') {
+      if (game.pendingCollect.payee === myIdx) {
+        UI.showCollectDialog(game, { onCollect: () => doAction({ fn: 'collectMoney' }) });
+      } else UI.toast(`💰 ${peerName} גובה תשלום...`);
     } else if (game.phase === 'debt') {
       if (game.debt.debtor === myIdx) {
         UI.showDebtDialog(game, myIdx, {

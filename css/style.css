@@ -1019,6 +1019,123 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 }
 .asset-row .a-band { width: 17px; height: 17px; border-radius: 5px; flex-shrink: 0; border: 1.5px solid rgba(0, 0, 0, .3); }
 .asset-row .a-name { font-weight: 700; flex: 1; }
+/* רחוב שעדיין לא תורו בבנייה השווה — מוצג אפור, בלי כפתור */
+.asset-row .a-note { font-size: 13px; color: #8A8375; font-weight: 600; }
+
+/* ---------- העברה ידנית: הילד מקליד את הסכום ומעביר בעצמו ---------- */
+.pay-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(135deg, #FFF8E1, #FFEFC2);
+  border: 3px solid #E0A03E;
+  border-radius: 16px;
+  padding: 12px 16px;
+  margin: 12px 0;
+}
+/* גבייה — אותו כרטיס בירוק, כדי שכסף שנכנס ייראה אחרת מכסף שיוצא */
+.pay-card.collect { background: linear-gradient(135deg, #E9F8EE, #CFF0DB); border-color: #1F9D55; }
+.pay-card.collect .pay-amount { color: #17663A; }
+.pay-to { display: flex; align-items: center; gap: 10px; font-size: 15px; text-align: right; line-height: 1.35; }
+.pay-token { font-size: 30px; }
+.pay-amount { font-family: var(--font-title); font-size: 30px; color: #B3541E; white-space: nowrap; }
+.pay-entry { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 4px 0; }
+.pay-entry input {
+  font-family: var(--font-title);
+  font-size: 30px;
+  width: 190px;
+  max-width: 60vw;
+  text-align: center;
+  padding: 8px 10px;
+  border: 3px solid #E4DCC4;
+  border-radius: 14px;
+  background: #fff;
+}
+.pay-entry input:focus { outline: none; border-color: #E0A03E; box-shadow: 0 0 0 4px rgba(224, 160, 62, .2); }
+/* חצים של number מפריעים לילד — מסתירים אותם */
+.pay-entry input::-webkit-outer-spin-button,
+.pay-entry input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pay-entry input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+.pay-currency { font-family: var(--font-title); font-size: 26px; color: #7A6F5E; }
+/* ---------- סיכום סוף המשחק: מה הילד באמת עשה ---------- */
+.win-stats-title {
+  font-family: var(--font-title);
+  font-size: 19px;
+  margin: 16px 0 8px;
+  text-align: center;
+}
+.win-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+}
+.win-stat {
+  background: #fff;
+  border: 2px solid #E4DCC4;
+  border-radius: 13px;
+  padding: 9px 7px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.win-stat .ws-emoji { font-size: 21px; }
+.win-stat .ws-num { font-family: var(--font-title); font-size: 19px; color: #B3541E; }
+.win-stat .ws-label { font-size: 12.5px; color: #7A6F5E; line-height: 1.3; }
+.win-verdict {
+  margin-top: 10px;
+  background: #FFF8E1;
+  border-right: 6px solid #E0A03E;
+  border-radius: 12px;
+  padding: 9px 13px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.win-math { margin-top: 8px; font-size: 14px; color: #7A6F5E; text-align: center; }
+.win-math.ok { color: #1F9D55; font-weight: 700; }
+
+/* ---------- "מה עדיף?" — דרכים לגייס כסף, מהזול ליקר ---------- */
+.asset-row.debt-opt { flex-wrap: wrap; align-items: flex-start; }
+.asset-row.debt-opt .a-name { display: flex; flex-direction: column; gap: 2px; min-width: 45%; }
+.asset-row.debt-opt .opt-why { font-weight: 500; font-size: 12.5px; color: #7A6F5E; line-height: 1.35; }
+.asset-row.debt-opt .opt-cost {
+  font-size: 13px;
+  font-weight: 700;
+  color: #B3541E;
+  background: #FDF1E3;
+  border-radius: 9px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.asset-row.debt-opt.best { border-color: #1F9D55; background: #F4FBF6; }
+.asset-row.debt-opt.best .opt-cost { color: #17663A; background: #DFF0E4; }
+.best-tag { font-size: 12px; color: #1F9D55; font-weight: 700; }
+.debt-need + .d-sub .miss { color: #D93A3A; }
+
+.pay-step { margin-bottom: 2px; }
+.pay-step[hidden] { display: none; }
+.pay-entry input:disabled { background: #F3F0E6; color: #B5AE9E; }
+/* "כמה יש לי?" — היתרה מוסתרת עד שבודקים אותה בלחיצה */
+.pay-balance { text-align: center; margin: 6px 0 2px; font-size: 15px; min-height: 32px; }
+.peek-btn {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  background: #EEF4FA;
+  border: 2px dashed #7FA9CF;
+  color: #2A5D87;
+  border-radius: 12px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.peek-btn:hover { background: #DDEAF6; }
+.peek-btn:active { transform: translateY(2px); }
+.pay-feedback { text-align: center; font-weight: 700; font-size: 15.5px; min-height: 22px; margin: 2px 0 6px; }
+.pay-feedback.ok { color: #1F9D55; }
+.pay-feedback.bad { color: #D93A3A; }
+
+}
 .asset-row button {
   font-family: var(--font-body);
   font-size: 12.5px;

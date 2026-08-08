@@ -77,6 +77,13 @@
   const DIFF_KEY = 'monopoly-hebrew-difficulty';
   let chosenDifficulty = 'easy'; // ברירת מחדל ידידותית לילדים
   try { chosenDifficulty = localStorage.getItem(DIFF_KEY) || 'easy'; } catch (e) { /* */ }
+  const MP_KEY = 'monopoly-hebrew-manualpay';
+  // math = הילד מעביר וגם מחשב כמה יישאר · on = מעביר בלבד · off = הבנק גובה לבד
+  let chosenPayMode = 'math';
+  try {
+    const saved = localStorage.getItem(MP_KEY);
+    if (saved === 'off' || saved === 'on' || saved === 'math') chosenPayMode = saved;
+  } catch (e) { /* */ }
 
   function initSetup() {
     // הקמע בפתיחה ובמרכז הלוח
@@ -172,6 +179,20 @@
       };
     });
 
+    // בורר העברות ידניות
+    const mpPicker = $('#manualpay-picker');
+    if (mpPicker) {
+      mpPicker.querySelectorAll('.opt-btn').forEach((b) => {
+        b.classList.toggle('selected', b.dataset.mp === chosenPayMode);
+        b.onclick = () => {
+          mpPicker.querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
+          b.classList.add('selected');
+          chosenPayMode = b.dataset.mp;
+          try { localStorage.setItem(MP_KEY, chosenPayMode); } catch (e) { /* */ }
+        };
+      });
+    }
+
     $('#start-btn').onclick = startGame;
     $('#download-btn').onclick = showDownloadDialog;
     const albumBtn = $('#album-btn');
@@ -183,13 +204,21 @@
     UI.showWhatsNewIfUpdated(); // בפעם הראשונה אחרי עדכון — מראים מה השתנה
     const remoteBtn = $('#remote-btn');
     if (remoteBtn && globalThis.MonopolyRemote) remoteBtn.onclick = () => globalThis.MonopolyRemote.open();
+    // דיווח באג — גם ממסך הפתיחה וגם מתוך המשחק
+    if (globalThis.MonopolyBug) {
+      globalThis.MonopolyBug.attach(() => game);
+      for (const id of ['#bug-setup-btn', '#bug-btn']) {
+        const b = $(id);
+        if (b) b.onclick = () => globalThis.MonopolyBug.open();
+      }
+    }
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
   }
 
   // הורדת המשחק — שתי אפשרויות: לשחק אופליין, או פרויקט מלא למתכנת.
   // חשוב: DEV_BRANCH חייב להצביע על ענף הפיתוח הנוכחי, אחרת ההורדה
   // נותנת גרסה ישנה בלי העדכונים והתיקונים האחרונים.
-  const DEV_BRANCH = 'claude/monopoly-financial-education-scrm25';
+  const DEV_BRANCH = 'claude/bug-report-gameplay-a8rd1k';
   function showDownloadDialog() {
     const repo = 'https://github.com/elibic/monopoly';
     const playZip = `${repo}/archive/refs/heads/gh-pages.zip`;   // המשחק הרץ (שטוח, מתעדכן בכל פרסום)
@@ -227,7 +256,12 @@
       spec.push({ name: AI_NAMES[i], token: aiTokens[i].emoji, isAI: true, gender: 'm' });
     }
 
-    game = new Game(spec, { auctions: chosenAuctions, pot: chosenPot, difficulty: chosenDifficulty, finance: chosenFinance });
+    game = new Game(spec, {
+      auctions: chosenAuctions, pot: chosenPot, difficulty: chosenDifficulty,
+      finance: chosenFinance,
+      manualPay: chosenPayMode !== 'off',
+      payMath: chosenPayMode === 'math',
+    });
     aiRoundStartSeq = null;
     summaryPending = false;
     reportShown = 0;
@@ -297,6 +331,10 @@
   function currentActor() {
     if (game.phase === 'auction') return game.auctionTurn();
     if (game.phase === 'debt') return game.debt.debtor;
+    // בהעברה ובגבייה השחקן שפועל הוא לא בהכרח בעל התור — כך המחשב
+    // לא ממשיך לשחק בזמן שהילד עוד לא לחץ
+    if (game.phase === 'pay' && game.pendingPay) return game.pendingPay.payer;
+    if (game.phase === 'collect' && game.pendingCollect) return game.pendingCollect.payee;
     return game.turn;
   }
 
@@ -340,6 +378,25 @@
       } else if (game.phase === 'buy' && !isAI(game.turn)) {
         UI.showBuyDialog(game, () => { game.buy(); tick(); }, () => { game.declineBuy(); tick(); });
         dialogOpen = true;
+      } else if (game.phase === 'pay' && !isAI(game.pendingPay.payer)) {
+        // הכסף לא זז לבד — השחקן מבצע את ההעברה בעצמו
+        UI.showPayDialog(game, humanIdx, {
+          onConfirm: (typed) => {
+            try { game.confirmPayment(typed); } catch (e) { UI.toast(e.message); }
+            tick();
+          },
+          onWrong: () => { game.players[game.pendingPay.payer].stats.mathWrong += 1; },
+        });
+        dialogOpen = true;
+      } else if (game.phase === 'collect' && !isAI(game.pendingCollect.payee)) {
+        // מישהו נחת על הנכס שלך — הכסף מחכה עד שתגבה אותו בעצמך
+        UI.showCollectDialog(game, {
+          onCollect: () => {
+            try { game.collectMoney(); } catch (e) { UI.toast(e.message); }
+            tick();
+          },
+        });
+        dialogOpen = true;
       } else if (game.phase === 'debt' && !isAI(game.debt.debtor)) {
         showHumanDebt();
         dialogOpen = true;
@@ -352,10 +409,10 @@
         dialogOpen = true;
       } else if (!isAI(game.turn) && game.turn === humanIdx && !summaryPending && !buildOfferDone
                  && (game.phase === 'end' || (game.phase === 'roll' && game.doubles > 0))
-                 && game.canBuildOn(humanIdx, game.players[humanIdx].pos)) {
-        // החייל הגיע לרחוב של השחקן וכל העיר בבעלותו — מציעים לבנות כאן ועכשיו
+                 && buildableHere().length) {
+        // החייל הגיע לעיר של השחקן וכולה בבעלותו — מציעים לבנות כאן ועכשיו
         buildOfferDone = true;
-        showBuildOffer(game.players[humanIdx].pos);
+        showBuildOffer();
         dialogOpen = true;
       }
 
@@ -405,7 +462,7 @@
 
   function updateButtons() {
     const humanTurn = game.turn === humanIdx && !game.players[humanIdx].bankrupt && !summaryPending && !reportPending && !offerPending;
-    const free = !['auction', 'debt', 'gameover'].includes(game.phase);
+    const free = !['auction', 'pay', 'collect', 'debt', 'gameover'].includes(game.phase);
     $('#roll-btn').disabled = !(humanTurn && game.phase === 'roll' && !game.current().inJail);
     $('#end-turn-btn').disabled = !(humanTurn && game.phase === 'end');
     $('#manage-btn').disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));
@@ -430,31 +487,54 @@
     tick();
   }
 
-  // הצעת בנייה כשהחייל מגיע לרחוב של השחקן (וכל העיר בבעלותו)
-  function showBuildOffer(pos) {
-    const sq = D.BOARD[pos];
-    const grp = D.GROUPS[sq.group];
+  // הרחובות שמותר לבנות בהם עכשיו — רק בעיר שהחייל עומד בה
+  function buildableHere() {
+    const here = D.BOARD[game.players[humanIdx].pos];
+    if (!here || here.type !== 'street') return [];
+    return game.buildablePositions(humanIdx).filter((p) => D.BOARD[p].group === here.group);
+  }
+
+  // הצעת בנייה כשהחייל מגיע לעיר של השחקן (וכולה בבעלותו).
+  // חוק הבנייה השווה קובע איפה מותר — לכן מציגים רק את הרחובות שתורם עכשיו.
+  function showBuildOffer() {
+    const options = buildableHere();
+    if (!options.length) { tick(); return; }
+    const grp = D.GROUPS[D.BOARD[options[0]].group];
     const cost = grp.houseCost;
-    const h = game.houses[pos];
-    const next = h === 4 ? 'מלון 🏨' : 'בית 🏠';
-    const now = h === 5 ? 'יש כאן מלון 🏨' : h > 0 ? `יש כאן כבר ${h === 1 ? 'בית אחד' : h + ' בתים'}` : '';
+    const gp = game.groupPositions(D.BOARD[options[0]].group);
+    const stateOf = (p) => {
+      const h = game.houses[p];
+      return h === 5 ? '🏨' : h > 0 ? '🏠'.repeat(h) : '—';
+    };
+    // תמונת מצב של כל העיר, כדי שיהיה ברור למה בונים דווקא כאן
+    const cityRows = gp.map((p) => `
+      <div class="asset-row">
+        <span class="a-band" style="background:${grp.color}"></span>
+        <span class="a-name">${D.BOARD[p].name} ${stateOf(p)}</span>
+        ${options.includes(p)
+          ? `<button data-build="${p}">${game.houses[p] === 4 ? '🏨 מלון' : '🏠 בית'} ‎-${cost.toLocaleString('he-IL')} ₪</button>`
+          : '<span class="a-note">לא תורו</span>'}
+      </div>`).join('');
     const d = UI.openDialog(`
-      <h2>הגעת לרחוב שלך! 🏗️</h2>
-      <p class="d-sub">כל העיר <b>${grp.name}</b> בבעלותך — אפשר לבנות ב"${sq.name}"!</p>
-      <div class="price-tag">🏗️ ${next} — המחיר: <b>${cost.toLocaleString('he-IL')} ₪</b></div>
-      <p class="d-sub">${now ? now + ' · ' : ''}בחשבון שלך: <b>${game.players[humanIdx].money.toLocaleString('he-IL')} ₪</b></p>
+      <h2>הגעת לעיר שלך! 🏗️</h2>
+      <p class="d-sub">כל העיר <b>${grp.name}</b> בבעלותך — אפשר לבנות בה!</p>
+      <p class="d-sub">בונים <b>בבתים שווים</b>: קודם בית אחד בכל רחוב, ורק אז השני.</p>
+      <div class="asset-list">${cityRows}</div>
+      <p class="d-sub">בחשבון שלך: <b>${game.players[humanIdx].money.toLocaleString('he-IL')} ₪</b></p>
       <div class="d-actions">
-        <button class="big-btn green" id="d-build">🏠 בונים!</button>
         <button class="big-btn" id="d-nobuild">לא עכשיו</button>
       </div>`);
-    UI.speak('הִגַּעְתָּ לִרְחוֹב שֶׁלְּךָ! רוֹצִים לִבְנוֹת?', { raw: true });
-    d.querySelector('#d-build').onclick = () => {
-      UI.closeDialog();
-      try { game.buildHouse(pos); } catch (e) { UI.toast(e.message); }
-      // אפשר להמשיך לבנות באותו רחוב? מציעים שוב (עד מלון או עד שנגמר הכסף)
-      if (game.canBuildOn(humanIdx, pos)) showBuildOffer(pos);
-      tick();
-    };
+    UI.speak('הִגַּעְתָּ לָעִיר שֶׁלְּךָ! רוֹצִים לִבְנוֹת?', { raw: true });
+    d.querySelectorAll('[data-build]').forEach((btn) => {
+      btn.onclick = () => {
+        const pos = Number(btn.dataset.build);
+        UI.closeDialog();
+        try { game.buildHouse(pos); } catch (e) { UI.toast(e.message); }
+        // נשאר עוד מה לבנות בעיר הזאת? מציעים שוב
+        if (buildableHere().length) showBuildOffer();
+        tick();
+      };
+    });
     d.querySelector('#d-nobuild').onclick = () => { UI.closeDialog(); tick(); };
   }
 
@@ -674,6 +754,8 @@
   async function aiStep() {
     if (!game) return;
     if (game.phase === 'gameover') { tick(); return; }
+    // העברה או גבייה פתוחה — הכול ממתין לשחקן, המחשב לא נוגע
+    if (game.phase === 'pay' || game.phase === 'collect') { tick(); return; }
     const idx = currentActor();
     if (!isAI(idx)) { tick(); return; }
     const g = game;
