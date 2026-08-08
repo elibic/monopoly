@@ -6,6 +6,7 @@ on:
       - main
       - claude/monopoly-hebrew-dhr54d
       - claude/monopoly-financial-education-scrm25
+      - claude/bug-report-gameplay-a8rd1k
   workflow_dispatch:
 
 permissions:
