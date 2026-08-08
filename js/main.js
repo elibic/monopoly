@@ -183,13 +183,21 @@
     UI.showWhatsNewIfUpdated(); // בפעם הראשונה אחרי עדכון — מראים מה השתנה
     const remoteBtn = $('#remote-btn');
     if (remoteBtn && globalThis.MonopolyRemote) remoteBtn.onclick = () => globalThis.MonopolyRemote.open();
+    // דיווח באג — גם ממסך הפתיחה וגם מתוך המשחק
+    if (globalThis.MonopolyBug) {
+      globalThis.MonopolyBug.attach(() => game);
+      for (const id of ['#bug-setup-btn', '#bug-btn']) {
+        const b = $(id);
+        if (b) b.onclick = () => globalThis.MonopolyBug.open();
+      }
+    }
     if ('speechSynthesis' in window) speechSynthesis.getVoices(); // טעינה מוקדמת של קולות
   }
 
   // הורדת המשחק — שתי אפשרויות: לשחק אופליין, או פרויקט מלא למתכנת.
   // חשוב: DEV_BRANCH חייב להצביע על ענף הפיתוח הנוכחי, אחרת ההורדה
   // נותנת גרסה ישנה בלי העדכונים והתיקונים האחרונים.
-  const DEV_BRANCH = 'claude/monopoly-financial-education-scrm25';
+  const DEV_BRANCH = 'claude/bug-report-gameplay-a8rd1k';
   function showDownloadDialog() {
     const repo = 'https://github.com/elibic/monopoly';
     const playZip = `${repo}/archive/refs/heads/gh-pages.zip`;   // המשחק הרץ (שטוח, מתעדכן בכל פרסום)
