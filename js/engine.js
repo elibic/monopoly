@@ -23,6 +23,21 @@
     crashSurvived: false,
   });
 
+  // מונים לסיכום שבסוף המשחק: מה הילד באמת עשה לאורך המשחק
+  const emptyStats = () => ({
+    transfers: 0,       // כמה העברות ביצע בעצמו
+    paid: 0,            // כמה שילם בסך הכול
+    biggestPay: 0,      // התשלום הגדול ביותר
+    collections: 0,     // כמה פעמים גבה כסף
+    collected: 0,       // כמה גבה בסך הכול
+    biggestCollect: 0,  // הגבייה הגדולה ביותר
+    housesBuilt: 0,     // בתים שנבנו
+    hotelsBuilt: 0,     // מלונות שנבנו
+    bought: 0,          // נכסים שנקנו
+    salary: 0,          // משכורות מ"דרך צלחה"
+    mathWrong: 0,       // כמה פעמים הסכום שהוקלד לא היה מדויק
+  });
+
   // בנק מונופול: הון משלו, תיק השקעות משלו, והכנסות מדמי ניהול.
   // זה מה שמאפשר להראות לילד "במה הבנק משקיע וכמה הוא מרוויח".
   const emptyBank = () => ({
@@ -85,6 +100,7 @@
         jailCards: [], // {deck:'chance'|'chest', card}
         bankrupt: false,
         invest: emptyInvest(),
+        stats: emptyStats(),
       }));
 
       this.owner = new Array(40).fill(null);     // idx של שחקן או null (בנק)
@@ -102,14 +118,15 @@
       };
 
       this.turn = 0;
-      this.phase = 'roll'; // roll | buy | auction | pay | debt | end | gameover
+      this.phase = 'roll'; // roll | buy | auction | pay | collect | debt | end | gameover
       this.dice = [0, 0];
       this.doubles = 0;
       this.pendingBuy = null;   // pos
       this.auction = null;      // {pos, currentBid, highBidder, active:[idx], ptr}
       this.auctionQueue = [];   // מכירות פומביות שממתינות (פשיטת רגל לבנק)
       this.debt = null;         // {debtor, creditor|null, amount, reason}
-      this.pendingPay = null;   // {payer, creditor|null, amount, reason} — העברה שממתינה לילד
+      this.pendingPay = null;     // {payer, creditor|null, amount, reason} — העברה שממתינה לילד
+      this.pendingCollect = null; // {payee, payer, amount, reason} — כסף שממתין לגבייה
       this.lastDrawnCard = null;
       this.winner = null;
       this.log = [];
@@ -577,6 +594,7 @@
 
     _salary(p) {
       p.money += C.GO_SALARY;
+      p.stats.salary += C.GO_SALARY;
       this._bankPay(C.GO_SALARY, 'salaries');
       this._log(`${p.name} ${v(p, 'עבר ב"דרך צלחה" וקיבל', 'עברה ב"דרך צלחה" וקיבלה')} משכורת ${money(C.GO_SALARY)}!`, 'money');
     }
@@ -662,6 +680,7 @@
       p.money -= sq.price;
       this._toBankOrPot(sq.price);
       this.owner[pos] = p.idx;
+      p.stats.bought += 1;
       this.pendingBuy = null;
       this._log(`${p.name} ${v(p, 'קנה', 'קנתה')} את "${sq.name}" ב-${money(sq.price)}! 🎉`, 'buy');
       this._afterAction();
@@ -947,11 +966,13 @@
       if (this.houses[pos] === 4) {
         this.houses[pos] = 5;
         this.hotelsLeft--;
+        p.stats.hotelsBuilt += 1;
         this.housesLeft += 4; // 4 הבתים חוזרים לבנק
         this._log(`${p.name} ${v(p, 'בנה', 'בנתה')} מלון 🏨 ב"${sq.name}" (${money(cost)}).`, 'build');
       } else {
         this.houses[pos]++;
         this.housesLeft--;
+        p.stats.housesBuilt += 1;
         this._log(`${p.name} ${v(p, 'בנה', 'בנתה')} בית 🏠 ב"${sq.name}" (${money(cost)}). סה"כ ${this.houses[pos]} בתים.`, 'build');
       }
     }
@@ -1080,14 +1101,43 @@
           return;
         }
         p.money -= amount;
-        if (creditorIdx !== null) this.players[creditorIdx].money += amount;
-        else this._toBankOrPot(amount);
+        const d = { onPaid, cont: cont || { kind: 'afterAction' } };
+        if (this._deliver(amount, creditorIdx, reason, d, idx)) return; // ממתינים לגבייה
         if (onPaid) onPaid();
         return;
       }
       this.debt = { debtor: idx, creditor: creditorIdx, amount, reason, onPaid, cont: cont || { kind: 'afterAction' } };
       this.phase = 'debt';
       this._log(`ל${p.name} אין מספיק כסף לשלם ${money(amount)} (${reason}). צריך לגייס כסף!`, 'debt');
+    }
+
+    // הכסף שמגיע לשחקן שיושב מול המסך לא נכנס לבד — הוא גובה אותו בעצמו.
+    // מחזיר true אם נכנסנו לשלב גבייה, ואז ההמשך ימתין ל-collectMoney.
+    _deliver(amount, creditorIdx, reason, d, payerIdx) {
+      if (creditorIdx === null) { this._toBankOrPot(amount); return false; }
+      const c = this.players[creditorIdx];
+      if (this.manualPay && !c.isAI && !c.bankrupt && amount > 0) {
+        this.pendingCollect = { payee: creditorIdx, payer: payerIdx, amount, reason, onPaid: d.onPaid, cont: d.cont };
+        this.phase = 'collect';
+        this._log(`💰 מגיע ל${c.name} ${money(amount)} — ${reason}. צריך לגבות!`, 'collect');
+        return true;
+      }
+      c.money += amount;
+      return false;
+    }
+
+    // הגבייה שהילד מבצע: רק עכשיו הכסף נכנס לחשבון שלו
+    collectMoney() {
+      if (this.phase !== 'collect' || !this.pendingCollect) throw new Error('אין כסף שממתין לגבייה');
+      const c = this.pendingCollect;
+      const p = this.players[c.payee];
+      p.money += c.amount;
+      p.stats.collected += c.amount;
+      p.stats.collections += 1;
+      if (c.amount > p.stats.biggestCollect) p.stats.biggestCollect = c.amount;
+      this.pendingCollect = null;
+      this._log(`✅ ${p.name} ${v(p, 'גבה', 'גבתה')} ${money(c.amount)}!`, 'money');
+      this._resumeAfterPayment(c, c.payer);
     }
 
     // המשך הריצה אחרי שתשלום הושלם — משותף להעברה ידנית ולסגירת חוב
@@ -1117,11 +1167,13 @@
         return;
       }
       p.money -= d.amount;
-      if (d.creditor !== null) this.players[d.creditor].money += d.amount;
-      else this._toBankOrPot(d.amount);
+      p.stats.paid += d.amount;
+      p.stats.transfers += 1;
+      if (d.amount > p.stats.biggestPay) p.stats.biggestPay = d.amount;
       this.pendingPay = null;
       const to = d.creditor !== null ? this.players[d.creditor].name : 'הבנק';
       this._log(`✅ ${p.name} ${v(p, 'העביר', 'העבירה')} ${money(d.amount)} ל${to}.`, 'money');
+      if (this._deliver(d.amount, d.creditor, d.reason, d, d.payer)) return; // ממתינים לגבייה
       this._resumeAfterPayment(d, d.payer);
     }
 
@@ -1131,10 +1183,10 @@
       const p = this.players[d.debtor];
       if (p.money < d.amount) throw new Error('עדיין אין מספיק כסף');
       p.money -= d.amount;
-      if (d.creditor !== null) this.players[d.creditor].money += d.amount;
-      else this._toBankOrPot(d.amount);
+      p.stats.paid += d.amount;
       this.debt = null;
       this._log(`${p.name} ${v(p, 'שילם', 'שילמה')} את החוב (${money(d.amount)}).`, 'money');
+      if (this._deliver(d.amount, d.creditor, d.reason, d, d.debtor)) return; // ממתינים לגבייה
       this._resumeAfterPayment(d, d.debtor);
     }
 
@@ -1266,6 +1318,9 @@
         pendingPay: this.pendingPay
           ? { payer: this.pendingPay.payer, creditor: this.pendingPay.creditor, amount: this.pendingPay.amount, reason: this.pendingPay.reason, cont: this.pendingPay.cont }
           : null,
+        pendingCollect: this.pendingCollect
+          ? { payee: this.pendingCollect.payee, payer: this.pendingCollect.payer, amount: this.pendingCollect.amount, reason: this.pendingCollect.reason, cont: this.pendingCollect.cont }
+          : null,
         log: this.log.slice(-120),
         logSeq: this._logSeq,
       };
@@ -1284,6 +1339,7 @@
       // שמירות ישנות (מלפני מצב החינוך הפיננסי) נטענות עם ברירות מחדל ריקות
       g.players = data.players.map((p) => ({
         ...p,
+        stats: { ...emptyStats(), ...(p.stats || {}) }, // שמירות ישנות מתחילות מאפס
         jailCards: (p.jailCards || []).map((h) => ({ deck: h.deck, card: cardById(h.deck, h.id) })),
         invest: p.invest ? {
           ...emptyInvest(),
@@ -1318,6 +1374,7 @@
       g.winner = data.winner;
       g.debt = data.debt ? { ...data.debt, onPaid: null } : null;
       g.pendingPay = data.pendingPay ? { ...data.pendingPay, onPaid: null } : null;
+      g.pendingCollect = data.pendingCollect ? { ...data.pendingCollect, onPaid: null } : null;
       g.log = data.log || [];
       g._logSeq = data.logSeq || 0;
       return g;

@@ -1034,6 +1034,9 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   padding: 12px 16px;
   margin: 12px 0;
 }
+/* גבייה — אותו כרטיס בירוק, כדי שכסף שנכנס ייראה אחרת מכסף שיוצא */
+.pay-card.collect { background: linear-gradient(135deg, #E9F8EE, #CFF0DB); border-color: #1F9D55; }
+.pay-card.collect .pay-amount { color: #17663A; }
 .pay-to { display: flex; align-items: center; gap: 10px; font-size: 15px; text-align: right; line-height: 1.35; }
 .pay-token { font-size: 30px; }
 .pay-amount { font-family: var(--font-title); font-size: 30px; color: #B3541E; white-space: nowrap; }

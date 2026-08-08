@@ -1118,15 +1118,78 @@ test('העברה ידנית: מס הכנסה מגיע לקופה רק אחרי �
   assert.equal(g.pot, 200);
 });
 
-test('העברה ידנית: הבוט משלם אוטומטית ולא נתקע', () => {
+test('העברה ידנית: הבוט משלם מיד, והשחקן גובה בעצמו', () => {
   const g = manualGame({ diceQueue: [[1, 2]] });
   g.owner[3] = 0; // חוף אלמוג שייך לשחקן האנושי
   g.turn = 1;     // תור הבוט
   g.rollDice();   // הבוט נוחת על הרחוב של השחקן
-  assert.equal(g.phase, 'end', 'הבוט לא נעצר בשלב העברה');
-  assert.equal(g.pendingPay, null);
+  assert.equal(g.pendingPay, null, 'הבוט לא נעצר בשלב העברה');
   assert.equal(g.players[1].money, 1500 - 4, 'הבוט שילם מיד');
-  assert.equal(g.players[0].money, 1500 + 4, 'והשחקן קיבל מיד');
+  assert.equal(g.phase, 'collect', 'הכסף ממתין לגבייה');
+  assert.equal(g.players[0].money, 1500, 'ועדיין לא נכנס לחשבון');
+  assert.equal(g.pendingCollect.amount, 4);
+  assert.equal(g.pendingCollect.payee, 0);
+  g.collectMoney();
+  assert.equal(g.players[0].money, 1504);
+  assert.equal(g.pendingCollect, null);
+  assert.equal(g.phase, 'end');
+});
+
+test('גבייה: המונים והיומן מתעדכנים', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  g.owner[3] = 0;
+  g.turn = 1;
+  g.rollDice();
+  g.collectMoney();
+  assert.equal(g.players[0].stats.collections, 1);
+  assert.equal(g.players[0].stats.collected, 4);
+  assert.equal(g.players[0].stats.biggestCollect, 4);
+});
+
+test('גבייה: אין גבייה בלי כסף שממתין', () => {
+  const g = manualGame();
+  assert.throws(() => g.collectMoney(), /אין כסף שממתין/);
+});
+
+test('גבייה: בלי המצב הידני הכסף נכנס מיד', () => {
+  const g = twoPlayers({ diceQueue: [[1, 2]] });
+  g.owner[3] = 0;
+  g.turn = 1;
+  g.rollDice();
+  assert.equal(g.phase, 'end');
+  assert.equal(g.pendingCollect, null);
+  assert.equal(g.players[0].money, 1504);
+});
+
+test('גבייה: המצב נשמר ונטען עם הגבייה הפתוחה', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  g.owner[3] = 0;
+  g.turn = 1;
+  g.rollDice();
+  assert.equal(g.phase, 'collect');
+  const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.phase, 'collect');
+  assert.equal(r.pendingCollect.amount, 4);
+  r.collectMoney();
+  assert.equal(r.players[0].money, 1504);
+  assert.equal(r.phase, 'end');
+});
+
+test('גבייה: שחקן משלם לשחקן — קודם העברה ואז גבייה', () => {
+  const g = new Game(
+    [{ name: 'א' }, { name: 'ב' }], // שני בני אדם, כמו במשחק מרחוק
+    { diceQueue: [[1, 2]], manualPay: true },
+  );
+  g.owner[3] = 1; // הנכס של השחקן השני
+  g.rollDice();
+  assert.equal(g.phase, 'pay', 'הראשון מעביר');
+  g.confirmPayment(4);
+  assert.equal(g.players[0].money, 1496, 'ירד מהמשלם');
+  assert.equal(g.phase, 'collect', 'ועכשיו השני גובה');
+  assert.equal(g.players[1].money, 1500, 'עוד לא נכנס');
+  g.collectMoney();
+  assert.equal(g.players[1].money, 1504);
+  assert.equal(g.phase, 'end');
 });
 
 test('העברה ידנית: בלי מספיק כסף נכנסים לחוב כרגיל', () => {

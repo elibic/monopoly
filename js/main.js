@@ -325,6 +325,10 @@
   function currentActor() {
     if (game.phase === 'auction') return game.auctionTurn();
     if (game.phase === 'debt') return game.debt.debtor;
+    // בהעברה ובגבייה השחקן שפועל הוא לא בהכרח בעל התור — כך המחשב
+    // לא ממשיך לשחק בזמן שהילד עוד לא לחץ
+    if (game.phase === 'pay' && game.pendingPay) return game.pendingPay.payer;
+    if (game.phase === 'collect' && game.pendingCollect) return game.pendingCollect.payee;
     return game.turn;
   }
 
@@ -373,6 +377,15 @@
         UI.showPayDialog(game, humanIdx, {
           onConfirm: (typed) => {
             try { game.confirmPayment(typed); } catch (e) { UI.toast(e.message); }
+            tick();
+          },
+        });
+        dialogOpen = true;
+      } else if (game.phase === 'collect' && !isAI(game.pendingCollect.payee)) {
+        // מישהו נחת על הנכס שלך — הכסף מחכה עד שתגבה אותו בעצמך
+        UI.showCollectDialog(game, {
+          onCollect: () => {
+            try { game.collectMoney(); } catch (e) { UI.toast(e.message); }
             tick();
           },
         });
@@ -442,7 +455,7 @@
 
   function updateButtons() {
     const humanTurn = game.turn === humanIdx && !game.players[humanIdx].bankrupt && !summaryPending && !reportPending && !offerPending;
-    const free = !['auction', 'pay', 'debt', 'gameover'].includes(game.phase);
+    const free = !['auction', 'pay', 'collect', 'debt', 'gameover'].includes(game.phase);
     $('#roll-btn').disabled = !(humanTurn && game.phase === 'roll' && !game.current().inJail);
     $('#end-turn-btn').disabled = !(humanTurn && game.phase === 'end');
     $('#manage-btn').disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));
@@ -734,6 +747,8 @@
   async function aiStep() {
     if (!game) return;
     if (game.phase === 'gameover') { tick(); return; }
+    // העברה או גבייה פתוחה — הכול ממתין לשחקן, המחשב לא נוגע
+    if (game.phase === 'pay' || game.phase === 'collect') { tick(); return; }
     const idx = currentActor();
     if (!isAI(idx)) { tick(); return; }
     const g = game;

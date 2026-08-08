@@ -612,7 +612,8 @@
     switch (entry.kind) {
       case 'rent':
         if (isMe) return manual ? null : { title: 'שכר דירה! 💸', amount, mode: 'pay' };
-        if (t.includes(`ל${human.name}`)) return { title: 'קיבלת שכר דירה! 🤑', amount, mode: 'receive' };
+        // גם הכניסה עוברת בחלונית הגבייה — בלי אישור כפול
+        if (t.includes(`ל${human.name}`)) return manual ? null : { title: 'קיבלת שכר דירה! 🤑', amount, mode: 'receive' };
         return null;
       case 'tax':
         if (isMe) return manual ? null : { title: 'מס לבנק 🧾', amount, mode: 'pay' };
@@ -1274,6 +1275,30 @@
     setTimeout(() => { if (document.body.contains(help)) help.hidden = false; }, 30000);
     setTimeout(() => input.focus(), 50);
     speak(`צָרִיךְ לְהַעֲבִיר ${d0.amount} שֶׁקֶל`, { raw: true });
+  }
+
+  /* ---------- גבייה: הכסף לא נכנס לבד, גובים אותו ---------- */
+
+  // מישהו נחת על הנכס שלך. הכסף יצא מהכיס שלו — אבל נכנס אליך רק
+  // כשאתה גובה. זה הרגע שבו ילד מבין למה שווה להחזיק נכסים.
+  function showCollectDialog(g, { onCollect }) {
+    const c = g.pendingCollect;
+    const me = g.players[c.payee];
+    const from = g.players[c.payer];
+    const d = openDialog(`
+      <h2>יש לך כסף לגבות! 💰</h2>
+      <p class="d-sub">${esc(c.reason)}</p>
+      <div class="pay-card collect">
+        <div class="pay-to"><span class="pay-token">${from ? from.token : '🏦'}</span>
+          <span>${from ? esc(from.name) : 'הבנק'} משלם/ת לך</span></div>
+        <div class="pay-amount">${money(c.amount)}</div>
+      </div>
+      <p class="d-sub">בחשבון שלך: <b>${money(me.money)}</b> ← אחרי הגבייה: <b>${money(me.money + c.amount)}</b></p>
+      <div class="d-actions">
+        <button class="big-btn green" id="collect-go">🤑 גובים!</button>
+      </div>`);
+    d.querySelector('#collect-go').onclick = () => { closeDialog(); sounds.coin(); onCollect(); };
+    speak('יֵשׁ לְךָ כֶּסֶף לִגְבּוֹת!', { raw: true });
   }
 
   function showDebtDialog(g, humanIdx, { onAction, onSettle, onBankrupt }) {
@@ -2435,7 +2460,7 @@
 
   globalThis.MonopolyUI = {
     buildBoard, render, animateDice, openDialog, closeDialog,
-    showBuyDialog, renderAuction, showJailDialog, showDebtDialog, showPayDialog,
+    showBuyDialog, renderAuction, showJailDialog, showDebtDialog, showPayDialog, showCollectDialog,
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
     primeFromRestore, announce, SVG, narrator, showTurnSummary,
