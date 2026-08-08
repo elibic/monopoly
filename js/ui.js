@@ -2185,6 +2185,48 @@
     d.querySelector('#al-close').onclick = () => closeDialog();
   }
 
+  /* ---------- סיכום המשחק: מה הילד באמת עשה ---------- */
+
+  // לא רק "מי ניצח" — כמה העברות ביצע, כמה גבה, מה הייתה העסקה
+  // הגדולה שלו. אלה המספרים שהופכים משחק לשיעור.
+  function statsHTML(g, idx) {
+    const s = g.players[idx].stats;
+    if (!s) return '';
+    const items = [];
+    if (s.transfers) items.push({ e: '💳', n: s.transfers, l: s.transfers === 1 ? 'העברה שביצעת' : 'העברות שביצעת' });
+    if (s.paid) items.push({ e: '💸', n: money(s.paid), l: 'שילמת בסך הכול' });
+    if (s.biggestPay) items.push({ e: '😬', n: money(s.biggestPay), l: 'התשלום הכי גדול' });
+    if (s.collections) items.push({ e: '🤑', n: s.collections, l: s.collections === 1 ? 'פעם גבית כסף' : 'פעמים גבית כסף' });
+    if (s.collected) items.push({ e: '💰', n: money(s.collected), l: 'גבית בסך הכול' });
+    if (s.biggestCollect) items.push({ e: '🎯', n: money(s.biggestCollect), l: 'הגבייה הכי גדולה' });
+    if (s.salary) items.push({ e: '🚀', n: money(s.salary), l: 'משכורות מ"דרך צלחה"' });
+    if (s.bought) items.push({ e: '🏷️', n: s.bought, l: s.bought === 1 ? 'נכס שקנית' : 'נכסים שקנית' });
+    if (s.housesBuilt) items.push({ e: '🏠', n: s.housesBuilt, l: s.housesBuilt === 1 ? 'בית שבנית' : 'בתים שבנית' });
+    if (s.hotelsBuilt) items.push({ e: '🏨', n: s.hotelsBuilt, l: s.hotelsBuilt === 1 ? 'מלון שבנית' : 'מלונות שבנית' });
+    if (!items.length) return '';
+
+    // שורת סיכום אחת בשפה של ילד: יצא לך יותר או נכנס לך יותר?
+    const net = s.collected + s.salary - s.paid;
+    const verdict = s.collected + s.paid === 0 ? ''
+      : net > 0 ? `📈 נכנס לך יותר ממה שיצא — ${money(net)} ביתרה חיובית. יפה!`
+      : net < 0 ? `📉 יצא לך יותר ממה שנכנס — ${money(-net)}. בפעם הבאה כדאי לקנות עוד רחובות!`
+      : '⚖️ נכנס בדיוק כמו שיצא!';
+
+    const mathNote = g.payMath && s.transfers
+      ? (s.mathWrong === 0
+          ? '<div class="win-math ok">🧮 כל תרגילי החשבון יצאו נכון בפעם הראשונה — מדהים!</div>'
+          : `<div class="win-math">🧮 ${s.mathWrong} ${s.mathWrong === 1 ? 'פעם' : 'פעמים'} התרגיל לא יצא בפעם הראשונה — וזה בסדר גמור, ככה לומדים.</div>`)
+      : '';
+
+    return `<div class="win-stats-title">מה עשית במשחק הזה 📊</div>
+      <div class="win-stats">${items.map((it) => `
+        <div class="win-stat"><span class="ws-emoji">${it.e}</span>
+          <span class="ws-num">${it.n}</span>
+          <span class="ws-label">${it.l}</span></div>`).join('')}</div>
+      ${verdict ? `<div class="win-verdict">${verdict}</div>` : ''}
+      ${mathNote}`;
+  }
+
   function showWin(g, onRestart, extra = {}) {
     const w = g.players[g.winner];
     const isF = w.gender === 'f';
@@ -2228,6 +2270,7 @@
       <h2>${title}</h2>
       <div class="win-standings">${rows}</div>
       ${g.financeEnabled ? `<div class="win-finance">📈 ההשקעות שלך: הפקדת ${money(g.players[humanIdx].invest.totalIn)} · ${g.investProfit(humanIdx) >= 0 ? 'הרווחת' : 'הפסדת'} ${deltaHTML(g.investProfit(humanIdx))}</div>` : ''}
+      ${statsHTML(g, humanIdx)}
       ${wealthChart(g, extra.history)}
       <div class="win-stickers-title">המדבקות שהרווחת 🏅</div>
       <div class="sticker-strip">${stickerHTML}</div>
@@ -2254,10 +2297,13 @@
   const VERSIONS = [
     {
       id: 'v19', label: 'גרסה 19', date: 'אוגוסט 2026', current: true,
-      title: 'אתם מעבירים את הכסף 💳',
+      title: 'אתם הבנקאים! 💳',
       items: [
         '💳 הכסף כבר לא זז לבד! בכל תשלום נפתחת חלונית העברה — רואים למי, כמה ולמה, מקלידים את הסכום ומעבירים',
-        '🧮 הקלדת הסכום היא תרגיל חשבון אמיתי: המשחק אומר "צריך יותר" או "יותר מדי" עד שמדייקים, ויש כפתור עזרה למי שנתקע',
+        '🧮 תרגיל חשבון אמיתי: היתרה מוסתרת עד שלוחצים "לבדוק כמה יש לי", ואחרי הסכום שואלים גם כמה יישאר. יש עזרה למי שנתקע',
+        '🤑 גבייה יזומה: בוט שנחת על הרחוב שלכם משלם — אבל הכסף נכנס רק כשלוחצים "גובים!"',
+        '🤔 נגמר הכסף? החלונית מראה כל דרך לגייס כסף עם המחיר האמיתי שלה, ממוינת מהזול ליקר, עם סימון "הכי משתלם"',
+        '📊 בסוף המשחק — סיכום אישי: כמה העברות ביצעתם, כמה גביתם, מה היה התשלום הכי גדול וכמה בניתם',
         '🏠 תוקן באג: אי אפשר יותר להעמיד מלון ברחוב אחד בזמן שרחוב אחר באותה עיר ריק — בונים בבתים שווים, כמו בחוקים',
         '🏗️ הגעתם לעיר שכולה שלכם? אפשר לבנות בכל רחוב בה שתורו הגיע, והחלונית מראה את מצב כל העיר',
         '🐞 כפתור דיווח באג חדש: אוסף לבד צילום מסך, את יומן המשחק ואת כל מה שקרה — ושולח בקובץ אחד',
