@@ -77,6 +77,9 @@
   const DIFF_KEY = 'monopoly-hebrew-difficulty';
   let chosenDifficulty = 'easy'; // ברירת מחדל ידידותית לילדים
   try { chosenDifficulty = localStorage.getItem(DIFF_KEY) || 'easy'; } catch (e) { /* */ }
+  const MP_KEY = 'monopoly-hebrew-manualpay';
+  let chosenManualPay = true; // ברירת מחדל: הילד מעביר את הכסף בעצמו
+  try { chosenManualPay = localStorage.getItem(MP_KEY) !== 'off'; } catch (e) { /* */ }
 
   function initSetup() {
     // הקמע בפתיחה ובמרכז הלוח
@@ -172,6 +175,20 @@
       };
     });
 
+    // בורר העברות ידניות
+    const mpPicker = $('#manualpay-picker');
+    if (mpPicker) {
+      mpPicker.querySelectorAll('.opt-btn').forEach((b) => {
+        b.classList.toggle('selected', (b.dataset.mp === 'on') === chosenManualPay);
+        b.onclick = () => {
+          mpPicker.querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
+          b.classList.add('selected');
+          chosenManualPay = b.dataset.mp === 'on';
+          try { localStorage.setItem(MP_KEY, chosenManualPay ? 'on' : 'off'); } catch (e) { /* */ }
+        };
+      });
+    }
+
     $('#start-btn').onclick = startGame;
     $('#download-btn').onclick = showDownloadDialog;
     const albumBtn = $('#album-btn');
@@ -235,7 +252,10 @@
       spec.push({ name: AI_NAMES[i], token: aiTokens[i].emoji, isAI: true, gender: 'm' });
     }
 
-    game = new Game(spec, { auctions: chosenAuctions, pot: chosenPot, difficulty: chosenDifficulty, finance: chosenFinance });
+    game = new Game(spec, {
+      auctions: chosenAuctions, pot: chosenPot, difficulty: chosenDifficulty,
+      finance: chosenFinance, manualPay: chosenManualPay,
+    });
     aiRoundStartSeq = null;
     summaryPending = false;
     reportShown = 0;
@@ -348,6 +368,15 @@
       } else if (game.phase === 'buy' && !isAI(game.turn)) {
         UI.showBuyDialog(game, () => { game.buy(); tick(); }, () => { game.declineBuy(); tick(); });
         dialogOpen = true;
+      } else if (game.phase === 'pay' && !isAI(game.pendingPay.payer)) {
+        // הכסף לא זז לבד — השחקן מבצע את ההעברה בעצמו
+        UI.showPayDialog(game, humanIdx, {
+          onConfirm: (typed) => {
+            try { game.confirmPayment(typed); } catch (e) { UI.toast(e.message); }
+            tick();
+          },
+        });
+        dialogOpen = true;
       } else if (game.phase === 'debt' && !isAI(game.debt.debtor)) {
         showHumanDebt();
         dialogOpen = true;
@@ -413,7 +442,7 @@
 
   function updateButtons() {
     const humanTurn = game.turn === humanIdx && !game.players[humanIdx].bankrupt && !summaryPending && !reportPending && !offerPending;
-    const free = !['auction', 'debt', 'gameover'].includes(game.phase);
+    const free = !['auction', 'pay', 'debt', 'gameover'].includes(game.phase);
     $('#roll-btn').disabled = !(humanTurn && game.phase === 'roll' && !game.current().inJail);
     $('#end-turn-btn').disabled = !(humanTurn && game.phase === 'end');
     $('#manage-btn').disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));

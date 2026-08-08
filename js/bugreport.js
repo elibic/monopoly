@@ -463,7 +463,8 @@ ${players}
     open: start,
     // main.js מחבר את המשחק כאן, כדי שהדוח יכלול מצב ויומן
     attach(fn) { getGame = fn; },
-    // חשיפה לבדיקות
-    _state: () => ({ errors, consoleLines, clicks }),
+    // חשיפה לבדיקות ולניפוי שגיאות מהקונסול
+    game: () => (typeof getGame === 'function' ? getGame() : null),
+    snapshot: () => ({ game: gameSnapshot(), env: envInfo(), errors, consoleLines, clicks }),
   };
 })();

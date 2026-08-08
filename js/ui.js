@@ -16,6 +16,9 @@
   const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const money = (n) => `${n.toLocaleString('he-IL')} ₪`;
+  // שם השחקן מגיע מהקלדה חופשית — מנטרלים תווי HTML לפני שמציגים אותו
+  const esc = (s) => String(s === undefined || s === null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const PLAYER_COLORS = ['#E0393E', '#3D8FD1', '#2FA671', '#8E44AD', '#E67E22', '#16A085'];
   let uiGame = null; // הפניה למשחק הנוכחי — לשליפת שטר קניין בלחיצה על משבצת
 
@@ -602,13 +605,17 @@
       .sort((a, b) => t.indexOf(a.name) - t.indexOf(b.name))[0];
     const isMe = actor && actor.idx === human.idx;
 
+    // במצב העברות ידניות התשלום נעשה בחלונית ההעברה האמיתית, שבה
+    // הילד מקליד את הסכום. אישור "שלם" נוסף כאן רק היה דורס אותה.
+    const manual = !!g.manualPay;
+
     switch (entry.kind) {
       case 'rent':
-        if (isMe) return { title: 'שכר דירה! 💸', amount, mode: 'pay' };
+        if (isMe) return manual ? null : { title: 'שכר דירה! 💸', amount, mode: 'pay' };
         if (t.includes(`ל${human.name}`)) return { title: 'קיבלת שכר דירה! 🤑', amount, mode: 'receive' };
         return null;
       case 'tax':
-        if (isMe) return { title: 'מס לבנק 🧾', amount, mode: 'pay' };
+        if (isMe) return manual ? null : { title: 'מס לבנק 🧾', amount, mode: 'pay' };
         return null;
       case 'money':
         if (isMe && t.includes('משכורת')) return { title: 'משכורת! 💰', amount, mode: 'receive' };
@@ -947,7 +954,8 @@
         // קלף כסף לשחקן האנושי — לוחצים "שלם"/"קבל"
         if (humanCard && cardData) {
           const act = cardData.action;
-          if (act.type === 'pay') await showAckDialog({ title: 'הקלף אומר לשלם 💳', amount: act.amount, mode: 'pay' });
+          // תשלום מקלף עובר בחלונית ההעברה הידנית — בלי אישור כפול
+          if (act.type === 'pay' && !g.manualPay) await showAckDialog({ title: 'הקלף אומר לשלם 💳', amount: act.amount, mode: 'pay' });
           if (act.type === 'receive') await showAckDialog({ title: 'הקלף נותן לך כסף! 🤑', amount: act.amount, mode: 'receive' });
           if (act.type === 'collectFromAll') await showAckDialog({ title: 'כולם משלמים לך! 🥳', amount: act.amount * (g.alive().length - 1), mode: 'receive' });
           if (act.type === 'payToAll') await showAckDialog({ title: 'משלמים לכל המשתתפים 💳', amount: act.amount * (g.alive().length - 1), mode: 'pay' });
@@ -1194,6 +1202,78 @@
     d.querySelector('#d-pay').onclick = () => { closeDialog(); onPay(); };
     const cardBtn = d.querySelector('#d-card');
     if (cardBtn) cardBtn.onclick = () => { closeDialog(); onCard(); };
+  }
+
+  /* ---------- העברה ידנית: הילד מעביר את הכסף בעצמו ---------- */
+
+  // הכסף לא זז לבד. הילד רואה למי, כמה ולמה — ומקליד את הסכום.
+  // אחרי שלושה ניסיונות שגויים נפתחת עזרה, כדי שזה יישאר משחק ולא מבחן.
+  function showPayDialog(g, humanIdx, { onConfirm }) {
+    const d0 = g.pendingPay;
+    const p = g.players[d0.payer]; // המשלם נקבע לפי ההעברה עצמה, לא לפי מי פתח
+    const toName = d0.creditor !== null ? g.players[d0.creditor].name : '🏦 הבנק';
+    const toToken = d0.creditor !== null ? g.players[d0.creditor].token : '🏦';
+    const after = p.money - d0.amount;
+    let wrongTries = 0;
+
+    const d = openDialog(`
+      <h2>העברה מהחשבון שלך 💸</h2>
+      <p class="d-sub">${esc(d0.reason)}</p>
+      <div class="pay-card">
+        <div class="pay-to"><span class="pay-token">${toToken}</span>
+          <span>מעבירים אל<br><b>${esc(toName)}</b></span></div>
+        <div class="pay-amount">${money(d0.amount)}</div>
+      </div>
+      <p class="d-sub">הקלידו את הסכום להעברה:</p>
+      <div class="pay-entry">
+        <input id="pay-input" type="number" inputmode="numeric" min="0" placeholder="כמה?" autocomplete="off">
+        <span class="pay-currency">₪</span>
+      </div>
+      <p class="pay-feedback" id="pay-fb">&nbsp;</p>
+      <p class="d-sub">בחשבון: <b>${money(p.money)}</b> ← אחרי ההעברה: <b>${money(after)}</b></p>
+      <div class="d-actions">
+        <button class="big-btn green" id="pay-go" disabled>💳 מעבירים!</button>
+        <button class="big-btn" id="pay-help" hidden>💡 עזרה</button>
+      </div>`);
+
+    const input = d.querySelector('#pay-input');
+    const go = d.querySelector('#pay-go');
+    const fb = d.querySelector('#pay-fb');
+    const help = d.querySelector('#pay-help');
+
+    const check = () => {
+      const val = input.value.trim();
+      if (val === '') { fb.textContent = ' '; fb.className = 'pay-feedback'; go.disabled = true; return; }
+      const n = Number(val);
+      if (n === d0.amount) {
+        fb.textContent = '✅ בדיוק! אפשר להעביר';
+        fb.className = 'pay-feedback ok';
+        go.disabled = false;
+      } else {
+        fb.textContent = n < d0.amount ? '⬆️ צריך יותר' : '⬇️ זה יותר מדי';
+        fb.className = 'pay-feedback bad';
+        go.disabled = true;
+      }
+    };
+    input.oninput = check;
+    input.onkeydown = (e) => { if (e.key === 'Enter' && !go.disabled) go.click(); };
+
+    go.onclick = () => {
+      const typed = Number(input.value);
+      if (typed !== d0.amount) {
+        wrongTries++;
+        if (wrongTries >= 3) help.hidden = false;
+        return;
+      }
+      closeDialog();
+      onConfirm(typed);
+    };
+    // עזרה אמיתית: ממלאת את הסכום, אבל ההעברה עדיין נעשית בלחיצה של הילד
+    help.onclick = () => { input.value = String(d0.amount); check(); input.focus(); };
+    // מי שמתקשה יראה עזרה גם בלי לנסות — אחרי חצי דקה מול המסך
+    setTimeout(() => { if (document.body.contains(help)) help.hidden = false; }, 30000);
+    setTimeout(() => input.focus(), 50);
+    speak(`צָרִיךְ לְהַעֲבִיר ${d0.amount} שֶׁקֶל`, { raw: true });
   }
 
   function showDebtDialog(g, humanIdx, { onAction, onSettle, onBankrupt }) {
@@ -2044,12 +2124,24 @@
   }
 
 
+
   /* ==================== מה חדש? — יומן גרסאות לשחקנים ==================== */
 
   // חמש הגרסאות האחרונות, מהחדשה לישנה. current = הגרסה שרצה עכשיו.
   const VERSIONS = [
     {
-      id: 'v18', label: 'גרסה 18', date: 'אוגוסט 2026', current: true,
+      id: 'v19', label: 'גרסה 19', date: 'אוגוסט 2026', current: true,
+      title: 'אתם מעבירים את הכסף 💳',
+      items: [
+        '💳 הכסף כבר לא זז לבד! בכל תשלום נפתחת חלונית העברה — רואים למי, כמה ולמה, מקלידים את הסכום ומעבירים',
+        '🧮 הקלדת הסכום היא תרגיל חשבון אמיתי: המשחק אומר "צריך יותר" או "יותר מדי" עד שמדייקים, ויש כפתור עזרה למי שנתקע',
+        '🏠 תוקן באג: אי אפשר יותר להעמיד מלון ברחוב אחד בזמן שרחוב אחר באותה עיר ריק — בונים בבתים שווים, כמו בחוקים',
+        '🏗️ הגעתם לעיר שכולה שלכם? אפשר לבנות בכל רחוב בה שתורו הגיע, והחלונית מראה את מצב כל העיר',
+        '🐞 כפתור דיווח באג חדש: אוסף לבד צילום מסך, את יומן המשחק ואת כל מה שקרה — ושולח בקובץ אחד',
+      ],
+    },
+    {
+      id: 'v18', label: 'גרסה 18', date: 'אוגוסט 2026',
       title: 'מכירה פומבית הוגנת ומעניינת 🔨',
       items: [
         '🔨 מי שוויתר על הקנייה כבר לא מציע ראשון — השחקן הבא פותח, והמוותר מגיב',
@@ -2343,7 +2435,7 @@
 
   globalThis.MonopolyUI = {
     buildBoard, render, animateDice, openDialog, closeDialog,
-    showBuyDialog, renderAuction, showJailDialog, showDebtDialog,
+    showBuyDialog, renderAuction, showJailDialog, showDebtDialog, showPayDialog,
     showManageDialog, showTradeDialog, showAiTradeOffer, showWin,
     toast, speak, vocalize, setSound, isSoundOn, sounds, confettiBurst,
     primeFromRestore, announce, SVG, narrator, showTurnSummary,

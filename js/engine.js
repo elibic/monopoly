@@ -67,6 +67,10 @@
       this.financeEnabled = opts.finance === true; // מצב חינוך פיננסי — כבוי אלא אם בחרו בו
       this.marketQueue = (opts.marketQueue || []).slice(); // עדכוני שוק כפויים לבדיקות
       this.difficulty = opts.difficulty || 'medium'; // easy | medium | hard — רמת הבוט
+      // העברות ידניות: הילד מבצע כל תשלום בעצמו במקום שהבנק יגבה לבד.
+      // ברירת המחדל של המנוע היא החוקים הקלאסיים (גבייה אוטומטית);
+      // המשחק עצמו מדליק את המצב הזה במסך הפתיחה.
+      this.manualPay = opts.manualPay === true;
 
       this.players = playersSpec.map((p, idx) => ({
         idx,
@@ -98,13 +102,14 @@
       };
 
       this.turn = 0;
-      this.phase = 'roll'; // roll | buy | auction | debt | end | gameover
+      this.phase = 'roll'; // roll | buy | auction | pay | debt | end | gameover
       this.dice = [0, 0];
       this.doubles = 0;
       this.pendingBuy = null;   // pos
       this.auction = null;      // {pos, currentBid, highBidder, active:[idx], ptr}
       this.auctionQueue = [];   // מכירות פומביות שממתינות (פשיטת רגל לבנק)
       this.debt = null;         // {debtor, creditor|null, amount, reason}
+      this.pendingPay = null;   // {payer, creditor|null, amount, reason} — העברה שממתינה לילד
       this.lastDrawnCard = null;
       this.winner = null;
       this.log = [];
@@ -1066,6 +1071,14 @@
     _charge(idx, amount, creditorIdx, reason, onPaid, cont) {
       const p = this.players[idx];
       if (p.money >= amount) {
+        // העברה ידנית: הכסף לא זז לבד — הילד מבצע את ההעברה בעצמו.
+        // הבוטים תמיד משלמים אוטומטית, אחרת המשחק היה נתקע.
+        if (this.manualPay && !p.isAI && amount > 0) {
+          this.pendingPay = { payer: idx, creditor: creditorIdx, amount, reason, onPaid, cont: cont || { kind: 'afterAction' } };
+          this.phase = 'pay';
+          this._log(`💳 ${p.name} ${v(p, 'צריך', 'צריכה')} להעביר ${money(amount)} — ${reason}.`, 'pay');
+          return;
+        }
         p.money -= amount;
         if (creditorIdx !== null) this.players[creditorIdx].money += amount;
         else this._toBankOrPot(amount);
@@ -1075,6 +1088,41 @@
       this.debt = { debtor: idx, creditor: creditorIdx, amount, reason, onPaid, cont: cont || { kind: 'afterAction' } };
       this.phase = 'debt';
       this._log(`ל${p.name} אין מספיק כסף לשלם ${money(amount)} (${reason}). צריך לגייס כסף!`, 'debt');
+    }
+
+    // המשך הריצה אחרי שתשלום הושלם — משותף להעברה ידנית ולסגירת חוב
+    _resumeAfterPayment(d, payerIdx) {
+      this.phase = 'end';
+      if (d.onPaid) d.onPaid();
+      else if (d.cont && d.cont.kind === 'jailMove') {
+        this._move(this.players[payerIdx], d.cont.total, { noExtraRoll: true });
+      } else this._afterAction();
+    }
+
+    // ההעברה שהילד מבצע. typed הוא הסכום שהוקלד — חייב להיות מדויק.
+    // בלי typed (למשל בבוט או במשחק מרחוק) מאשרים בלחיצה בלבד.
+    confirmPayment(typed) {
+      if (this.phase !== 'pay' || !this.pendingPay) throw new Error('אין העברה שממתינה');
+      const d = this.pendingPay;
+      if (typed !== undefined && typed !== null && Number(typed) !== d.amount) {
+        throw new Error(`הסכום לא מדויק — צריך להעביר בדיוק ${money(d.amount)}`);
+      }
+      const p = this.players[d.payer];
+      if (p.money < d.amount) {
+        // הגנה: אם משהו שינה את היתרה בינתיים, עוברים למסלול גיוס הכסף
+        this.pendingPay = null;
+        this.debt = { debtor: d.payer, creditor: d.creditor, amount: d.amount, reason: d.reason, onPaid: d.onPaid, cont: d.cont };
+        this.phase = 'debt';
+        this._log(`ל${p.name} אין מספיק כסף לשלם ${money(d.amount)} (${d.reason}). צריך לגייס כסף!`, 'debt');
+        return;
+      }
+      p.money -= d.amount;
+      if (d.creditor !== null) this.players[d.creditor].money += d.amount;
+      else this._toBankOrPot(d.amount);
+      this.pendingPay = null;
+      const to = d.creditor !== null ? this.players[d.creditor].name : 'הבנק';
+      this._log(`✅ ${p.name} ${v(p, 'העביר', 'העבירה')} ${money(d.amount)} ל${to}.`, 'money');
+      this._resumeAfterPayment(d, d.payer);
     }
 
     settleDebt() {
@@ -1087,10 +1135,7 @@
       else this._toBankOrPot(d.amount);
       this.debt = null;
       this._log(`${p.name} ${v(p, 'שילם', 'שילמה')} את החוב (${money(d.amount)}).`, 'money');
-      this.phase = 'end';
-      if (d.onPaid) d.onPaid();
-      else if (d.cont && d.cont.kind === 'jailMove') this._move(p, d.cont.total, { noExtraRoll: true });
-      else this._afterAction();
+      this._resumeAfterPayment(d, d.debtor);
     }
 
     canAffordDebt() {
@@ -1211,6 +1256,10 @@
         debt: this.debt
           ? { debtor: this.debt.debtor, creditor: this.debt.creditor, amount: this.debt.amount, reason: this.debt.reason, cont: this.debt.cont }
           : null,
+        manualPay: this.manualPay,
+        pendingPay: this.pendingPay
+          ? { payer: this.pendingPay.payer, creditor: this.pendingPay.creditor, amount: this.pendingPay.amount, reason: this.pendingPay.reason, cont: this.pendingPay.cont }
+          : null,
         log: this.log.slice(-120),
         logSeq: this._logSeq,
       };
@@ -1224,6 +1273,7 @@
         pot: data.potEnabled !== false,
         finance: data.financeEnabled === true,
         difficulty: data.difficulty || 'medium',
+        manualPay: data.manualPay === true,
       });
       // שמירות ישנות (מלפני מצב החינוך הפיננסי) נטענות עם ברירות מחדל ריקות
       g.players = data.players.map((p) => ({
@@ -1261,6 +1311,7 @@
       g.auctionQueue = data.auctionQueue || [];
       g.winner = data.winner;
       g.debt = data.debt ? { ...data.debt, onPaid: null } : null;
+      g.pendingPay = data.pendingPay ? { ...data.pendingPay, onPaid: null } : null;
       g.log = data.log || [];
       g._logSeq = data.logSeq || 0;
       return g;

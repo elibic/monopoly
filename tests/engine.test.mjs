@@ -1072,3 +1072,113 @@ test('basis: פשיטת רגל מאפסת גם את ההפקדות', () => {
   g.declareBankruptcy();
   assert.equal(g.players[0].invest.basis.savings, 0);
 });
+
+/* ==================== העברות ידניות ==================== */
+
+const manualGame = (opts) => new Game(
+  [{ name: 'דנה', token: '🚗' }, { name: 'מחשב', token: '🐶', isAI: true }],
+  { manualPay: true, ...opts },
+);
+
+test('העברה ידנית: הכסף לא זז עד שהשחקן מעביר אותו', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  g.owner[3] = 1; // חוף אלמוג של היריב, שכ"ד 4
+  g.rollDice();
+  assert.equal(g.phase, 'pay', 'נכנסים לשלב ההעברה');
+  assert.equal(g.players[0].money, 1500, 'הכסף עדיין בחשבון');
+  assert.equal(g.players[1].money, 1500, 'והיריב עוד לא קיבל');
+  assert.equal(g.pendingPay.amount, 4);
+  assert.equal(g.pendingPay.creditor, 1);
+  g.confirmPayment(4);
+  assert.equal(g.players[0].money, 1496);
+  assert.equal(g.players[1].money, 1504);
+  assert.equal(g.phase, 'end');
+  assert.equal(g.pendingPay, null);
+});
+
+test('העברה ידנית: סכום שגוי נדחה והכסף לא זז', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  g.owner[3] = 1;
+  g.rollDice();
+  assert.throws(() => g.confirmPayment(3), /לא מדויק/);
+  assert.throws(() => g.confirmPayment(400), /לא מדויק/);
+  assert.equal(g.players[0].money, 1500);
+  assert.equal(g.phase, 'pay');
+  g.confirmPayment(4); // הסכום הנכון עובר
+  assert.equal(g.players[0].money, 1496);
+});
+
+test('העברה ידנית: מס הכנסה מגיע לקופה רק אחרי אישור', () => {
+  const g = manualGame({ diceQueue: [[1, 3]] }); // משבצת 4 — מס הכנסה 200
+  g.rollDice();
+  assert.equal(g.phase, 'pay');
+  assert.equal(g.pot, 0, 'הקופה עוד ריקה');
+  g.confirmPayment(200);
+  assert.equal(g.players[0].money, 1300);
+  assert.equal(g.pot, 200);
+});
+
+test('העברה ידנית: הבוט משלם אוטומטית ולא נתקע', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  g.owner[3] = 0; // חוף אלמוג שייך לשחקן האנושי
+  g.turn = 1;     // תור הבוט
+  g.rollDice();   // הבוט נוחת על הרחוב של השחקן
+  assert.equal(g.phase, 'end', 'הבוט לא נעצר בשלב העברה');
+  assert.equal(g.pendingPay, null);
+  assert.equal(g.players[1].money, 1500 - 4, 'הבוט שילם מיד');
+  assert.equal(g.players[0].money, 1500 + 4, 'והשחקן קיבל מיד');
+});
+
+test('העברה ידנית: בלי מספיק כסף נכנסים לחוב כרגיל', () => {
+  const g = manualGame({ diceQueue: [[1, 3]] });
+  g.players[0].money = 50;
+  g.rollDice(); // מס הכנסה 200
+  assert.equal(g.phase, 'debt', 'אין העברה ידנית כשאין כסף — קודם מגייסים');
+  assert.equal(g.pendingPay, null);
+});
+
+test('העברה ידנית: אין אישור בלי העברה ממתינה', () => {
+  const g = manualGame();
+  assert.throws(() => g.confirmPayment(100), /אין העברה/);
+});
+
+test('העברה ידנית: קנס כלא כפוי עובר דרך אישור וממשיך לזוז', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  const p = g.players[0];
+  p.inJail = true; p.pos = C.JAIL_POS; p.jailRolls = 2;
+  g.rollDice(); // ניסיון שלישי בלי דאבל — קנס כפוי
+  assert.equal(g.phase, 'pay');
+  assert.equal(g.pendingPay.amount, C.JAIL_FINE);
+  assert.equal(p.pos, C.JAIL_POS, 'לא זז לפני שהעביר את הקנס');
+  g.confirmPayment(C.JAIL_FINE);
+  assert.equal(p.inJail, false);
+  assert.equal(p.money, 1500 - C.JAIL_FINE);
+  assert.equal(p.pos, C.JAIL_POS + 3, 'ממשיך לזוז אחרי ששילם');
+});
+
+test('העברה ידנית: המצב נשמר ונטען עם ההעברה הפתוחה', () => {
+  const g = manualGame({ diceQueue: [[1, 3]] });
+  g.rollDice();
+  assert.equal(g.phase, 'pay');
+  const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.manualPay, true);
+  assert.equal(r.phase, 'pay');
+  assert.equal(r.pendingPay.amount, 200);
+  r.confirmPayment(200);
+  assert.equal(r.players[0].money, 1300);
+  assert.equal(r.phase, 'end');
+});
+
+test('אישור בלי סכום מוקלד מתקבל (משחק מרחוק)', () => {
+  const g = manualGame({ diceQueue: [[1, 3]] });
+  g.rollDice();
+  g.confirmPayment();
+  assert.equal(g.players[0].money, 1300);
+});
+
+test('בלי המצב הידני — הגבייה נשארת אוטומטית', () => {
+  const g = twoPlayers({ diceQueue: [[1, 3]] });
+  g.rollDice();
+  assert.equal(g.phase, 'end');
+  assert.equal(g.players[0].money, 1300);
+});
