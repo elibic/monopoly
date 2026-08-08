@@ -1149,9 +1149,15 @@
       const p = this.players[d.debtor];
       this._log(`${p.name} ${v(p, 'פשט', 'פשטה')} רגל! 💥`, 'bankrupt');
 
-      // מוכרים את כל הבניינים לבנק (חצי מחיר) — הכסף נכנס לקופת החייב
-      for (const pos of this.playerProps(p.idx)) {
-        while (this.houses[pos] > 0) this.sellHouse(pos);
+      // מוכרים את כל הבניינים לבנק (חצי מחיר) — הכסף נכנס לקופת החייב.
+      // תמיד מוכרים קודם את הרחוב עם הכי הרבה בתים: כלל המכירה השווה
+      // חוסם מכירה מרחוב נמוך, ומעבר רחוב-רחוב היה נתקע על עיר כמו 3-2.
+      let guard = 300;
+      while (guard-- > 0) {
+        const built = this.playerProps(p.idx).filter((pos) => this.houses[pos] > 0);
+        if (!built.length) break;
+        built.sort((a, b) => this.houses[b] - this.houses[a]);
+        this.sellHouse(built[0]);
       }
 
       // ההשקעות נפדות בכוח — אסור שיישאר כסף "תקוע" בבנק ההשקעות

@@ -1182,3 +1182,34 @@ test('בלי המצב הידני — הגבייה נשארת אוטומטית', 
   assert.equal(g.phase, 'end');
   assert.equal(g.players[0].money, 1300);
 });
+
+test('פשיטת רגל מפרקת עיר בנויה לא אחיד בלי להיתקע', () => {
+  const g = twoPlayers({ diceQueue: [[1, 3]] }); // מס הכנסה 200
+  g.owner[1] = 0; g.owner[3] = 0;
+  // הרחוב הנמוך מופיע ראשון ב-playerProps — בדיוק המקרה שהיה קורס
+  g.houses[1] = 2; g.houses[3] = 3;
+  g.housesLeft = C.TOTAL_HOUSES - 5;
+  g.players[0].money = 0;
+  g.rollDice();
+  assert.equal(g.phase, 'debt');
+  g.declareBankruptcy();
+  assert.equal(g.players[0].bankrupt, true);
+  assert.equal(g.houses[1], 0);
+  assert.equal(g.houses[3], 0);
+  assert.equal(g.housesLeft, C.TOTAL_HOUSES, 'כל הבתים חזרו למלאי');
+});
+
+test('פשיטת רגל מחזירה גם מלון וגם בתים למלאי', () => {
+  const g = twoPlayers({ diceQueue: [[1, 3]] });
+  g.owner[1] = 0; g.owner[3] = 0;
+  g.houses[1] = 5; g.houses[3] = 4; // מלון מול ארבעה בתים
+  g.hotelsLeft = C.TOTAL_HOTELS - 1;
+  g.housesLeft = C.TOTAL_HOUSES - 4;
+  g.players[0].money = 0;
+  g.rollDice();
+  g.declareBankruptcy();
+  assert.equal(g.houses[1], 0);
+  assert.equal(g.houses[3], 0);
+  assert.equal(g.hotelsLeft, C.TOTAL_HOTELS);
+  assert.equal(g.housesLeft, C.TOTAL_HOUSES);
+});
