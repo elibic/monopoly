@@ -673,17 +673,23 @@
 
     /* ---------- קנייה ומכירה פומבית ---------- */
 
+    // גם קנייה היא תשלום: הכסף עובר דרך אותה חלונית העברה,
+    // והנכס נרשם על שם השחקן רק אחרי שהתשלום בוצע בפועל.
     buy() {
       if (this.phase !== 'buy') throw new Error('אין נכס ממתין לקנייה');
       const pos = this.pendingBuy;
       const sq = this.square(pos);
       const p = this.current();
       if (p.money < sq.price) throw new Error('אין מספיק כסף בחשבון');
-      p.money -= sq.price;
-      this._toBankOrPot(sq.price);
-      this.owner[pos] = p.idx;
-      p.stats.bought += 1;
       this.pendingBuy = null;
+      this._charge(p.idx, sq.price, null, `קניית "${sq.name}"`, null, { kind: 'buy', pos });
+    }
+
+    _completeBuy(idx, pos) {
+      const p = this.players[idx];
+      const sq = this.square(pos);
+      this.owner[pos] = idx;
+      p.stats.bought += 1;
       this._log(`${p.name} ${v(p, 'קנה', 'קנתה')} את "${sq.name}" ב-${money(sq.price)}! 🎉`, 'buy');
       this._afterAction();
     }
@@ -758,14 +764,22 @@
       }
       if (a.active.length === 1 && a.highBidder === a.active[0]) {
         const winner = this.players[a.highBidder];
-        winner.money -= a.currentBid;
-        this._toBankOrPot(a.currentBid);
-        this.owner[a.pos] = winner.idx;
-        this._log(`${winner.name} ${v(winner, 'זכה', 'זכתה')} במכירה! "${this.square(a.pos).name}" ב-${money(a.currentBid)}.`, 'buy');
+        const pos = a.pos, bid = a.currentBid;
         this.auction = null;
-        return this._afterAction();
+        // גם זכייה במכירה משלמים בפועל — הנכס עובר אחרי התשלום
+        this._charge(winner.idx, bid, null, `זכייה במכירה על "${this.square(pos).name}"`, null,
+          { kind: 'auctionWin', pos, bid });
+        return;
       }
       // אם נשאר שחקן יחיד בלי הצעה כלל — הוא יכול להציע מינימום או לפרוש
+    }
+
+    _completeAuctionWin(idx, pos, bid) {
+      const winner = this.players[idx];
+      this.owner[pos] = idx;
+      winner.stats.bought += 1;
+      this._log(`${winner.name} ${v(winner, 'זכה', 'זכתה')} במכירה! "${this.square(pos).name}" ב-${money(bid)}.`, 'buy');
+      this._afterAction();
     }
 
     _startNextQueuedAuction() {
@@ -914,8 +928,12 @@
       const p = this.current();
       if (this.phase !== 'roll' || !p.inJail) throw new Error('לא ניתן לשלם קנס עכשיו');
       if (p.money < C.JAIL_FINE) throw new Error('אין מספיק כסף לקנס');
-      p.money -= C.JAIL_FINE;
-      this._toBankOrPot(C.JAIL_FINE);
+      this._charge(p.idx, C.JAIL_FINE, null, 'קנס יציאה מהכלא', null, { kind: 'jailFine', back: 'roll' });
+    }
+
+    _completeJailFine(idx, back) {
+      const p = this.players[idx];
+      this.phase = back || 'roll'; // אחרי הקנס עדיין מטילים קוביות
       p.inJail = false;
       p.jailRolls = 0;
       this._log(`${p.name} ${v(p, 'שילם קנס', 'שילמה קנס')} ${money(C.JAIL_FINE)} ${v(p, 'ויצא', 'ויצאה')} מהכלא.`, 'jail');
@@ -963,8 +981,15 @@
       if (!this.canBuildOn(p.idx, pos)) throw new Error('בנייה לא חוקית כאן');
       const sq = this.square(pos);
       const cost = GROUPS[sq.group].houseCost;
-      p.money -= cost;
-      this._toBankOrPot(cost);
+      // גם בנייה משלמים בפועל — הבית עולה רק אחרי שהכסף עבר
+      this._charge(p.idx, cost, null, `בנייה ב"${sq.name}"`, null, { kind: 'build', pos, back: this.phase });
+    }
+
+    _completeBuild(idx, pos, back) {
+      const p = this.players[idx];
+      const sq = this.square(pos);
+      const cost = GROUPS[sq.group].houseCost;
+      if (back) this.phase = back; // בנייה לא מסיימת תור
       if (this.houses[pos] === 4) {
         this.houses[pos] = 5;
         this.hotelsLeft--;
@@ -1044,8 +1069,14 @@
       const cost = Math.round((sq.price / 2) * (1 + C.MORTGAGE_INTEREST));
       const p = this.players[idx];
       if (p.money < cost) throw new Error('אין מספיק כסף לפדיון');
-      p.money -= cost;
-      this._toBankOrPot(cost);
+      this._charge(idx, cost, null, `פדיון "${sq.name}" מהמשכנתא`, null, { kind: 'unmortgage', pos, back: this.phase });
+    }
+
+    _completeUnmortgage(idx, pos, back) {
+      const p = this.players[idx];
+      const sq = this.square(pos);
+      const cost = Math.round((sq.price / 2) * (1 + C.MORTGAGE_INTEREST));
+      if (back) this.phase = back; // פדיון לא מסיים תור
       this.mortgaged[pos] = false;
       this._log(`${p.name} ${v(p, 'פדה', 'פדתה')} את "${sq.name}" מהמשכנתא תמורת ${money(cost)} (כולל 10% ריבית).`, 'mortgage');
     }
@@ -1096,7 +1127,8 @@
       if (p.money >= amount) {
         // העברה ידנית: הכסף לא זז לבד — הילד מבצע את ההעברה בעצמו.
         // הבוטים תמיד משלמים אוטומטית, אחרת המשחק היה נתקע.
-        if (this.manualPay && !p.isAI && amount > 0) {
+        // בשלב החוב לא פותחים חלונית העברה — שם כבר יש מסלול משלו.
+        if (this.manualPay && !p.isAI && amount > 0 && this.phase !== 'debt') {
           this.pendingPay = { payer: idx, creditor: creditorIdx, amount, reason, onPaid, cont: cont || { kind: 'afterAction' } };
           this.phase = 'pay';
           this._log(`💳 ${p.name} ${v(p, 'צריך', 'צריכה')} להעביר ${money(amount)} — ${reason}.`, 'pay');
@@ -1106,6 +1138,7 @@
         const d = { onPaid, cont: cont || { kind: 'afterAction' } };
         if (this._deliver(amount, creditorIdx, reason, d, idx)) return; // ממתינים לגבייה
         if (onPaid) onPaid();
+        else this._runCont(d.cont, idx);
         return;
       }
       this.debt = { debtor: idx, creditor: creditorIdx, amount, reason, onPaid, cont: cont || { kind: 'afterAction' } };
@@ -1146,9 +1179,22 @@
     _resumeAfterPayment(d, payerIdx) {
       this.phase = 'end';
       if (d.onPaid) d.onPaid();
-      else if (d.cont && d.cont.kind === 'jailMove') {
-        this._move(this.players[payerIdx], d.cont.total, { noExtraRoll: true });
-      } else this._afterAction();
+      else this._runCont(d.cont, payerIdx);
+    }
+
+    /* מה קורה אחרי שהכסף עבר.
+     * cont הוא תיאור שניתן לשמירה, ולא פונקציה — ככה פעולה שממתינה
+     * לתשלום שורדת גם רענון של הדף באמצע. */
+    _runCont(cont, payerIdx) {
+      switch (cont && cont.kind) {
+        case 'jailMove': this._move(this.players[payerIdx], cont.total, { noExtraRoll: true }); return;
+        case 'buy': this._completeBuy(payerIdx, cont.pos); return;
+        case 'auctionWin': this._completeAuctionWin(payerIdx, cont.pos, cont.bid); return;
+        case 'build': this._completeBuild(payerIdx, cont.pos, cont.back); return;
+        case 'jailFine': this._completeJailFine(payerIdx, cont.back); return;
+        case 'unmortgage': this._completeUnmortgage(payerIdx, cont.pos, cont.back); return;
+        default: this._afterAction();
+      }
     }
 
     // ההעברה שהילד מבצע. typed הוא הסכום שהוקלד — חייב להיות מדויק.

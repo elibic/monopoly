@@ -1286,3 +1286,132 @@ test('תרגיל החשבון נשמר ונטען, ותלוי במצב הידנ�
   const auto = new Game([{ name: 'א' }, { name: 'ב', isAI: true }], { payMath: true });
   assert.equal(auto.payMath, false);
 });
+
+/* ==================== כל תשלום עובר דרך ההעברה הידנית ==================== */
+
+test('קנייה: הנכס נרשם רק אחרי שהתשלום בוצע', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  g.rollDice();
+  assert.equal(g.phase, 'buy');
+  g.buy();
+  assert.equal(g.phase, 'pay', 'קנייה פותחת חלונית העברה');
+  assert.equal(g.players[0].money, 1500, 'הכסף עדיין בחשבון');
+  assert.equal(g.owner[3], null, 'והנכס עוד לא שלו');
+  assert.equal(g.pendingPay.amount, 60);
+  assert.throws(() => g.confirmPayment(50), /לא מדויק/);
+  assert.equal(g.owner[3], null);
+  g.confirmPayment(60);
+  assert.equal(g.players[0].money, 1440);
+  assert.equal(g.owner[3], 0);
+  assert.equal(g.phase, 'end');
+  assert.equal(g.players[0].stats.bought, 1);
+});
+
+test('בנייה: הבית עולה רק אחרי שהתשלום בוצע', () => {
+  const g = manualGame();
+  g.owner[1] = 0; g.owner[3] = 0;
+  g.phase = 'end';
+  g.players[0].pos = 1;
+  g.buildHouse(1);
+  assert.equal(g.phase, 'pay');
+  assert.equal(g.houses[1], 0, 'הבית עוד לא נבנה');
+  assert.equal(g.players[0].money, 1500);
+  assert.equal(g.pendingPay.amount, 50);
+  g.confirmPayment(50);
+  assert.equal(g.houses[1], 1);
+  assert.equal(g.players[0].money, 1450);
+  assert.equal(g.phase, 'end', 'בנייה לא מסיימת את התור');
+  assert.equal(g.housesLeft, C.TOTAL_HOUSES - 1);
+});
+
+test('בנייה אחרי דאבל חוזרת לשלב ההטלה', () => {
+  const g = manualGame();
+  g.owner[1] = 0; g.owner[3] = 0;
+  g.phase = 'roll'; g.doubles = 1;
+  g.players[0].pos = 1;
+  g.buildHouse(1);
+  g.confirmPayment(50);
+  assert.equal(g.phase, 'roll', 'עדיין מגיעה הטלה נוספת');
+});
+
+test('קנס כלא: משלמים בהעברה וממשיכים להטיל', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  const p = g.players[0];
+  p.inJail = true; p.pos = C.JAIL_POS;
+  g.payJailFine();
+  assert.equal(g.phase, 'pay');
+  assert.equal(p.inJail, true, 'עוד בכלא עד שמשלמים');
+  assert.equal(p.money, 1500);
+  g.confirmPayment(C.JAIL_FINE);
+  assert.equal(p.inJail, false);
+  assert.equal(p.money, 1450);
+  assert.equal(g.phase, 'roll');
+  g.rollDice();
+  assert.equal(p.pos, 13);
+});
+
+test('פדיון משכנתא: משוחרר רק אחרי התשלום', () => {
+  const g = manualGame();
+  g.owner[26] = 0; // רחוב יפו 260
+  g.phase = 'end';
+  g.mortgage(26);
+  const before = g.players[0].money;
+  g.unmortgage(26);
+  assert.equal(g.phase, 'pay');
+  assert.equal(g.mortgaged[26], true, 'עוד ממושכן');
+  assert.equal(g.players[0].money, before);
+  g.confirmPayment(143); // 130 + 10%
+  assert.equal(g.mortgaged[26], false);
+  assert.equal(g.players[0].money, before - 143);
+  assert.equal(g.phase, 'end');
+});
+
+test('זכייה במכירה פומבית: הנכס עובר אחרי התשלום', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  g.rollDice();
+  g.declineBuy();
+  assert.equal(g.phase, 'auction');
+  g.placeBid(1, 10);
+  g.placeBid(0, 20);
+  g.passAuction(1);
+  assert.equal(g.phase, 'pay', 'הזוכה משלם בהעברה');
+  assert.equal(g.owner[3], null);
+  assert.equal(g.players[0].money, 1500);
+  g.confirmPayment(20);
+  assert.equal(g.owner[3], 0);
+  assert.equal(g.players[0].money, 1480);
+  assert.equal(g.phase, 'end');
+});
+
+test('הבוט קונה ובונה אוטומטית, בלי חלונית העברה', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  g.turn = 1;
+  g.rollDice();
+  assert.equal(g.phase, 'buy');
+  g.buy();
+  assert.equal(g.phase, 'end', 'הבוט לא נעצר');
+  assert.equal(g.owner[3], 1);
+  assert.equal(g.players[1].money, 1500 - 60);
+});
+
+test('בלי המצב הידני — קנייה ובנייה מיידיות כמו קודם', () => {
+  const g = twoPlayers({ diceQueue: [[1, 2]] });
+  g.rollDice();
+  g.buy();
+  assert.equal(g.phase, 'end');
+  assert.equal(g.owner[3], 0);
+  assert.equal(g.players[0].money, 1440);
+});
+
+test('תשלום ממתין על קנייה שורד שמירה וטעינה', () => {
+  const g = manualGame({ diceQueue: [[1, 2]] });
+  g.rollDice();
+  g.buy();
+  assert.equal(g.phase, 'pay');
+  const r = Game.restore(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(r.phase, 'pay');
+  assert.equal(r.pendingPay.cont.kind, 'buy');
+  r.confirmPayment(60);
+  assert.equal(r.owner[3], 0, 'הנכס נרשם גם אחרי טעינה מחדש');
+  assert.equal(r.players[0].money, 1440);
+});

@@ -21,6 +21,8 @@
   const clicks = [];
 
   let getGame = null; // main.js מזריק גישה למשחק הנוכחי
+  let getUiState = null; // ...וגם לדגלים של לולאת התורות
+  let resume = null; // ...ודרך להחזיר את החלונית שהייתה פתוחה לפני הדיווח
 
   const ring = (arr, max, item) => {
     arr.push(item);
@@ -199,6 +201,8 @@
         })),
       };
     } catch (e) { out.summaryError = String(e && e.message); }
+    // דגלי לולאת התורות — בלעדיהם אי אפשר להסביר "הכפתורים תקועים"
+    try { if (getUiState) out.ui = getUiState(); } catch (e) { out.uiError = String(e && e.message); }
     return out;
   }
 
@@ -412,6 +416,12 @@ ${players}
     else alert(msg);
   }
 
+  // הדיווח נפתח מעל חלונית פתוחה ודורס אותה — לכן בסיום מחזירים
+  // את המשחק לעצמו, כדי שהחלונית שהייתה פתוחה תיפתח שוב.
+  function resumeGame() {
+    try { if (resume) resume(); } catch (e) { /* המשחק קרס — הדיווח כבר נשמר */ }
+  }
+
   async function start() {
     const canPNG = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
     const panel = openPanel(`
@@ -432,7 +442,7 @@ ${players}
         <button class="big-btn" id="bug-cancel">ביטול</button>
       </div>`);
 
-    panel.el.querySelector('#bug-cancel').onclick = () => panel.close();
+    panel.el.querySelector('#bug-cancel').onclick = () => { panel.close(); resumeGame(); };
     panel.el.querySelector('#bug-send').onclick = async () => {
       const description = panel.el.querySelector('#bug-desc').value.trim();
       const wantPNG = canPNG && panel.el.querySelector('#bug-png').checked;
@@ -455,6 +465,8 @@ ${players}
         else note('✅ הדוח נשמר במכשיר. אפשר לשלוח אותו בוואטסאפ או במייל.');
       } catch (e) {
         note('לא הצלחנו לייצר את הדוח: ' + (e && e.message ? e.message : e));
+      } finally {
+        resumeGame(); // חוזרים למשחק בדיוק לאן שהיינו
       }
     };
   }
@@ -462,7 +474,8 @@ ${players}
   globalThis.MonopolyBug = {
     open: start,
     // main.js מחבר את המשחק כאן, כדי שהדוח יכלול מצב ויומן
-    attach(fn) { getGame = fn; },
+    attach(fn, uiFn, resumeFn) { getGame = fn; getUiState = uiFn || null; resume = resumeFn || null; },
+    uiState: () => (typeof getUiState === 'function' ? getUiState() : null),
     // חשיפה לבדיקות ולניפוי שגיאות מהקונסול
     game: () => (typeof getGame === 'function' ? getGame() : null),
     snapshot: () => ({ game: gameSnapshot(), env: envInfo(), errors, consoleLines, clicks }),
