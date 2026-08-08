@@ -16,6 +16,7 @@
   let aiTimer = null;
   let tradeOfferedThisRound = false;
   let buildOfferDone = false;  // הצעת בנייה אחת לכל נחיתה — לא מציקים שוב באותו תור
+  let reopenManage = false;    // "העסקים שלי" נסגר לטובת חלונית העברה — ייפתח שוב אחריה
   let aiRoundStartSeq = null; // מיקום היומן כשתור המחשב/ים התחיל — לסיכום
   let summaryPending = false;  // ממתינים לאישור השחקן על סיכום תור המחשב
   let reportShown = 0;         // הסבב האחרון שדוח הבורסה שלו כבר הוצג
@@ -206,7 +207,10 @@
     if (remoteBtn && globalThis.MonopolyRemote) remoteBtn.onclick = () => globalThis.MonopolyRemote.open();
     // דיווח באג — גם ממסך הפתיחה וגם מתוך המשחק
     if (globalThis.MonopolyBug) {
-      globalThis.MonopolyBug.attach(() => game);
+      globalThis.MonopolyBug.attach(() => game, () => ({
+        summaryPending, reportPending, offerPending, reopenManage,
+        buildOfferDone, ticking, tickQueued, aiRoundStartSeq, humanTurnSeq,
+      }), () => { if (game) tick(); }); // סגירת הדיווח מחזירה את החלונית שנדרסה
       for (const id of ['#bug-setup-btn', '#bug-btn']) {
         const b = $(id);
         if (b) b.onclick = () => globalThis.MonopolyBug.open();
@@ -381,8 +385,19 @@
       } else if (game.phase === 'pay' && !isAI(game.pendingPay.payer)) {
         // הכסף לא זז לבד — השחקן מבצע את ההעברה בעצמו
         UI.showPayDialog(game, humanIdx, {
-          onConfirm: (typed) => {
+          onConfirm: async (typed) => {
+            // מה חיכה לתשלום? אחרי בנייה או ניהול נכסים חוזרים לאותו מקום
+            const kind = (game.pendingPay.cont || {}).kind;
             try { game.confirmPayment(typed); } catch (e) { UI.toast(e.message); }
+            if (kind === 'build' && buildableHere().length) buildOfferDone = false;
+            if (reopenManage && ['roll', 'end'].includes(game.phase)) {
+              reopenManage = false;
+              await UI.render(game);
+              updateButtons();
+              showManage();
+              return;
+            }
+            reopenManage = false;
             tick();
           },
           onWrong: () => { game.players[game.pendingPay.payer].stats.mathWrong += 1; },
@@ -530,8 +545,8 @@
         const pos = Number(btn.dataset.build);
         UI.closeDialog();
         try { game.buildHouse(pos); } catch (e) { UI.toast(e.message); }
-        // נשאר עוד מה לבנות בעיר הזאת? מציעים שוב
-        if (buildableHere().length) showBuildOffer();
+        // חלונית ההעברה קודמת; ההצעה תחזור אחרי שהתשלום יבוצע
+        if (game.phase !== 'pay' && buildableHere().length) showBuildOffer();
         tick();
       };
     });
@@ -590,6 +605,8 @@
           if (act === 'unmortgage') game.unmortgage(pos);
         } catch (e) { UI.toast(e.message); }
         await UI.render(game);
+        // בנייה או פדיון פתחו חלונית העברה — היא קודמת, ונחזור לכאן אחריה
+        if (game.phase === 'pay') { reopenManage = true; tick(); return; }
         showManage(); // רענון
       },
       onClose: () => tick(),

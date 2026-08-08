@@ -360,6 +360,10 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 .mid-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: none; }
 .mid-btn:disabled { opacity: .45; cursor: not-allowed; }
 
+/* כפתור דיווח הבאג חייב להיות לחיץ גם כשחלונית פתוחה —
+   דווקא כשנתקעים מול חלונית רוצים לדווח. z-index מעל שכבת הדיאלוג. */
+#bug-btn { position: relative; z-index: 300; }
+
 .icon-btn {
   font-size: 22px;
   border: none;
