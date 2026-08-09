@@ -360,10 +360,6 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 .mid-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: none; }
 .mid-btn:disabled { opacity: .45; cursor: not-allowed; }
 
-/* כפתור דיווח הבאג חייב להיות לחיץ גם כשחלונית פתוחה —
-   דווקא כשנתקעים מול חלונית רוצים לדווח. z-index מעל שכבת הדיאלוג. */
-#bug-btn { position: relative; z-index: 300; }
-
 .icon-btn {
   font-size: 22px;
   border: none;
@@ -927,7 +923,26 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
   backdrop-filter: blur(2px);
 }
 
+/* דיווח באג מתוך כל חלונית: כשנתקעים מול חלונית זה בדיוק הרגע
+   שרוצים לדווח, וכפתור הצד חסום. פינה קטנה ושקטה, בלי לכסות תוכן. */
+.dlg-bug {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  font-size: 16px;
+  line-height: 1;
+  background: rgba(0, 0, 0, .06);
+  border: none;
+  border-radius: 10px;
+  padding: 5px 7px;
+  cursor: pointer;
+  opacity: .45;
+  transition: opacity .15s, background .15s;
+}
+.dlg-bug:hover, .dlg-bug:focus-visible { opacity: 1; background: rgba(0, 0, 0, .12); }
+
 .dialog {
+  position: relative;
   background: linear-gradient(180deg, var(--cream), var(--board-face));
   border: 3px solid var(--board-edge);
   border-radius: var(--radius-l);
@@ -1136,6 +1151,45 @@ h1, h2, .center-logo, .logo, #turn-banner, .cc-balance, .deed-band, .debt-need {
 .peek-btn:hover { background: #DDEAF6; }
 .peek-btn:active { transform: translateY(2px); }
 .pay-feedback { text-align: center; font-weight: 700; font-size: 15.5px; min-height: 22px; margin: 2px 0 6px; }
+
+/* השדה שהמקלדת מקלידה אליו — כדי שיהיה ברור לאן הספרות הולכות */
+.pay-entry input.np-active {
+  border-color: #E0A03E;
+  box-shadow: 0 0 0 4px rgba(224, 160, 62, .25);
+  background: #FFFDF5;
+}
+
+/* מקלדת מספרים לילדים: כפתורים גדולים, ספרות בלבד */
+.numpad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  max-width: 300px;
+  margin: 10px auto 6px;
+  /* מקלדת מספרים היא תמיד משמאל לימין — 1,2,3 ולא 3,2,1,
+     גם בעמוד בעברית. זה הסידור שילד מכיר מכל טלפון ומחשבון. */
+  direction: ltr;
+}
+.numpad button {
+  font-family: var(--font-title);
+  font-size: 27px;
+  line-height: 1;
+  padding: 13px 0;
+  border-radius: 14px;
+  border: 2px solid #E4DCC4;
+  background: #fff;
+  color: #2B2B2B;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #DED5BC;
+  transition: transform .08s, box-shadow .08s, background .15s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+.numpad button:hover { background: #FFFBF0; }
+.numpad button:active { transform: translateY(4px); box-shadow: none; }
+.numpad .np-back { background: #FFF0F0; border-color: #E9B7B7; box-shadow: 0 4px 0 #E0A5A5; }
+.numpad .np-clear { background: #FFF8E1; border-color: #E0C97F; box-shadow: 0 4px 0 #CDB673; }
 .pay-feedback.ok { color: #1F9D55; }
 .pay-feedback.bad { color: #D93A3A; }
 

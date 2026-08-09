@@ -180,6 +180,20 @@
       };
     });
 
+    // בורר מקלדת המספרים — נשמר ב-UI כי הוא נקרא משם בזמן ההעברה
+    const kpPicker = $('#keypad-picker');
+    if (kpPicker) {
+      const cur = UI.getKeypadPref();
+      kpPicker.querySelectorAll('.opt-btn').forEach((b) => {
+        b.classList.toggle('selected', b.dataset.kp === cur);
+        b.onclick = () => {
+          kpPicker.querySelectorAll('.opt-btn').forEach((x) => x.classList.remove('selected'));
+          b.classList.add('selected');
+          UI.setKeypadPref(b.dataset.kp);
+        };
+      });
+    }
+
     // בורר העברות ידניות
     const mpPicker = $('#manualpay-picker');
     if (mpPicker) {

@@ -1013,12 +1013,25 @@
 
   /* ==================== דיאלוגים ==================== */
 
+  // 🐞 קטן בפינת כל חלונית — הדרך לדווח על באג גם כשחלונית חוסמת
+  // את הכפתור שבצד. לא מוסיפים אותו לחלונית הדיווח עצמה.
+  function addDialogBugButton(d) {
+    if (!globalThis.MonopolyBug || d.querySelector('#bug-desc')) return;
+    const b = el('button', 'dlg-bug', '🐞');
+    b.type = 'button';
+    b.title = 'דיווח על באג';
+    b.setAttribute('aria-label', 'דיווח על באג');
+    b.onclick = () => globalThis.MonopolyBug.open();
+    d.appendChild(b);
+  }
+
   function openDialog(html) {
     const root = $('#dialog-root');
     root.innerHTML = '';
     const d = el('div', 'dialog', html);
     root.appendChild(d);
     root.classList.remove('hidden');
+    addDialogBugButton(d);
     // רמז לחיצה על הכפתור הראשי של הדיאלוג אם אין לחיצה תוך 2 שניות
     const primary = d.querySelector('.big-btn.green:not([disabled])') ||
                     d.querySelector('.big-btn:not([disabled])');
@@ -1205,6 +1218,51 @@
     if (cardBtn) cardBtn.onclick = () => { closeDialog(); onCard(); };
   }
 
+  /* ---------- מקלדת מספרים על המסך ----------
+   * מקלדת המערכת קשה לילד קטן: מלאה באותיות, קופצת ומכסה חצי מסך.
+   * כאן יש ספרות גדולות בלבד. ההעדפה נבחרת במסך הפתיחה, כי לא בכל
+   * מכשיר יש מגע — ובמחשב עדיף פשוט להקליד. */
+
+  const KEYPAD_KEY = 'monopoly-hebrew-keypad'; // auto | on | off
+  function getKeypadPref() {
+    try { return localStorage.getItem(KEYPAD_KEY) || 'auto'; } catch (e) { return 'auto'; }
+  }
+  function setKeypadPref(v) {
+    try { localStorage.setItem(KEYPAD_KEY, v); } catch (e) { /* אחסון חסום */ }
+  }
+  function keypadWanted() {
+    const pref = getKeypadPref();
+    if (pref === 'on') return true;
+    if (pref === 'off') return false;
+    // אוטומטי: מסך מגע מקבל מקלדת, מחשב עם עכבר לא
+    return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
+  }
+
+  // getTarget מחזיר את השדה הפעיל — כך מקלדת אחת משרתת כמה שדות
+  function buildNumpad(getTarget) {
+    const pad = el('div', 'numpad');
+    for (const k of ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫']) {
+      const b = el('button', k === '⌫' ? 'np-back' : k === 'C' ? 'np-clear' : '', k);
+      b.type = 'button';
+      // בלי preventDefault הלחיצה מוציאה את הפוקוס מהשדה
+      b.onmousedown = (e) => e.preventDefault();
+      b.ontouchstart = (e) => e.preventDefault();
+      b.onclick = () => {
+        const t = getTarget();
+        if (!t || t.disabled) return;
+        if (k === 'C') t.value = '';
+        else if (k === '⌫') t.value = t.value.slice(0, -1);
+        // בלי אפסים מובילים: "0" ואז "6" צריך לתת 6, לא 06
+        else if (t.value === '0') t.value = k;
+        else if (t.value.length < 7) t.value += k;
+        t.dispatchEvent(new Event('input', { bubbles: true }));
+        sounds.tick();
+      };
+      pad.appendChild(b);
+    }
+    return pad;
+  }
+
   /* ---------- העברה ידנית: הילד מעביר את הכסף בעצמו ---------- */
 
   // הכסף לא זז לבד. הילד רואה למי, כמה ולמה — ומקליד את הסכום.
@@ -1301,6 +1359,27 @@
     const enterGo = (e) => { if (e.key === 'Enter' && !go.disabled) go.click(); };
     input.onkeydown = enterGo;
     leftInput.onkeydown = enterGo;
+
+    // מקלדת מספרים על המסך — במקום מקלדת המערכת המלאה
+    if (keypadWanted()) {
+      let active = input;
+      // סימון ברור לאן הספרות נכנסות; אפשר להחליף שדה בנגיעה
+      const mark = () => {
+        for (const f of [input, leftInput]) f.classList.toggle('np-active', f === active && !f.disabled);
+      };
+      const focusOn = (f) => { active = f; mark(); };
+      for (const f of [input, leftInput]) {
+        f.readOnly = true; // מונע קפיצה של מקלדת המערכת
+        f.onfocus = () => focusOn(f);
+        f.onclick = () => focusOn(f);
+      }
+      d.querySelector('.pay-balance').before(buildNumpad(() => active));
+      // אחרי שהסכום נכון עוברים לשלב הבא — והמקלדת עוברת איתו
+      const jump = input.oninput;
+      input.oninput = () => { jump(); if (amountOK() && math) focusOn(leftInput); else mark(); };
+      leftInput.oninput = ((orig) => () => { orig(); mark(); })(leftInput.oninput);
+      mark();
+    }
 
     // כל ניסיון שגוי מקרב את העזרה — ונספר לסיכום בסוף המשחק
     const missed = () => {
@@ -2306,7 +2385,8 @@
         '📊 בסוף המשחק — סיכום אישי: כמה העברות ביצעתם, כמה גביתם, מה היה התשלום הכי גדול וכמה בניתם',
         '🏠 תוקן באג: אי אפשר יותר להעמיד מלון ברחוב אחד בזמן שרחוב אחר באותה עיר ריק — בונים בבתים שווים, כמו בחוקים',
         '🏗️ הגעתם לעיר שכולה שלכם? אפשר לבנות בכל רחוב בה שתורו הגיע, והחלונית מראה את מצב כל העיר',
-        '🐞 כפתור דיווח באג חדש: אוסף לבד צילום מסך, את יומן המשחק ואת כל מה שקרה — ושולח בקובץ אחד',
+        '🔢 מקלדת מספרים גדולה על המסך במקום מקלדת הטלפון — נבחר במסך הפתיחה: לפי המכשיר, תמיד, או בלי',
+        '🐞 כפתור דיווח באג חדש: אוסף לבד צילום מסך, את יומן המשחק ואת כל מה שקרה — ושולח בקובץ אחד. יש 🐞 קטן גם בפינת כל חלונית',
       ],
     },
     {
@@ -2611,6 +2691,7 @@
     setSpeed, getSpeed, aiDelay, closeAuctionDialog, showDeed, music,
     showStickerAlbum, startTutorial, tutorialSeen,
     setLocalIdx, nudge, clearNudge, deedHTML,
+    getKeypadPref, setKeypadPref, keypadWanted,
     showBankDialog, showMainBankDialog, setPortfolioOpener, showMarketReport,
     confirmDialog, confirmWithdraw, confirmMortgage, confirmSellHouse, showInvestInfo, showInvestOffer, outcome100, finTutorialSeen, FIN_TUTORIAL_STEPS, FIN_TUTORIAL_KEY,
     showWhatsNew, showWhatsNewIfUpdated, VERSIONS,
