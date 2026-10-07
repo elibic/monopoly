@@ -243,69 +243,12 @@
     return out;
   }
 
-  function speak(text, { raw = false } = {}) {
-    if (!soundOn || !('speechSynthesis' in window)) return;
-    const final = raw ? text : vocalize(text);
-    const u = new SpeechSynthesisUtterance(final);
-    u.lang = 'he-IL';
-    u.rate = 1 + sp().rate / 100;
-    const voices = speechSynthesis.getVoices().filter((vc) => vc.lang && vc.lang.startsWith('he'));
-    const voice = voices.find((vc) => /google/i.test(vc.name)) || voices[0];
-    if (voice) u.voice = voice;
-    speechSynthesis.speak(u);
-  }
-
-  // הערה: 'offer' לא כאן — ההצעה מוקראת ע"י showBuyDialog בלבד, אחרת נוצרת כפילות
-  const SPOKEN_KINDS = new Set(['turn', 'buy', 'rent', 'jail', 'win', 'debt', 'bankrupt', 'money', 'tax', 'pot',
-    'market', 'market_news']);
-
-  /* ---------- קריין AI: קליפים מוקלטים מראש (audio/), עם נסיגה לקול הדפדפן ---------- */
-
-  const narrator = {
-    ids: null,          // Set של קליפים זמינים (מתוך audio/manifest.json)
-    cache: {},
-    queue: Promise.resolve(),
-    async init() {
-      // אופליין (file://): fetch חסום, אז מעדיפים מניפסט שנטען כ-<script>
-      if (Array.isArray(globalThis.MONOPOLY_VOICE_MANIFEST)) {
-        this.ids = new Set(globalThis.MONOPOLY_VOICE_MANIFEST);
-        return;
-      }
-      try {
-        const r = await fetch('audio/manifest.json', { cache: 'no-cache' });
-        if (r.ok) this.ids = new Set(await r.json());
-      } catch (e) { this.ids = null; }
-    },
-    available() { return !!(this.ids && this.ids.size); },
-    say(ids, fallbackText) {
-      if (!soundOn) return;
-      if (!ids.length) return; // רשימה ריקה = שתיקה מכוונת (למשל השקעות של שחקן אחר)
-      const usable = this.ids && ids.every((id) => this.ids.has(id));
-      if (usable) {
-        this.queue = this.queue.then(async () => {
-          for (const id of ids) await this._play(id);
-        }).catch(() => {});
-      } else if (fallbackText) {
-        speak(fallbackText, { raw: fallbackText.includes('ְ') || fallbackText.includes('ָ') });
-      }
-    },
-    _play(id) {
-      return new Promise((resolve) => {
-        if (!soundOn) return resolve();
-        let a = this.cache[id];
-        // ?v — מניעת קאש: מבטיח שהדפדפן יטען את קובצי הקול המעודכנים
-        if (!a) { a = new Audio(`audio/${id}.mp3?v=18`); a.preload = 'auto'; this.cache[id] = a; }
-        a.currentTime = 0;
-        a.onended = resolve;
-        a.onerror = resolve;
-        a.play().catch(resolve);
-      });
-    },
-    stop() {
-      for (const a of Object.values(this.cache)) { try { a.pause(); } catch (e) { /* */ } }
-      this.queue = Promise.resolve();
-    },
-  };
+  const narrator = new globalThis.MonopolyNarrator({
+    enabled: () => soundOn,
+    onText: (text) => { const box = document.querySelector('#speech-caption'); if (box) box.textContent = text; },
+  });
+  function speak(text) { return narrator.say([], text); }
+  const SPOKEN_KINDS = new Set(['turn', 'buy', 'jail', 'win', 'bankrupt', 'pot', 'market', 'market_news']);
 
   // מי "השחקן שלי" מול המסך — 0 במשחק יחיד; במשחק מרחוק כל צד מגדיר את עצמו.
   // חשוב לקריינות: קליפים כמו "התור שלך!" נכונים רק לשחקן המקומי.
@@ -948,7 +891,8 @@
           deckCards.find((cd) => cd.text === entry.cardText);
         const intro = entry.deck === 'chance' ? 'ev_chance' : 'ev_chest';
         const cardClip = cardData ? [cardData.id] : [];
-        narrator.say([intro, ...cardClip],
+        narrator.stop();
+        narrator.say(cardClip.length ? cardClip : [intro],
           'קלף ' + (entry.deck === 'chance' ? 'הפתעה' : 'תיבת המזל') + '. ' + entry.cardText);
         const humanCard = !g.current().isAI && g.current().idx === localIdx;
         await showCardFlip(entry.deck, entry.cardText, { interactive: humanCard });
@@ -958,15 +902,15 @@
           // תשלום מקלף עובר בחלונית ההעברה הידנית — בלי אישור כפול
           if (act.type === 'pay' && !g.manualPay) await showAckDialog({ title: 'הקלף אומר לשלם 💳', amount: act.amount, mode: 'pay' });
           if (act.type === 'receive') await showAckDialog({ title: 'הקלף נותן לך כסף! 🤑', amount: act.amount, mode: 'receive' });
-          if (act.type === 'collectFromAll') await showAckDialog({ title: 'כולם משלמים לך! 🥳', amount: act.amount * (g.alive().length - 1), mode: 'receive' });
-          if (act.type === 'payToAll') await showAckDialog({ title: 'משלמים לכל המשתתפים 💳', amount: act.amount * (g.alive().length - 1), mode: 'pay' });
+          if (act.type === 'collectFromAll' && !g.manualPay) await showAckDialog({ title: 'כולם משלמים לך! 🥳', amount: act.amount * (g.alive().length - 1), mode: 'receive' });
+          if (act.type === 'payToAll' && !g.manualPay) await showAckDialog({ title: 'משלמים לכל המשתתפים 💳', amount: act.amount * (g.alive().length - 1), mode: 'pay' });
         }
         continue;
       }
       if (SPOKEN_KINDS.has(entry.kind)) {
         const clips = narrationFor(g, entry);
-        if (clips) narrator.say(clips, entry.text);
-        else speak(entry.text);
+        if (clips) { if (clips.length) narrator.say(clips, entry.text); }
+        else if (!g.current().isAI) speak(entry.text);
       }
       const ack = ackFor(g, entry);
       if (ack) {
@@ -1029,6 +973,10 @@
     const root = $('#dialog-root');
     root.innerHTML = '';
     const d = el('div', 'dialog', html);
+    d.setAttribute('role', 'dialog');
+    d.setAttribute('aria-modal', 'true');
+    const heading = d.querySelector('h2');
+    if (heading) { heading.id = 'active-dialog-title'; d.setAttribute('aria-labelledby', heading.id); }
     root.appendChild(d);
     root.classList.remove('hidden');
     addDialogBugButton(d);
@@ -1036,6 +984,7 @@
     const primary = d.querySelector('.big-btn.green:not([disabled])') ||
                     d.querySelector('.big-btn:not([disabled])');
     nudge(primary);
+    requestAnimationFrame(() => { if (d.isConnected) (d.querySelector('input, .big-btn:not([disabled]), button') || d).focus(); });
     return d;
   }
 
@@ -1091,6 +1040,7 @@
 
   // תצוגת שטר קניין מלאה בלחיצה על משבצת — כולל מצב נוכחי (בעלים/בתים/שכ"ד)
   function showDeed(g, pos) {
+    if (!document.querySelector('#dialog-root').classList.contains('hidden')) return;
     const sq = BOARD[pos];
     sounds.tick();
     // משבצת שאינה נכס — הסבר קצר וידידותי
@@ -1145,6 +1095,7 @@
         <button class="big-btn green" id="d-buy" ${canAfford ? '' : 'disabled'}>💳 קונים!</button>
         <button class="big-btn" id="d-skip">🙅 לא הפעם</button>
       </div>`);
+    narrator.stop();
     narrator.say([`offer_${pos}`], `${vocalize(sq.name)} פָּנוּי לִקְנִיָּה. רוֹצֶה לִקְנוֹת?`);
     d.querySelector('#d-buy').onclick = () => { closeDialog(); onBuy(); };
     d.querySelector('#d-skip').onclick = () => { closeDialog(); onDecline(); };
@@ -1405,7 +1356,7 @@
     // מי שמתקשה יראה עזרה גם בלי לנסות — אחרי חצי דקה מול המסך
     setTimeout(() => { if (document.body.contains(help)) help.hidden = false; }, 30000);
     setTimeout(() => input.focus(), 50);
-    speak(`צָרִיךְ לְהַעֲבִיר ${d0.amount} שֶׁקֶל`, { raw: true });
+    narrator.say(['guide_pay'], 'מקלידים את הסכום שמופיע ולוחצים על העברה.', { interrupt: true });
   }
 
   /* ---------- גבייה: הכסף לא נכנס לבד, גובים אותו ---------- */
@@ -1429,7 +1380,7 @@
         <button class="big-btn green" id="collect-go">🤑 גובים!</button>
       </div>`);
     d.querySelector('#collect-go').onclick = () => { closeDialog(); sounds.coin(); onCollect(); };
-    speak('יֵשׁ לְךָ כֶּסֶף לִגְבּוֹת!', { raw: true });
+    narrator.say(['guide_collect'], 'מגיע לך כסף! לוחצים על גבייה.', { interrupt: true });
   }
 
   // כשנגמר הכסף, השאלה האמיתית היא "מה עדיף?" — ולכן כל דרך לגייס
@@ -2678,6 +2629,8 @@
       narrator.stop();
     }
     $('#sound-btn').textContent = on ? '🔊' : '🔇';
+    $('#sound-btn').setAttribute('aria-label', on ? 'השתקת קריינות' : 'הפעלת קריינות');
+    $('#sound-btn').setAttribute('aria-pressed', String(on));
   }
 
   function isSoundOn() { return soundOn; }

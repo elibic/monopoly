@@ -34,12 +34,11 @@ jobs:
 
       - name: התקנת edge-tts ו-ffmpeg
         run: |
-          pip install edge-tts
+          pip install edge-tts==7.2.8
           sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
 
-      - name: יצירת קובצי הקריינות (מאפס)
+      - name: עדכון קובצי הקריינות
         run: |
-          rm -rf audio
           python tools/generate_voice.py
 
       - name: Commit קובצי האודיו

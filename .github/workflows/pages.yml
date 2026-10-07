@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: הרצת בדיקות המנוע
-        run: node --test tests/engine.test.mjs
+        run: node --test tests/*.test.mjs
 
       - name: פרסום לענף gh-pages
         uses: peaceiris/actions-gh-pages@v4
