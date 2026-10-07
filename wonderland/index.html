@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>מונופול • העיר שלי</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎩</text></svg>">
-  <link rel="stylesheet" href="css/style.css?v=20">
+  <link rel="stylesheet" href="css/style.css?v=30">
   <meta name="theme-color" content="#176857">
-  <link rel="stylesheet" href="css/wonderland.css?v=21">
+  <link rel="stylesheet" href="css/wonderland.css?v=30">
+  <link rel="stylesheet" href="css/world3d.css?v=30">
 </head>
 <body>
 
@@ -142,6 +143,16 @@
   <!-- מסך המשחק -->
   <div id="game-screen" class="hidden">
     <div id="board-wrap">
+      <section id="world-stage" aria-label="העיר התלת־ממדית שלנו">
+        <div class="world-heading"><span class="world-live">העיר שלנו • LIVE</span><h1 id="world-prompt">מוכנים לצעד הבא?</h1><p id="world-player">הרפתקה קטנה, עיר גדולה.</p></div>
+        <div class="world-budget"><span>הארנק שלי</span><strong id="world-budget">1,500 ₪</strong><small id="world-count">0 נכסים</small></div>
+        <div id="world-canvas"></div>
+        <div class="world-camera" aria-label="שליטה במצלמה"><button id="camera-home" title="חזרה לזווית הפתיחה" aria-label="חזרה לזווית הפתיחה">⌂</button><button id="camera-top" title="מבט מלמעלה" aria-label="מבט מלמעלה">▦</button><span></span><button id="camera-in" aria-label="הגדלת הלוח">+</button><button id="camera-out" aria-label="הקטנת הלוח">−</button></div>
+        <p class="world-drag">גוררים כדי לגלות את העיר <span>↔</span></p>
+        <div id="tile-peek" hidden><span id="peek-city"></span><h2 id="peek-title"></h2><p id="peek-owner"></p><div><strong id="peek-price"></strong><button id="peek-open">על המקום ←</button></div></div>
+        <div class="world-dock" id="world-dock"></div>
+        <span id="world-loading">מכינים את העיר שלך…</span>
+      </section>
       <div id="board">
         <div id="board-center">
           <div class="center-stripe"><span>העיר שלי</span><small>כל צעד הוא התחלה של משהו טוב</small></div>
@@ -191,15 +202,16 @@
   <div id="toast-root"></div>
 
   <!-- ראשון בכוונה: תופס גם שגיאות שקורות בזמן טעינת שאר הקבצים -->
-  <script src="js/bugreport.js?v=20"></script>
-  <script src="audio/manifest.js?v=20" onerror="/* אין קריינות — נסיגה לקול הדפדפן */"></script>
-  <script src="js/data.js?v=20"></script>
-  <script src="js/engine.js?v=20"></script>
-  <script src="js/ai.js?v=20"></script>
-  <script src="js/narrator.js?v=20"></script>
-  <script src="js/ui.js?v=20"></script>
-  <script src="js/remote.js?v=20"></script>
-  <script src="js/main.js?v=20"></script>
-  <script src="js/experience.js?v=20"></script>
+  <script src="js/bugreport.js?v=30"></script>
+  <script src="audio/manifest.js?v=30" onerror="/* אין קריינות — נסיגה לקול הדפדפן */"></script>
+  <script src="js/data.js?v=30"></script>
+  <script src="js/engine.js?v=30"></script>
+  <script src="js/ai.js?v=30"></script>
+  <script src="js/narrator.js?v=30"></script>
+  <script src="js/ui.js?v=30"></script>
+  <script src="js/remote.js?v=30"></script>
+  <script src="js/main.js?v=30"></script>
+  <script src="js/experience.js?v=30"></script>
+  <script type="module" src="js/world3d.js?v=30"></script>
 </body>
 </html>

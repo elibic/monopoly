@@ -446,6 +446,7 @@
   }
 
   async function animateTokenMove(g, playerIdx, from, to) {
+    if (globalThis.MonopolyWorld?.ready) return globalThis.MonopolyWorld.move(g, playerIdx, from, to);
     const p = g.players[playerIdx];
     if (reducedMotion() || document.hidden) return;
 
