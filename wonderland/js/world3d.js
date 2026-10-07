@@ -219,7 +219,7 @@ try {
     document.querySelector('#world-player').textContent=p.isAI?p.name+' חושב…':p.name+', התור שלך!';
     const title={roll:'מוכנים לצעד הבא?',buy:'איזה עסק פותחים כאן?',pay:'עושים העברה, צעד אחר צעד',collect:'הגיע הזמן לקבל כסף!',debt:'נמצא יחד דרך לשלם',auction:'מי יזכה בנכס?',end:'כל הכבוד! ממשיכים?',gameover:'איזו הרפתקה!'}[g.phase]||'בונים את העיר שלנו';
     document.querySelector('#world-prompt').textContent=title;
-    document.querySelector('#world-location').textContent=D.BOARD[p.pos].name;
+    document.querySelector('#world-player').textContent += ' · ' + D.BOARD[p.pos].name;
     document.querySelector('#world-count').textContent=g.playerProps(0).length+' נכסים';
     document.querySelector('#world-budget').textContent=g.players[0].money.toLocaleString('he-IL')+' ₪';
     selectTile(p.pos,false);
@@ -267,7 +267,7 @@ try {
   document.querySelector('#camera-in').onclick=()=>{zoom=clamp(zoom+.15,.75,1.75);};
   document.querySelector('#camera-out').onclick=()=>{zoom=clamp(zoom-.15,.75,1.75);};
   renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();world.ready=false;document.querySelector('#board').prepend(document.querySelector('#board-center'));document.body.classList.remove('world-ready');UI.toast('עוברים ללוח הרגיל כדי להמשיך לשחק');});
-  function resize(){const r=host.getBoundingClientRect();if(!r.width||!r.height)return;renderer.setSize(r.width,r.height,false);const aspect=r.width/r.height;const span=9.5;camera.left=-span*aspect;camera.right=span*aspect;camera.top=span;camera.bottom=-span;camera.updateProjectionMatrix();}
+  function resize(){const r=host.getBoundingClientRect();if(!r.width||!r.height)return;renderer.setSize(r.width,r.height,false);const aspect=r.width/r.height;const span=Math.max(9.5, 8.8/aspect);camera.left=-span*aspect;camera.right=span*aspect;camera.top=span;camera.bottom=-span;camera.updateProjectionMatrix();}
   new ResizeObserver(resize).observe(host);
   const observer=new MutationObserver(()=>{if(!document.querySelector('#game-screen').classList.contains('hidden'))resize();});observer.observe(document.querySelector('#game-screen'),{attributes:true,attributeFilter:['class']});
   const originalRender=UI.render;UI.render=async function(g){sync(g,{positions:false});await originalRender(g);sync(g);};
