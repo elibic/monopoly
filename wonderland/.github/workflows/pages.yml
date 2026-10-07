@@ -1,0 +1,35 @@
+name: פרסום לאתר (GitHub Pages)
+
+on:
+  push:
+    branches:
+      - main
+      - claude/monopoly-hebrew-dhr54d
+      - claude/monopoly-financial-education-scrm25
+      - claude/bug-report-gameplay-a8rd1k
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: הרצת בדיקות המנוע
+        run: node --test tests/*.test.mjs
+
+      - name: פרסום לענף gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          exclude_assets: '.github,tests'
+          commit_message: 'פרסום אתר: ${{ github.event.head_commit.message }}'

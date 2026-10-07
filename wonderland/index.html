@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>מונופול • העיר שלי</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎩</text></svg>">
+  <link rel="stylesheet" href="css/style.css?v=20">
+  <meta name="theme-color" content="#176857">
+  <link rel="stylesheet" href="css/wonderland.css?v=20">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="brand" href="./" aria-label="מונופול — העיר שלי"><span class="brand-icon">⌂</span><span>מוֹנוֹפּוֹל<small>העיר שלי. ההרפתקה שלי.</small></span></a>
+    <span class="header-note"><span class="live-dot"></span> משחקים · לומדים · גדלים</span>
+  </header>
+  <!-- מסך פתיחה -->
+  <div id="setup-screen">
+    <section class="world-intro" aria-labelledby="world-title">
+      <div class="eyebrow">עולם קטן. הרפתקה גדולה.</div>
+      <h1 id="world-title">העיר הבאה שלך<br>מתחילה <em>כאן.</em></h1>
+      <p>מטילים קוביות, בונים בתים ומגלים<br>איך החלטות קטנות יוצרות עיר גדולה.</p>
+      <div class="world-art"><img src="assets/toy-city.webp" width="1536" height="1024" alt="עיר צעצוע תלת־ממדית עם בתים צבעוניים, עצים וקוביות">
+        <span class="floating-badge badge-home">⌂ <b>בית ראשון בדרך!</b></span>
+        <span class="floating-badge badge-dice">✦ <b>כל תור, סיפור חדש</b></span>
+      </div>
+      <div class="adventure-steps"><span><b>01</b> מטילים</span><i>···</i><span><b>02</b> בוחרים</span><i>···</i><span><b>03</b> בונים</span></div>
+    </section>
+    <div class="setup-card">
+      <span class="setup-kicker">מוכנים להרפתקה?</span>
+      <h2 class="setup-title">נעים להכיר, ראש העיר!</h2>
+      <p class="subtitle">רק בוחרים שם וחבר קטן לדרך.</p>
+
+      <div class="setup-options">
+      <div class="setup-group setup-wide">
+        <label class="setup-label" for="player-name">איך קוראים לך?</label>
+        <input id="player-name" type="text" maxlength="12" placeholder="השם שלי...">
+      </div>
+
+      <div class="setup-group">
+      <label class="setup-label">איך לפנות אליך?</label>
+      <div id="gender-picker" class="opponent-picker">
+        <button class="opt-btn selected" data-g="m">👦 בן</button>
+        <button class="opt-btn" data-g="f">👧 בת</button>
+      </div>
+      </div>
+
+      <div class="setup-group setup-wide">
+        <label class="setup-label">מי יוצא איתך להרפתקה?</label>
+        <div id="token-picker" class="token-picker"></div>
+      </div>
+
+      </div>
+      <button id="start-btn" class="big-btn">יוצאים להרפתקה <span aria-hidden="true">←</span></button>
+      <p class="start-hint">רובי הבוט מחכה לך · קריינות בעברית</p>
+      <button id="preview-voice" class="voice-preview" type="button">◖)) לשמוע את המדריכה שלנו</button>
+      <details class="advanced-settings"><summary>⚙ אפשרויות משחק <small>רמה, חשבון וחוקים</small></summary><div class="advanced-grid">
+      <div class="setup-group">
+      <label class="setup-label">כמה יריבי מחשב?</label>
+      <div id="opponent-picker" class="opponent-picker">
+        <button class="opt-btn selected" data-n="1">🤖</button>
+        <button class="opt-btn" data-n="2">🤖🤖</button>
+        <button class="opt-btn" data-n="3">🤖🤖🤖</button>
+      </div>
+      </div>
+
+      <div class="setup-group">
+      <label class="setup-label">כמה הבוט חכם?</label>
+      <div id="difficulty-picker" class="opponent-picker">
+        <button class="opt-btn selected" data-diff="easy">🧸 קל</button>
+        <button class="opt-btn" data-diff="medium">🤖 בינוני</button>
+        <button class="opt-btn" data-diff="hard">🧠 קשה</button>
+      </div>
+      </div>
+
+      <div class="setup-group">
+      <label class="setup-label">קצב המשחק:</label>
+      <div id="speed-picker" class="opponent-picker">
+        <button class="opt-btn" data-speed="slow">🐢 רגוע</button>
+        <button class="opt-btn selected" data-speed="normal">🚶 רגיל</button>
+        <button class="opt-btn" data-speed="fast">🐇 מהיר</button>
+      </div>
+      </div>
+
+      <div class="setup-group">
+      <label class="setup-label">מכירה פומבית כשמוותרים על קנייה?</label>
+      <div id="auction-picker" class="opponent-picker">
+        <button class="opt-btn selected" data-auc="on">🔨 כן (חוקי)</button>
+        <button class="opt-btn" data-auc="off">🚫 לא (פשוט)</button>
+      </div>
+      </div>
+
+      <div class="setup-group">
+      <label class="setup-label">קופה בחניה חופשית? (חוק בית — לא רשמי)</label>
+      <div id="pot-picker" class="opponent-picker">
+        <button class="opt-btn selected" data-pot="on">🎁 כן (כיף)</button>
+        <button class="opt-btn" data-pot="off">📕 לא (רשמי)</button>
+      </div>
+      </div>
+
+      <div class="setup-group">
+      <label class="setup-label">💳 מי מעביר את הכסף?</label>
+      <div id="manualpay-picker" class="opponent-picker">
+        <button class="opt-btn selected" data-mp="math">🧮 אני, עם תרגיל</button>
+        <button class="opt-btn" data-mp="on">✍️ אני, בלי תרגיל</button>
+        <button class="opt-btn" data-mp="off">⚡ הבנק, אוטומטי</button>
+      </div>
+      </div>
+
+      <div class="setup-group">
+      <label class="setup-label">🔢 מקלדת מספרים על המסך?</label>
+      <div id="keypad-picker" class="opponent-picker">
+        <button class="opt-btn selected" data-kp="auto">📱 לפי המכשיר</button>
+        <button class="opt-btn" data-kp="on">🔢 תמיד</button>
+        <button class="opt-btn" data-kp="off">⌨️ בלי</button>
+      </div>
+      </div>
+
+      <div class="setup-group">
+      <label class="setup-label">🏦 מצב חינוך פיננסי? (חיסכון, פיקדון ומניות)</label>
+      <div id="finance-picker" class="opponent-picker">
+        <button class="opt-btn" data-fin="on">📈 כן, לומדים!</button>
+        <button class="opt-btn selected" data-fin="off">🚫 לא</button>
+      </div>
+      </div>
+
+      </div>
+
+      </details>
+      <div class="setup-links">
+      <button id="remote-btn" class="big-btn blue">🎥 משחק עם חבר/ה מרחוק</button>
+      <button id="tutorial-btn" class="link-btn">📖 מדריך למתחילים</button>
+      <button id="whatsnew-btn" class="link-btn">✨ מה חדש במשחק?</button>
+      <button id="album-btn" class="link-btn">🏅 אלבום המדבקות שלי</button>
+      <button id="download-btn" class="link-btn">⬇️ הורדה למשחק בלי אינטרנט</button>
+      <button id="bug-setup-btn" class="link-btn">🐞 דיווח על באג</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- מסך המשחק -->
+  <div id="game-screen" class="hidden">
+    <div id="board-wrap">
+      <div id="board">
+        <div id="board-center">
+          <div class="center-stripe"><span>העיר שלי</span><small>כל צעד הוא התחלה של משהו טוב</small></div>
+          <img class="board-town" src="assets/toy-city.webp" alt="" aria-hidden="true">
+          <div id="pot-display" class="hidden"></div>
+          <div id="turn-banner" aria-live="polite"></div>
+          <div id="dice-area">
+            <div class="die3d-scene"><div class="die3d" id="die1"></div></div>
+            <div class="die3d-scene"><div class="die3d" id="die2"></div></div>
+          </div>
+          <div id="action-buttons">
+            <button id="roll-btn" class="big-btn">🎲 הטלת קוביות</button>
+            <button id="end-turn-btn" class="big-btn green">✅ סיום תור</button>
+            <div class="row">
+              <button id="manage-btn" class="mid-btn">🏠 העסקים שלי</button>
+              <button id="trade-btn" class="mid-btn">🤝 הצעת עסקה</button>
+              <button id="bank-btn" class="mid-btn hidden">📈 תיק ההשקעות שלי</button>
+              <button id="mainbank-btn" class="mid-btn hidden">🏦 בנק מונופול</button>
+            </div>
+          </div>
+        </div>
+        <div id="token-layer"></div>
+      </div>
+    </div>
+
+    <aside id="side-panel">
+      <div class="guide-card"><span class="guide-avatar" aria-hidden="true">✦</span><div><b>ביחד, צעד אחר צעד</b><p id="speech-caption" aria-live="polite">לוחצים על הקוביות ומתחילים לגלות!</p></div><button id="repeat-voice" aria-label="שמיעת ההסבר שוב" title="שמיעת ההסבר שוב">↻</button></div>
+      <div class="side-top">
+        <button id="sound-btn" class="icon-btn" title="הקראה קולית">🔊</button>
+        <button id="music-btn" class="icon-btn" title="מוזיקת רקע">🎵</button>
+        <button id="speed-btn" class="icon-btn" title="קצב המשחק">🚶</button>
+        <button id="bug-btn" class="icon-btn" title="דיווח באג">🐞</button>
+        <button id="restart-btn" class="icon-btn" title="איפוס משחק">🔄</button>
+      </div>
+      <div id="money-bar" class="hidden"></div>
+      <div id="cards-panel"></div>
+      <h2 class="log-heading">הסיפור של המשחק <span>✦</span></h2><div id="log" aria-label="יומן המשחק"></div>
+    </aside>
+  </div>
+
+  <!-- שכבות: כרזות, קלף נשלף, דיאלוגים, מטבעות, קונפטי, טוסטים -->
+  <div id="banner-root"></div>
+  <div id="card-root" class="hidden"></div>
+  <div id="dialog-root" class="hidden"></div>
+  <div id="fx-layer"></div>
+  <canvas id="confetti"></canvas>
+  <div id="toast-root"></div>
+
+  <!-- ראשון בכוונה: תופס גם שגיאות שקורות בזמן טעינת שאר הקבצים -->
+  <script src="js/bugreport.js?v=20"></script>
+  <script src="audio/manifest.js?v=20" onerror="/* אין קריינות — נסיגה לקול הדפדפן */"></script>
+  <script src="js/data.js?v=20"></script>
+  <script src="js/engine.js?v=20"></script>
+  <script src="js/ai.js?v=20"></script>
+  <script src="js/narrator.js?v=20"></script>
+  <script src="js/ui.js?v=20"></script>
+  <script src="js/remote.js?v=20"></script>
+  <script src="js/main.js?v=20"></script>
+  <script src="js/experience.js?v=20"></script>
+</body>
+</html>
