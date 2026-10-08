@@ -1187,7 +1187,7 @@
     if (pref === 'on') return true;
     if (pref === 'off') return false;
     // אוטומטי: מסך מגע מקבל מקלדת, מחשב עם עכבר לא
-    return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
+    return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   }
 
   // getTarget מחזיר את השדה הפעיל — כך מקלדת אחת משרתת כמה שדות
@@ -1198,15 +1198,21 @@
       b.type = 'button';
       // בלי preventDefault הלחיצה מוציאה את הפוקוס מהשדה
       b.onmousedown = (e) => e.preventDefault();
-      b.ontouchstart = (e) => e.preventDefault();
+      b.onpointerdown = (e) => e.preventDefault();
       b.onclick = () => {
         const t = getTarget();
         if (!t || t.disabled) return;
-        if (k === 'C') t.value = '';
-        else if (k === '⌫') t.value = t.value.slice(0, -1);
-        // בלי אפסים מובילים: "0" ואז "6" צריך לתת 6, לא 06
-        else if (t.value === '0') t.value = k;
-        else if (t.value.length < 7) t.value += k;
+        const start = typeof t.selectionStart === 'number' ? t.selectionStart : t.value.length;
+        const end = typeof t.selectionEnd === 'number' ? t.selectionEnd : start;
+        let caret = start;
+        if (k === 'C') { t.value = ''; caret = 0; }
+        else if (k === '⌫') {
+          t.value = t.value.slice(0, start === end ? Math.max(0,start-1) : start) + t.value.slice(end);
+          caret = start === end ? Math.max(0,start-1) : start;
+        } else if (t.value.length - (end-start) < 7) {
+          t.value = t.value.slice(0,start) + k + t.value.slice(end); caret = start + 1;
+        }
+        if (t.type === 'text') t.setSelectionRange(caret,caret);
         t.dispatchEvent(new Event('input', { bubbles: true }));
         sounds.tick();
       };
@@ -1219,145 +1225,72 @@
 
   // הכסף לא זז לבד. הילד רואה למי, כמה ולמה — ומקליד את הסכום.
   // אחרי שלושה ניסיונות שגויים נפתחת עזרה, כדי שזה יישאר משחק ולא מבחן.
-  function showPayDialog(g, humanIdx, { onConfirm, onWrong }) {
-    const d0 = g.pendingPay;
-    const p = g.players[d0.payer]; // המשלם נקבע לפי ההעברה עצמה, לא לפי מי פתח
-    const toName = d0.creditor !== null ? g.players[d0.creditor].name : '🏦 הבנק';
-    const toToken = d0.creditor !== null ? g.players[d0.creditor].token : '🏦';
-    const after = p.money - d0.amount;
-    const math = !!g.payMath; // תרגיל החשבון — רק במצב שנבחר במסך הפתיחה
+  function showPayDialog(g, humanIdx, { onConfirm, onWrong, onCancel }) {
+    const d0 = g.pendingPay, p = g.players[d0.payer];
+    const after = p.money - d0.amount, math = !!g.payMath;
+    const canCancel = d0.cont?.kind === 'buy' && typeof onCancel === 'function';
+    const toName = d0.creditor !== null ? g.players[d0.creditor].name : 'הבנק';
     let wrongTries = 0;
-
     const d = openDialog(`
-      <h2>העברה מהחשבון שלך 💸</h2>
+      <div class="payment-heading"><span class="payment-symbol" aria-hidden="true">↗</span>
+        <div><span class="dialog-eyebrow">${canCancel ? 'העסק הבא שלך' : 'מנהלים את הכסף'}</span>
+        <h2>${canCancel ? 'רגע לפני שקונים' : 'מעבירים כסף'}</h2></div>
+      </div>
       <p class="d-sub">${esc(d0.reason)}</p>
-      <div class="pay-card">
-        <div class="pay-to"><span class="pay-token">${toToken}</span>
-          <span>מעבירים אל<br><b>${esc(toName)}</b></span></div>
-        <div class="pay-amount">${money(d0.amount)}</div>
-      </div>
-
-      <div class="pay-step">
-        <p class="d-sub">${math ? '1️⃣ ' : ''}הקלידו את הסכום להעברה:</p>
-        <div class="pay-entry">
-          <input id="pay-input" type="number" inputmode="numeric" min="0" placeholder="כמה?" autocomplete="off">
-          <span class="pay-currency">₪</span>
+      <div class="pay-card"><div class="pay-to"><span class="pay-token" aria-hidden="true">↗</span><span>התשלום עובר אל<br><b>${esc(toName)}</b></span></div><div class="pay-amount">${money(d0.amount)}</div></div>
+      <div class="payment-fields">
+        <div class="pay-step"><label for="pay-input"><span class="step-number">1</span>כמה מעבירים?</label>
+          <div class="pay-entry"><input id="pay-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="הסכום" autocomplete="off" aria-describedby="pay-fb"><span class="pay-currency">₪</span></div>
+          <p class="pay-feedback" id="pay-fb" aria-live="polite">אפשר להקליד כאן</p>
         </div>
-        <p class="pay-feedback" id="pay-fb">&nbsp;</p>
-      </div>
-
-      <div class="pay-step" id="pay-step2" ${math ? '' : 'hidden'}>
-        <p class="d-sub">2️⃣ וכמה יישאר לך בחשבון אחרי ההעברה?</p>
-        <div class="pay-entry">
-          <input id="left-input" type="number" inputmode="numeric" placeholder="כמה יישאר?" autocomplete="off" disabled>
-          <span class="pay-currency">₪</span>
+        <div class="pay-step" id="pay-step2" ${math ? '' : 'hidden'}><label for="left-input"><span class="step-number">2</span>כמה יישאר בחשבון?</label>
+          <div class="pay-entry"><input id="left-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="היתרה" autocomplete="off" aria-describedby="left-fb"><span class="pay-currency">₪</span></div>
+          <p class="pay-feedback" id="left-fb" aria-live="polite">גם את השדה הזה אפשר לערוך</p>
         </div>
-        <p class="pay-feedback" id="left-fb">&nbsp;</p>
       </div>
-
-      <div class="pay-balance">
-        <button class="peek-btn" id="pay-peek">🔍 לבדוק כמה יש לי</button>
-        <span id="pay-balance-val" hidden>בחשבון: <b>${money(p.money)}</b>${math ? '' : ` ← אחרי ההעברה: <b>${money(after)}</b>`}</span>
-      </div>
-      <div class="d-actions">
-        <button class="big-btn green" id="pay-go" disabled>💳 מעבירים!</button>
-        <button class="big-btn" id="pay-help" hidden>💡 עזרה</button>
+      <div class="pay-balance"><span id="pay-balance-val">יש לך עכשיו <b>${money(p.money)}</b></span><button class="peek-btn" id="pay-keyboard" aria-expanded="false">מקלדת מספרים</button></div>
+      <div id="payment-keypad" hidden></div>
+      <div class="payment-footer"><p class="payment-note">${canCancel ? 'הכסף יעבור רק בלחיצה על אישור הרכישה.' : 'הכסף יעבור רק אחרי אישור ההעברה.'}</p>
+        <div class="d-actions"><button class="big-btn green" id="pay-go" disabled>${canCancel ? 'אישור רכישה' : 'אישור העברה'} <span aria-hidden="true">←</span></button>
+        ${canCancel ? '<button class="payment-cancel" id="pay-cancel">ביטול רכישה</button>' : ''}
+        <button class="payment-help" id="pay-help">צריך קצת עזרה?</button></div>
       </div>`);
-
-    const input = d.querySelector('#pay-input');
-    const leftInput = d.querySelector('#left-input');
-    const go = d.querySelector('#pay-go');
-    const fb = d.querySelector('#pay-fb');
-    const leftFb = d.querySelector('#left-fb');
-    const help = d.querySelector('#pay-help');
-    const peek = d.querySelector('#pay-peek');
-
-    // "כמה יש לי?" — היתרה מוסתרת עד שבודקים, כדי שהבדיקה תהיה פעולה
-    peek.onclick = () => {
-      peek.hidden = true;
-      d.querySelector('#pay-balance-val').hidden = false;
-      sounds.tick();
-    };
-
-    const amountOK = () => Number(input.value) === d0.amount;
-    const leftOK = () => !math || Number(leftInput.value) === after;
-
+    d.classList.add('payment-dialog');
+    const input = d.querySelector('#pay-input'), leftInput = d.querySelector('#left-input');
+    const go = d.querySelector('#pay-go'), fb = d.querySelector('#pay-fb'), leftFb = d.querySelector('#left-fb');
+    const help = d.querySelector('#pay-help'), keypad = d.querySelector('#payment-keypad'), keyboard = d.querySelector('#pay-keyboard');
+    let active = input;
+    const valid = (field, amount) => /^[0-9]+$/.test(field.value.trim()) && Number(field.value) === amount;
+    const amountOK = () => valid(input, d0.amount);
+    const leftOK = () => !math || valid(leftInput, after);
     const refresh = () => {
-      const v1 = input.value.trim();
-      if (v1 === '') { fb.textContent = ' '; fb.className = 'pay-feedback'; }
-      else if (amountOK()) { fb.textContent = '✅ בדיוק!'; fb.className = 'pay-feedback ok'; }
-      else {
-        fb.textContent = Number(v1) < d0.amount ? '⬆️ צריך יותר' : '⬇️ זה יותר מדי';
-        fb.className = 'pay-feedback bad';
-      }
-      // השלב השני נפתח רק אחרי שהסכום הראשון נכון
-      if (math) {
-        leftInput.disabled = !amountOK();
-        const v2 = leftInput.value.trim();
-        if (!amountOK() || v2 === '') { leftFb.textContent = ' '; leftFb.className = 'pay-feedback'; }
-        else if (leftOK()) { leftFb.textContent = '✅ נכון! יופי'; leftFb.className = 'pay-feedback ok'; }
-        else {
-          leftFb.textContent = Number(v2) < after ? '⬆️ יישאר יותר' : '⬇️ יישאר פחות';
-          leftFb.className = 'pay-feedback bad';
-        }
+      for (const [field, feedback, expected] of [[input,fb,d0.amount],[leftInput,leftFb,after]]) {
+        const value=field.value.trim(), ok=valid(field,expected);
+        feedback.textContent = !value ? 'אפשר להקליד או להשתמש במקלדת המספרים' : ok ? 'בדיוק, כל הכבוד!' : !/^[0-9]+$/.test(value) ? 'מקלידים ספרות בלבד' : Number(value)<expected ? 'צריך מספר גדול יותר' : 'צריך מספר קטן יותר';
+        feedback.className = 'pay-feedback' + (value ? ok ? ' ok' : ' bad' : '');
+        field.setAttribute('aria-invalid',String(!!value && !ok));
+        field.classList.toggle('np-active',field===active);
       }
       go.disabled = !(amountOK() && leftOK());
     };
-    input.oninput = () => {
-      refresh();
-      if (amountOK() && math) setTimeout(() => leftInput.focus(), 30);
-    };
-    leftInput.oninput = refresh;
-    const enterGo = (e) => { if (e.key === 'Enter' && !go.disabled) go.click(); };
-    input.onkeydown = enterGo;
-    leftInput.onkeydown = enterGo;
-
-    // מקלדת מספרים על המסך — במקום מקלדת המערכת המלאה
-    if (keypadWanted()) {
-      let active = input;
-      // סימון ברור לאן הספרות נכנסות; אפשר להחליף שדה בנגיעה
-      const mark = () => {
-        for (const f of [input, leftInput]) f.classList.toggle('np-active', f === active && !f.disabled);
-      };
-      const focusOn = (f) => { active = f; mark(); };
-      for (const f of [input, leftInput]) {
-        f.readOnly = true; // מונע קפיצה של מקלדת המערכת
-        f.onfocus = () => focusOn(f);
-        f.onclick = () => focusOn(f);
-      }
-      d.querySelector('.pay-balance').before(buildNumpad(() => active));
-      // אחרי שהסכום נכון עוברים לשלב הבא — והמקלדת עוברת איתו
-      const jump = input.oninput;
-      input.oninput = () => { jump(); if (amountOK() && math) focusOn(leftInput); else mark(); };
-      leftInput.oninput = ((orig) => () => { orig(); mark(); })(leftInput.oninput);
-      mark();
+    for(const field of [input,leftInput]) {
+      field.onfocus=()=>{active=field;refresh();};
+      field.onclick=()=>{active=field;refresh();};
+      field.oninput=refresh;
+      field.onkeydown=e=>{if(e.key==='Enter'&&!go.disabled)go.click();};
+      field.onblur=()=>{if(field.value.trim() && !valid(field,field===input?d0.amount:after)){wrongTries++;if(onWrong)onWrong();}};
     }
-
-    // כל ניסיון שגוי מקרב את העזרה — ונספר לסיכום בסוף המשחק
-    const missed = () => {
-      wrongTries++;
-      if (onWrong) onWrong();
-      if (wrongTries >= 2) help.hidden = false;
-    };
-    input.onblur = () => { if (input.value.trim() !== '' && !amountOK()) missed(); };
-    leftInput.onblur = () => { if (!leftInput.disabled && leftInput.value.trim() !== '' && !leftOK()) missed(); };
-
-    go.onclick = () => {
-      if (!amountOK() || !leftOK()) { missed(); return; }
-      closeDialog();
-      onConfirm(d0.amount);
-    };
-    // עזרה אמיתית: ממלאת את התשובה, אבל ההעברה עדיין נעשית בלחיצה של הילד
-    help.onclick = () => {
-      if (!amountOK()) input.value = String(d0.amount);
-      else if (math) leftInput.value = String(after);
-      refresh();
-      (amountOK() && math && !leftOK() ? leftInput : input).focus();
-    };
-    // מי שמתקשה יראה עזרה גם בלי לנסות — אחרי חצי דקה מול המסך
-    setTimeout(() => { if (document.body.contains(help)) help.hidden = false; }, 30000);
-    setTimeout(() => input.focus(), 50);
-    narrator.say(['guide_pay'], 'מקלידים את הסכום שמופיע ולוחצים על העברה.', { interrupt: true });
+    keypad.appendChild(buildNumpad(()=>active));
+    const showKeypad=(show)=>{keypad.hidden=!show;keyboard.setAttribute('aria-expanded',String(show));keyboard.textContent=show?'סגירת מקלדת המספרים':'מקלדת מספרים';};
+    showKeypad(keypadWanted());
+    keyboard.onclick=()=>showKeypad(keypad.hidden);
+    go.onclick=()=>{if(!amountOK()||!leftOK())return;closeDialog();onConfirm(d0.amount);};
+    const cancel=d.querySelector('#pay-cancel');
+    if(cancel)cancel.onclick=()=>{narrator.stop();closeDialog();onCancel();};
+    help.onclick=()=>{if(!amountOK()){input.value=String(d0.amount);active=input;}else if(math){leftInput.value=String(after);active=leftInput;}refresh();active.focus();};
+    refresh();
+    requestAnimationFrame(()=>input.focus());
+    narrator.say(['guide_pay'],'אפשר לערוך את שני השדות. הכסף יעבור רק אחרי האישור.',{interrupt:true});
   }
 
   /* ---------- גבייה: הכסף לא נכנס לבד, גובים אותו ---------- */

@@ -418,7 +418,11 @@
             reopenManage = false;
             tick();
           },
-          onWrong: () => { game.players[game.pendingPay.payer].stats.mathWrong += 1; },
+          onWrong: () => { if (game.pendingPay) game.players[game.pendingPay.payer].stats.mathWrong += 1; },
+          onCancel: () => {
+            try { game.cancelPendingPurchase(); saveGame(); tick(); }
+            catch (e) { UI.toast(e.message); tick(); }
+          },
         });
         dialogOpen = true;
       } else if (game.phase === 'collect' && !isAI(game.pendingCollect.payee)) {

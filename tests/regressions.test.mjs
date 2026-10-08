@@ -108,3 +108,27 @@ test('seeded games with debt, card transfers and repeated reloads advance withou
     assert.ok(g.phase === 'gameover' || g._logSeq > 1000, `Seed ${seed} failed to advance`);
   }
 });
+
+test('cancel an unpaid purchase without changing money, ownership, bank or stats', () => {
+  const g=make({manualPay:true,auctions:false});
+  g.current().pos=1;g.pendingBuy=1;g.phase='buy';
+  const money=g.current().money, bank=g.bank.cash, pot=g.pot, bought=g.current().stats.bought;
+  g.buy();assert.equal(g.phase,'pay');g.cancelPendingPurchase();
+  assert.equal(g.phase,'end');assert.equal(g.pendingPay,null);assert.equal(g.owner[1],null);
+  assert.equal(g.current().money,money);assert.equal(g.bank.cash,bank);assert.equal(g.pot,pot);assert.equal(g.current().stats.bought,bought);
+  assert.throws(()=>g.confirmPayment(60));assert.throws(()=>g.cancelPendingPurchase());
+});
+test('cancel pending purchase after save and restore preserves auction rules', () => {
+  let g=make({manualPay:true,auctions:true});
+  g.current().pos=1;g.pendingBuy=1;g.phase='buy';g.buy();g=restore(g);
+  g.cancelPendingPurchase();assert.equal(g.phase,'auction');assert.equal(g.auction.pos,1);
+  assert.equal(g.current().money,1500);assert.equal(g.owner[1],null);
+});
+test('mandatory payments and completed purchases cannot be cancelled', () => {
+  const g=make({manualPay:true,auctions:false});
+  g._charge(0,100,null,'tax',null,{kind:'afterAction'});
+  const before=JSON.stringify(g.toJSON());
+  assert.throws(()=>g.cancelPendingPurchase());assert.equal(JSON.stringify(g.toJSON()),before);
+  g.confirmPayment(100);g.current().pos=1;g.pendingBuy=1;g.phase='buy';g.buy();g.confirmPayment(60);
+  assert.throws(()=>g.cancelPendingPurchase());assert.equal(g.owner[1],0);assert.equal(g.current().money,1340);
+});

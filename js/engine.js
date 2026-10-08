@@ -686,6 +686,19 @@
       this._charge(p.idx, sq.price, null, `קניית "${sq.name}"`, null, { kind: 'buy', pos });
     }
 
+    cancelPendingPurchase() {
+      const payment = this.pendingPay;
+      if (this.phase !== 'pay' || !payment || payment.cont?.kind !== 'buy'
+          || payment.payer !== this.turn || this.owner[payment.cont.pos] !== null) {
+        throw new Error('אפשר לבטל רק קנייה שעדיין לא שולמה');
+      }
+      this.pendingBuy = payment.cont.pos;
+      this.pendingPay = null;
+      this.phase = 'buy';
+      this._log('הקנייה בוטלה לפני התשלום. לא ירד כסף מהחשבון.', 'info');
+      this.declineBuy();
+    }
+
     _completeBuy(idx, pos) {
       const p = this.players[idx];
       const sq = this.square(pos);
