@@ -323,7 +323,7 @@
       if (!this.financeEnabled) throw new Error('מצב חינוך פיננסי כבוי');
       if (idx !== this.turn) throw new Error('אפשר להשקיע רק בתור שלך');
       if (this.phase !== 'roll' && this.phase !== 'end') throw new Error('אי אפשר להשקיע עכשיו');
-      if (!F.TRACKS[track]) throw new Error('מסלול לא מוכר');
+      if (!Object.hasOwn(F.TRACKS, track)) throw new Error('מסלול לא מוכר');
       if (track === 'stocks' && !F.COMPANIES.some((c) => c.id === co)) throw new Error('חברה לא מוכרת');
       if (!Number.isInteger(amount) || amount <= 0) throw new Error('סכום לא תקין');
       const p = this.players[idx];
@@ -340,6 +340,7 @@
     // משיכה מלאה של אחזקה אחת — גם בשלב חוב, כדי שאפשר יהיה לשלם
     withdraw(idx, track, co) {
       if (!this.financeEnabled) throw new Error('מצב חינוך פיננסי כבוי');
+      if (!Object.hasOwn(F.TRACKS, track) || (track === 'stocks' && !F.COMPANIES.some((c) => c.id === co))) throw new Error('מסלול לא מוכר');
       const inDebt = this.phase === 'debt' && this.debt && this.debt.debtor === idx;
       const ownTurn = idx === this.turn && (this.phase === 'roll' || this.phase === 'end');
       if (!inDebt && !ownTurn) throw new Error('אפשר למשוך רק בתור שלך');
@@ -685,6 +686,19 @@
       this._charge(p.idx, sq.price, null, `קניית "${sq.name}"`, null, { kind: 'buy', pos });
     }
 
+    cancelPendingPurchase() {
+      const payment = this.pendingPay;
+      if (this.phase !== 'pay' || !payment || payment.cont?.kind !== 'buy'
+          || payment.payer !== this.turn || this.owner[payment.cont.pos] !== null) {
+        throw new Error('אפשר לבטל רק קנייה שעדיין לא שולמה');
+      }
+      this.pendingBuy = payment.cont.pos;
+      this.pendingPay = null;
+      this.phase = 'buy';
+      this._log('הקנייה בוטלה לפני התשלום. לא ירד כסף מהחשבון.', 'info');
+      this.declineBuy();
+    }
+
     _completeBuy(idx, pos) {
       const p = this.players[idx];
       const sq = this.square(pos);
@@ -812,32 +826,22 @@
         case 'receive':
           returnCard();
           p.money += act.amount;
+          this._bankPay(act.amount);
           this._afterAction(opts);
           return;
         case 'pay':
           returnCard();
           this._charge(p.idx, act.amount, null, card.text, () => this._afterAction(opts));
           return;
-        case 'collectFromAll': {
-          returnCard();
-          for (const other of this.alive()) {
-            if (other.idx === p.idx) continue;
-            const paid = Math.min(act.amount, other.money);
-            other.money -= paid;
-            p.money += paid;
-          }
-          this._afterAction(opts);
-          return;
-        }
+        case 'collectFromAll':
         case 'payToAll': {
           returnCard();
-          for (const other of this.alive()) {
-            if (other.idx === p.idx) continue;
-            const paid = Math.min(act.amount, p.money);
-            p.money -= paid;
-            other.money += paid;
-          }
-          this._afterAction(opts);
+          const payments = this.alive().filter((other) => other.idx !== p.idx).map((other) => ({
+            payer: act.type === 'payToAll' ? p.idx : other.idx,
+            creditor: act.type === 'payToAll' ? other.idx : p.idx,
+            amount: act.amount,
+          }));
+          this._cardPayments(payments, card.text, opts);
           return;
         }
         case 'repairs': {
@@ -861,6 +865,7 @@
           this._afterAction(opts);
           return;
         case 'goToJail':
+          returnCard();
           this._goToJail(p);
           return;
         case 'moveTo':
@@ -911,6 +916,17 @@
           returnCard();
           this._afterAction(opts);
       }
+    }
+
+    // Each transfer uses the normal debt/manual-payment path. The remaining
+    // transfers are serializable, so reloading never forgives or repeats a debt.
+    _cardPayments(payments, reason, opts = {}) {
+      const remaining = payments.filter((x) => !this.players[x.payer].bankrupt && !this.players[x.creditor].bankrupt);
+      if (!remaining.length) { this._afterAction(opts); return; }
+      const [next, ...rest] = remaining;
+      this.phase = 'end';
+      this._charge(next.payer, next.amount, next.creditor, reason, null,
+        { kind: 'cardPayments', payments: rest, reason, opts });
     }
 
     /* ---------- כלא ---------- */
@@ -1095,9 +1111,14 @@
 
     executeTrade(aIdx, bIdx, { propsA = [], propsB = [], moneyA = 0, moneyB = 0 } = {}) {
       const A = this.players[aIdx], B = this.players[bIdx];
-      for (const pos of propsA) if (!this.canTradeProp(aIdx, pos)) throw new Error('נכס לא סחיר בהצעה');
-      for (const pos of propsB) if (!this.canTradeProp(bIdx, pos)) throw new Error('נכס לא סחיר בהצעה');
-      if (A.money < moneyA || B.money < moneyB) throw new Error('אין כיסוי כספי לעסקה');
+      if (!A || !B || aIdx === bIdx || A.bankrupt || B.bankrupt) throw new Error('משתתפים לא תקינים לעסקה');
+      if (!['roll', 'end'].includes(this.phase) || ![aIdx, bIdx].includes(this.turn)) throw new Error('אי אפשר לסחור עכשיו');
+      if (![moneyA, moneyB].every((n) => Number.isSafeInteger(n) && n >= 0)) throw new Error('סכום לא תקין');
+      if (!Array.isArray(propsA) || !Array.isArray(propsB) || new Set([...propsA, ...propsB]).size !== propsA.length + propsB.length) throw new Error('נכסים כפולים בעסקה');
+      for (const pos of propsA) if (!Number.isInteger(pos) || !this.canTradeProp(aIdx, pos)) throw new Error('נכס לא סחיר בהצעה');
+      for (const pos of propsB) if (!Number.isInteger(pos) || !this.canTradeProp(bIdx, pos)) throw new Error('נכס לא סחיר בהצעה');
+      const fees = (props) => props.reduce((sum, pos) => sum + (this.mortgaged[pos] ? Math.round(this.square(pos).price / 2 * C.MORTGAGE_INTEREST) : 0), 0);
+      if (A.money < moneyA || B.money < moneyB || A.money - moneyA + moneyB < fees(propsB) || B.money - moneyB + moneyA < fees(propsA)) throw new Error('אין כיסוי כספי לעסקה ולריבית');
 
       A.money -= moneyA; B.money += moneyA;
       B.money -= moneyB; A.money += moneyB;
@@ -1114,6 +1135,7 @@
         const to = this.players[toIdx];
         const paid = Math.min(fee, to.money);
         to.money -= paid;
+        this.bank.cash += paid;
         this._log(`"${this.square(pos).name}" ממושכן — ${to.name} ${v(to, 'משלם', 'משלמת')} ${money(paid)} ריבית לבנק.`, 'mortgage');
       }
     }
@@ -1187,6 +1209,7 @@
      * לתשלום שורדת גם רענון של הדף באמצע. */
     _runCont(cont, payerIdx) {
       switch (cont && cont.kind) {
+        case 'cardPayments': this._cardPayments(cont.payments, cont.reason, cont.opts); return;
         case 'jailMove': this._move(this.players[payerIdx], cont.total, { noExtraRoll: true }); return;
         case 'buy': this._completeBuy(payerIdx, cont.pos); return;
         case 'auctionWin': this._completeAuctionWin(payerIdx, cont.pos, cont.bid); return;
@@ -1299,6 +1322,10 @@
         this.winner = alive[0].idx;
         this.phase = 'gameover';
         this._log(`🏆 ${alive[0].name} ${v(alive[0], 'ניצח', 'ניצחה')} במשחק! 🏆`, 'win');
+        return;
+      }
+      if (d.cont && d.cont.kind === 'cardPayments') {
+        this._runCont(d.cont, p.idx);
         return;
       }
       // _afterAction מטפל גם בתור המכירות הפומביות וגם בהעברת התור הלאה

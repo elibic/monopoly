@@ -227,7 +227,7 @@
     const allowed = [
       'rollDice', 'buy', 'declineBuy', 'placeBid', 'passAuction', 'endTurn',
       'payJailFine', 'useJailCard', 'buildHouse', 'sellHouse', 'mortgage',
-      'unmortgage', 'settleDebt', 'declareBankruptcy', 'confirmPayment', 'collectMoney',
+      'unmortgage', 'settleDebt', 'declareBankruptcy', 'confirmPayment', 'collectMoney', 'cancelPendingPurchase',
     ];
     if (!allowed.includes(act.fn)) return;
     try {
@@ -322,6 +322,7 @@
       if (game.pendingPay.payer === myIdx) {
         UI.showPayDialog(game, myIdx, {
           onConfirm: (typed) => doAction({ fn: 'confirmPayment', args: [typed] }),
+          onCancel: () => doAction({ fn: 'cancelPendingPurchase', args: [] }),
         });
       } else UI.toast(`💳 ${peerName} מעביר/ה תשלום...`);
     } else if (game.phase === 'collect') {

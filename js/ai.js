@@ -242,7 +242,7 @@
           const my = sy.type === 'street' && g.ownsFullGroup(idx, sy.group) ? 0 : 1;
           return mx - my;
         });
-      if (!mortgaged.length) break;
+      if (!mortgaged.length || !['roll', 'end', 'buy'].includes(g.phase)) break;
       g.unmortgage(mortgaged[0]);
     }
     // בנייה: כל עוד נשאר מעל הרזרבה
@@ -252,7 +252,7 @@
         .filter((pos) => g.canBuildOn(idx, pos))
         .filter((pos) => p.money - GROUPS[g.square(pos).group].houseCost > prof.reserve + prof.buildReserve)
         .sort((x, y) => GROUPS[g.square(x).group].houseCost - GROUPS[g.square(y).group].houseCost);
-      if (!buildable.length) break;
+      if (!buildable.length || !['roll', 'end', 'buy'].includes(g.phase)) break;
       g.buildHouse(buildable[0]);
     }
   }
