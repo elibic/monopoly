@@ -396,7 +396,15 @@ ${players}
   // דיווח באג חייב לעבוד גם כשכל השאר שבור.
   function openPanel(html) {
     const UI = globalThis.MonopolyUI;
-    if (UI && UI.openDialog) return { el: UI.openDialog(html), close: UI.closeDialog };
+    if (UI && UI.openDialog) {
+      const root = document.querySelector('#dialog-root');
+      const previous = root && !root.classList.contains('hidden') ? [...root.childNodes] : [];
+      const panel = UI.openDialog(html);
+      return { el: panel, close: () => {
+        UI.closeDialog();
+        if (previous.length) { root.replaceChildren(...previous); root.classList.remove('hidden'); }
+      } };
+    }
     const back = document.createElement('div');
     back.setAttribute('style', 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;'
       + 'display:flex;align-items:center;justify-content:center;padding:16px;');

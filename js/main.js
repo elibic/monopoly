@@ -216,7 +216,8 @@
     if (tutBtn) tutBtn.onclick = () => UI.startTutorial();
     const newsBtn = $('#whatsnew-btn');
     if (newsBtn) newsBtn.onclick = () => UI.showWhatsNew();
-    UI.showWhatsNewIfUpdated(); // בפעם הראשונה אחרי עדכון — מראים מה השתנה
+    // Updates remain available through the menu; avoid interrupting onboarding.
+    // UI.showWhatsNewIfUpdated(); // בפעם הראשונה אחרי עדכון — מראים מה השתנה
     const remoteBtn = $('#remote-btn');
     if (remoteBtn && globalThis.MonopolyRemote) remoteBtn.onclick = () => globalThis.MonopolyRemote.open();
     // דיווח באג — גם ממסך הפתיחה וגם מתוך המשחק
@@ -236,7 +237,7 @@
   // הורדת המשחק — שתי אפשרויות: לשחק אופליין, או פרויקט מלא למתכנת.
   // חשוב: DEV_BRANCH חייב להצביע על ענף הפיתוח הנוכחי, אחרת ההורדה
   // נותנת גרסה ישנה בלי העדכונים והתיקונים האחרונים.
-  const DEV_BRANCH = 'claude/bug-report-gameplay-a8rd1k';
+  const DEV_BRANCH = 'codex/monopoly-wonderland';
   function showDownloadDialog() {
     const repo = 'https://github.com/elibic/monopoly';
     const playZip = `${repo}/archive/refs/heads/gh-pages.zip`;   // המשחק הרץ (שטוח, מתעדכן בכל פרסום)
@@ -265,7 +266,8 @@
   }
 
   function startGame() {
-    const name = $('#player-name').value.trim() || 'אלוף/ה';
+    const name = $('#player-name').value.trim().replace(/[<>&"']/g, '') || 'אלוף/ה';
+    UI.narrator.stop();
     const nAI = Number($('#opponent-picker .selected').dataset.n);
     const aiTokens = D.TOKENS.filter((t) => t.id !== chosenToken.id);
 
@@ -367,8 +369,10 @@
     if (!game) return;
     if (ticking) { tickQueued = true; return; }
     ticking = true;
+    try {
     do {
       tickQueued = false;
+      saveGame();
       await UI.render(game);
       updateButtons();
       saveGame(); // שמירה אוטומטית אחרי כל שינוי מצב
@@ -414,7 +418,11 @@
             reopenManage = false;
             tick();
           },
-          onWrong: () => { game.players[game.pendingPay.payer].stats.mathWrong += 1; },
+          onWrong: () => { if (game.pendingPay) game.players[game.pendingPay.payer].stats.mathWrong += 1; },
+          onCancel: () => {
+            try { game.cancelPendingPurchase(); saveGame(); tick(); }
+            catch (e) { UI.toast(e.message); tick(); }
+          },
         });
         dialogOpen = true;
       } else if (game.phase === 'collect' && !isAI(game.pendingCollect.payee)) {
@@ -486,11 +494,16 @@
         if (!shown) { summaryPending = false; updateButtons(); }
       }
     } while (tickQueued);
-    ticking = false;
+    } catch (e) {
+      console.error('Game update failed:', e);
+      UI.toast('לא הצלחנו לעדכן את המסך. אפשר לנסות שוב.');
+    } finally {
+      ticking = false;
+    }
   }
 
   function updateButtons() {
-    const humanTurn = game.turn === humanIdx && !game.players[humanIdx].bankrupt && !summaryPending && !reportPending && !offerPending;
+    const humanTurn = !rolling && game.turn === humanIdx && !game.players[humanIdx].bankrupt && !summaryPending && !reportPending && !offerPending;
     const free = !['auction', 'pay', 'collect', 'debt', 'gameover'].includes(game.phase);
     $('#roll-btn').disabled = !(humanTurn && game.phase === 'roll' && !game.current().inJail);
     $('#end-turn-btn').disabled = !(humanTurn && game.phase === 'end');
@@ -500,20 +513,32 @@
     if (bankBtn) bankBtn.disabled = !(humanTurn && free && ['roll', 'end'].includes(game.phase));
     const mainBankBtn = $('#mainbank-btn');
     // מסך הבנק הוא תצוגה בלבד — אפשר לפתוח אותו תמיד, גם בתור המחשב
-    if (mainBankBtn) mainBankBtn.disabled = !game.financeEnabled || game.phase === 'gameover';
+    if (mainBankBtn) mainBankBtn.disabled = !humanTurn || !free || !game.financeEnabled;
     // רמז לחיצה: אם השחקן לא לוחץ תוך 2 שניות — אצבע מרצדת על הכפתור הנדרש
     if (!$('#roll-btn').disabled) UI.nudge($('#roll-btn'));
     else if (!$('#end-turn-btn').disabled) UI.nudge($('#end-turn-btn'));
   }
 
   // הטלת קוביות עם אנימציית תלת-ממד — לאדם ולמחשב
+  let rolling = false;
   async function doRoll() {
-    $('#roll-btn').disabled = true;
-    buildOfferDone = false; // נחיתה חדשה — אפשר להציע בנייה שוב
-    sampleWealth(); // מדגם שווי-נטו לפני ההטלה — לגרף בסיכום המשחק
-    game.rollDice();
-    await UI.animateDice(game.dice[0], game.dice[1]);
-    tick();
+    if (rolling || !game || game.phase !== 'roll') return;
+    rolling = true;
+    UI.narrator.stop();
+    document.querySelectorAll('#action-buttons button').forEach((b) => { b.disabled = true; });
+    buildOfferDone = false;
+    try {
+      sampleWealth();
+      game.rollDice();
+      saveGame(); // Persist the result before any animation or user acknowledgement.
+      await UI.animateDice(game.dice[0], game.dice[1]);
+    } catch (e) {
+      console.error('Roll failed:', e);
+      UI.toast('הקוביות נעצרו. אפשר להמשיך.');
+    } finally {
+      rolling = false;
+      tick();
+    }
   }
 
   // הרחובות שמותר לבנות בהם עכשיו — רק בעיר שהחייל עומד בה
@@ -553,7 +578,7 @@
       <div class="d-actions">
         <button class="big-btn" id="d-nobuild">לא עכשיו</button>
       </div>`);
-    UI.speak('הִגַּעְתָּ לָעִיר שֶׁלְּךָ! רוֹצִים לִבְנוֹת?', { raw: true });
+    UI.narrator.say(['guide_build'], 'אפשר לבנות בית בעיר שלך.', { interrupt: true });
     d.querySelectorAll('[data-build]').forEach((btn) => {
       btn.onclick = () => {
         const pos = Number(btn.dataset.build);
@@ -719,6 +744,7 @@
           UI.sounds.money();
           UI.narrator.say(['inv_dep_h'], 'הַכֶּסֶף שֶׁלְּךָ הֻפְקַד וְעוֹבֵד בִּשְׁבִילְךָ!');
         } catch (e) { UI.toast(e.message); }
+        saveGame();
         await UI.render(game);
         showBank();
       },
@@ -730,6 +756,7 @@
           UI.sounds.cash();
           UI.narrator.say(['inv_wd_h'], 'הַכֶּסֶף חָזַר לְחֶשְׁבּוֹן הַבַּנְק שֶׁלְּךָ.');
         } catch (e) { UI.toast(e.message); }
+        saveGame();
         await UI.render(game);
         showBank();
       },
