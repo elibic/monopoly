@@ -26,20 +26,20 @@ try {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.25;
+  renderer.toneMappingExposure = .92;
   host.appendChild(renderer.domElement);
   renderer.domElement.setAttribute('aria-label', 'לוח מונופול תלת־ממדי. אפשר לגרור לסיבוב וללחוץ על נכסים.');
   const camera = new THREE.OrthographicCamera(-11, 11, 9, -9, .1, 100);
   let yaw = -.22, pitch = .88, zoom = 1, idle = true, selected = -1;
   const target = new THREE.Vector3(0, .1, 0);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x85a7b0, 3));
-  const sun = new THREE.DirectionalLight(0xfff3da, 4);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x527b89, 1.8));
+  const sun = new THREE.DirectionalLight(0xffe4b8, 2.5);
   sun.position.set(-9, 18, 10); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -11, right: 11, top: 11, bottom: -11, near: .1, far: 45 });
   sun.shadow.bias = -.0003; sun.shadow.normalBias = .025;
   scene.add(sun);
-  const rim = new THREE.DirectionalLight(0xd9efff, 1.2); rim.position.set(8, 4, -8); scene.add(rim);
+  const rim = new THREE.DirectionalLight(0xd9efff, .8); rim.position.set(8, 4, -8); scene.add(rim);
   const materials = new Map();
   function material(color, extra = {}) {
     if (!Object.keys(extra).length && materials.has(color)) return materials.get(color);
@@ -69,14 +69,14 @@ try {
     const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelSize: .035, bevelThickness: .035, bevelSegments: 2, steps: 1, curveSegments: 5 });
     g.rotateX(-Math.PI / 2); return g;
   }
-  const base = mesh(rounded(14.5, 14.5, .48, .5), '#78c7ce', scene, 0, -.5, 0);
-  mesh(rounded(14.2, 14.2, .15, .45), '#f6e5c2', scene, 0, -.03, 0);
-  const floor = mesh(new THREE.PlaneGeometry(200, 200), '#bde4e8', scene, 0, -.57, 0);
+  const base = mesh(rounded(14.5, 14.5, .48, .5), '#386979', scene, 0, -.5, 0);
+  mesh(rounded(14.2, 14.2, .15, .45), '#c09d62', scene, 0, -.03, 0);
+  const floor = mesh(new THREE.PlaneGeometry(200, 200), '#31566a', scene, 0, -.57, 0);
   floor.rotation.x = -Math.PI / 2; floor.castShadow = false;
   // Island, paths, pond and living miniature city occupy the actual board center.
-  mesh(rounded(11.1, 11.1, .13, .5), '#a7d4a3', scene, 0, .14, 0);
-  box(scene, 10.5, .06, 1.05, '#eedcb9', 0, .32, .3);
-  box(scene, 1.05, .06, 10.5, '#eedcb9', -.5, .32, 0);
+  mesh(rounded(11.1, 11.1, .13, .5), '#789e68', scene, 0, .14, 0);
+  box(scene, 10.5, .06, 1.05, '#c9b18c', 0, .32, .3);
+  box(scene, 1.05, .06, 10.5, '#c9b18c', -.5, .32, 0);
   box(scene, 10.2, .04, .035, '#fff8dc', 0, .36, -.14);
   box(scene, 10.2, .04, .035, '#fff8dc', 0, .36, .75);
   for (let i = -4; i <= 4; i++) box(scene, .37, .025, .045, '#fff4db', i * 1.05, .37, .3);
@@ -136,22 +136,22 @@ try {
   const tiles = [], decorations = [], pickable = [];
   function tileTexture(sq) {
     const canvas = document.createElement('canvas'); canvas.width = canvas.height = 256;
-    const c = canvas.getContext('2d'); c.fillStyle = '#fff8e8'; c.fillRect(0,0,256,256);
+    const c = canvas.getContext('2d'); c.fillStyle = '#e9d9b8'; c.fillRect(0,0,256,256);
     const color = sq.group ? D.GROUPS[sq.group].color : '#78b6bd';
     c.fillStyle = color; c.fillRect(0,0,256,60);
-    c.textAlign = 'center'; c.direction = 'rtl'; c.fillStyle = '#fff'; c.font = 'bold 28px Arial';
+    c.textAlign = 'center'; c.direction = 'rtl'; c.fillStyle = '#fff'; c.font = '800 28px Heebo';
     c.fillText(sq.group ? D.GROUPS[sq.group].name : '',128,42);
-    c.fillStyle = '#284e56'; c.font = 'bold 29px Arial';
+    c.fillStyle = '#193843'; c.font = 'bold 29px Heebo';
     const words = sq.name.split(' '); let lines = [''];
     for (const word of words) { const last=lines.length-1; if(c.measureText(lines[last]+' '+word).width>232)lines.push(word);else lines[last]+=' '+word; }
     lines.forEach((line,i)=>c.fillText(line.trim(),128,110+i*34));
-    c.font='bold 26px Arial'; c.fillStyle='#688b89';
+    c.font='bold 26px Heebo'; c.fillStyle='#31535b';
     c.fillText(sq.price ? sq.price+' ₪' : ({go:'+200 ₪',tax:sq.amount+' ₪',chance:'?',chest:'✦',free:'מתנה',jail:'ביקור',gotojail:'לכלא'}[sq.type]||''),128,225);
     const t = new THREE.CanvasTexture(canvas); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return t;
   }
   for (const sq of D.BOARD) {
     const pos=coordinate(sq.pos), g=new THREE.Group();g.position.copy(pos);g.position.y=.18;scene.add(g);
-    const body=mesh(rounded(1.19,1.19,.17,.08), '#fff8e8',g);body.userData.pos=sq.pos;pickable.push(body);
+    const body=mesh(rounded(1.19,1.19,.17,.08), '#e9d9b8',g);body.userData.pos=sq.pos;pickable.push(body);
     const face=mesh(new THREE.PlaneGeometry(1.14,1.14),new THREE.MeshBasicMaterial({map:tileTexture(sq)}),g,0,.213,0);
     face.rotation.x=-Math.PI/2;face.rotation.z=Math.floor(sq.pos/10)*-Math.PI/2;face.userData.pos=sq.pos;pickable.push(face);
     const property=new THREE.Group();g.add(property);property.position.set(0,.22,-.12);decorations.push(property);tiles.push(g);
@@ -166,13 +166,14 @@ try {
       const s=label('?', '#e28b91', '#ffffff', 100);s.scale.set(.55,.55,1);s.position.set(0,.65,-.25);property.add(s);
     }
   }
+  document.fonts.ready.then(()=>{for(const face of pickable){if(face.material?.map){const old=face.material.map;face.material.map=tileTexture(D.BOARD[face.userData.pos]);face.material.needsUpdate=true;old.dispose();}}});
   function label(text,bg='#ffffff',fg='#315e66',size=48) {
     const c=document.createElement('canvas');c.width=512;c.height=128;const x=c.getContext('2d');
-    x.fillStyle=bg;x.beginPath();x.roundRect(3,3,506,122,40);x.fill();x.font=`bold ${size}px Arial`;x.textAlign='center';x.direction='rtl';x.fillStyle=fg;x.fillText(text,256,84);
+    x.fillStyle=bg;x.beginPath();x.roundRect(3,3,506,122,40);x.fill();x.font=`800 ${size}px Heebo`;x.textAlign='center';x.direction='rtl';x.fillStyle=fg;x.fillText(text,256,84);
     const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;
     return new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
   }
-  const townSign=label('העיר שלנו','#fff8e8','#376b71',54);townSign.position.set(0,1.1,1.45);townSign.scale.set(3.5,.88,1);scene.add(townSign);
+  const townSign=label('העיר שלנו','#e9d9b8','#376b71',54);townSign.position.set(0,1.1,1.45);townSign.scale.set(3.5,.88,1);scene.add(townSign);
   const tokenMeshes=[];
   function token(player) {
     const g=new THREE.Group(),color=COLORS[player.idx%4];
@@ -220,7 +221,7 @@ try {
     const title={roll:'מוכנים לצעד הבא?',buy:'איזה עסק פותחים כאן?',pay:'עושים העברה, צעד אחר צעד',collect:'הגיע הזמן לקבל כסף!',debt:'נמצא יחד דרך לשלם',auction:'מי יזכה בנכס?',end:'כל הכבוד! ממשיכים?',gameover:'איזו הרפתקה!'}[g.phase]||'בונים את העיר שלנו';
     document.querySelector('#world-prompt').textContent=title;
     document.querySelector('#world-player').textContent += ' · ' + D.BOARD[p.pos].name;
-    document.querySelector('#world-count').textContent=g.playerProps(0).length+' נכסים';
+    const owned=g.playerProps(0).length;document.querySelector('#world-count').textContent=owned===1?'נכס אחד':owned+' נכסים';
     document.querySelector('#world-budget').textContent=g.players[0].money.toLocaleString('he-IL')+' ₪';
     selectTile(p.pos,false);
   }
